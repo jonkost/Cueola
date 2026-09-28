@@ -30,10 +30,14 @@ enum TestSnapshot {
 
         func snap(_ name: String) {
             for window in NSApp.windows where window.isVisible {
-                guard let view = window.contentView,
+                // The frame view includes the title bar and toolbar.
+                guard let view = window.contentView?.superview ?? window.contentView,
                       let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
                 view.cacheDisplay(in: view.bounds, to: rep)
-                let which = window.title == "Outrangutan Output" || !window.styleMask.contains(.titled) ? "output" : "control"
+                let which: String
+                if window.title == "Outrangutan" { which = "control" }
+                else if window.contentView is OutputView { which = "output-" + window.title.replacingOccurrences(of: " ", with: "") }
+                else { which = "window-" + window.title.replacingOccurrences(of: " ", with: "") }
                 try? rep.representation(using: .png, properties: [:])?
                     .write(to: dir.appendingPathComponent("\(name)-\(which).png"))
             }
@@ -48,6 +52,7 @@ enum TestSnapshot {
         case "link": steps = linkSteps(engine: engine, link: link, note: note, state: state, snap: snap)
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
+        case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
             (1.0, {
@@ -68,10 +73,9 @@ enum TestSnapshot {
         func run(_ index: Int) {
             guard index < steps.count else {
                 try? log.joined(separator: "\n").write(to: dir.appendingPathComponent("test-log.txt"), atomically: true, encoding: .utf8)
-                // An open sheet would hold up quitting.
-                for window in NSApp.windows { window.sheets.forEach { window.endSheet($0) } }
-                DispatchQueue.main.async { NSApp.terminate(nil) }
-                return
+                // Test mode never saves anything, so it can simply end here.
+                // (A normal quit waits on any open sheet.)
+                exit(0)
             }
             let (wait, step) = steps[index]
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
@@ -143,6 +147,70 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
+        ]
+    }
+
+    /// Outputs: two outputs, a cue on each, a cue on every output, Identify,
+    /// what the rundown hears about them, sound devices, and pad routing.
+    private static func outputSteps(engine: Engine, note: @escaping (String) -> Void,
+                                    state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        var still = Cue(name: "Still on Program", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID())
+        still.output = 1
+        var matte = Cue.matte(named: "Blue on IMAG", color: "#0047BB")
+        matte.output = 2
+        var both = Cue.matte(named: "White on every output", color: "#FFFFFF")
+        both.output = 0
+        let defaults = UserDefaults.standard
+        let savedTab = defaults.string(forKey: "ui.tab")
+        return [
+            (1.0, {
+                engine.outputs = [OutputConfig(id: 1, label: "Program"), OutputConfig(id: 2, label: "IMAG")]
+                engine.cues = [still, matte, both]
+                engine.standbyID = engine.cues[0].id
+                engine.openOutput()
+                let devices = AudioDevices.outputs()
+                note("sound devices: " + devices.map { "\($0.name) (\($0.channels) ch)" }.joined(separator: ", "))
+                note("default output: \(AudioDevices.defaultOutput()?.name ?? "-")")
+            }),
+            (0.8, { engine.go() }),
+            (0.5, { note("1 still on Program: " + engine.outputsShowing()) }),
+            (0.1, { engine.go() }),
+            (0.5, { note("2 matte on IMAG (the picture moves there): " + engine.outputsShowing()) }),
+            (0.1, { engine.go() }),
+            (0.5, {
+                note("3 white on every output: " + engine.outputsShowing())
+                let live = LivePacket.outputs(engine.liveState(), now: 1)
+                note("   the rundown hears: status=\(live["status"] ?? "-") \(live["detail"] ?? "-")")
+                snap("o-3-all")
+            }),
+            (0.1, { engine.closeOutput(2) }),
+            (0.3, {
+                let live = LivePacket.outputs(engine.liveState(), now: 1)
+                note("4 IMAG closed, the rundown hears: status=\(live["status"] ?? "-") \(live["detail"] ?? "-")")
+                engine.openOutput(2)
+            }),
+            (0.4, { engine.identifyOutputs() }),
+            (0.4, { snap("o-5-identify") }),
+            (0.1, {
+                engine.audio.padFirstChannel = 0
+                note("6 pads play to: \(engine.pads.channelMapNote)")
+                if engine.pads.pads.isEmpty {
+                    engine.pads.add(urls: [media.appendingPathComponent("demo-applause.wav")])
+                }
+            }),
+            (0.4, { if let p = engine.pads.pads.first { engine.pads.fire(p.id) } }),
+            (0.4, { note("7 pad meter while the applause plays: left \(String(format: "%.2f", engine.pads.meter.left)) right \(String(format: "%.2f", engine.pads.meter.right))") }),
+            (0.1, { engine.pads.stopAll(); defaults.set("cues", forKey: "ui.tab") }),
+            (0.8, { snap("o-8-cues") }),
+            (0.1, { defaults.set("pads", forKey: "ui.tab") }),
+            (0.8, { snap("o-9-pads") }),
+            (0.1, {
+                if let savedTab { defaults.set(savedTab, forKey: "ui.tab") } else { defaults.removeObject(forKey: "ui.tab") }
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }),
+            (1.0, { snap("o-10-settings") }),
         ]
     }
 

@@ -111,6 +111,7 @@ struct Cue: Identifiable, Codable, Equatable {
     var posX: Double = 0                        // percent of the screen width, + is right
     var posY: Double = 0                        // percent of the screen height, + is down
     var color = "#000000"                       // mattes only
+    var output = 1                              // which output shows it; 0 is every output
     // A sound effect pad that fires with this cue, after a delay
     var sfxPadId = ""
     var sfxDelay: Double = 0
@@ -154,6 +155,7 @@ struct Cue: Identifiable, Codable, Equatable {
         posX = try c.decodeIfPresent(Double.self, forKey: .posX) ?? 0
         posY = try c.decodeIfPresent(Double.self, forKey: .posY) ?? 0
         color = try c.decodeIfPresent(String.self, forKey: .color) ?? "#000000"
+        output = try c.decodeIfPresent(Int.self, forKey: .output) ?? 1
         sfxPadId = try c.decodeIfPresent(String.self, forKey: .sfxPadId) ?? ""
         sfxDelay = try c.decodeIfPresent(Double.self, forKey: .sfxDelay) ?? 0
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
@@ -198,7 +200,9 @@ struct Cue: Identifiable, Codable, Equatable {
 /// Everything Outrangutan saves between launches.
 struct ShowFile: Codable {
     var cues: [Cue] = []
-    var outputScreen: String?
+    var outputScreen: String?       // before step 4: the one output's screen
+    var outputs: [OutputConfig]?
+    var audio: AudioSettings?
     var masterGain: Double?
     var pads: [Pad]?
     var banks: [PadBank]?

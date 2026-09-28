@@ -14,15 +14,17 @@ enum PictureSlot: String, CaseIterable {
 /// On a second screen it fills that screen edge to edge, with no title bar
 /// and no menu bar. With only one screen it opens as a normal window so you
 /// can still see it while you build the show.
-final class OutputWindowController {
+final class OutputWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     let pictureView = OutputView()
+    /// Called when someone closes a windowed output with its close button.
+    var onClose: (() -> Void)?
 
     var isOpen: Bool { window?.isVisible ?? false }
 
     /// Opens the output on the named screen, or moves it there if it is
     /// already open.
-    func open(on screenName: String?) {
+    func open(on screenName: String?, title: String = "Outrangutan Output") {
         let control = NSApp.mainWindow?.screen ?? NSScreen.main
         let target = NSScreen.screens.first { $0.localizedName == screenName } ?? NSScreen.screens.first { $0 != control }
         window?.orderOut(nil)
@@ -37,9 +39,10 @@ final class OutputWindowController {
         } else {
             // Same screen as the controls: a normal window you can move and size.
             let frame = NSRect(x: 0, y: 0, width: 960, height: 540)
-            win = NSWindow(contentRect: frame, styleMask: [.titled, .resizable, .miniaturizable],
+            win = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .resizable, .miniaturizable],
                            backing: .buffered, defer: false)
-            win.title = "Outrangutan Output"
+            win.title = title
+            win.delegate = self
             win.contentAspectRatio = NSSize(width: 16, height: 9)
             win.center()
         }
@@ -51,8 +54,14 @@ final class OutputWindowController {
     }
 
     func close() {
+        window?.delegate = nil
         window?.orderOut(nil)
         window = nil
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        window = nil
+        onClose?()
     }
 }
 
@@ -63,6 +72,7 @@ final class OutputView: NSView {
     private let still1 = CALayer()
     private let still2 = CALayer()
     private var frames: [PictureSlot: Cue] = [:]
+    private var identifyLayer: CALayer?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -165,6 +175,49 @@ final class OutputView: NSView {
     }
 
     func black() { PictureSlot.allCases.forEach(hide) }
+
+    /// Names of what this output shows now, for tests.
+    var showing: [String] {
+        PictureSlot.allCases.compactMap { slot in
+            guard let cue = frames[slot], !layerFor(slot).isHidden else { return nil }
+            return cue.name
+        }
+    }
+
+    /// A big number and name over the picture for three seconds, so you can
+    /// tell which screen is which output.
+    func identify(number: Int, label: String) {
+        identifyLayer?.removeFromSuperlayer()
+        let box = CALayer()
+        box.frame = bounds
+        box.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        box.zPosition = 10_000
+        let scale = window?.backingScaleFactor ?? 2
+        let big = CATextLayer()
+        big.string = "\(number)"
+        big.font = NSFont.systemFont(ofSize: 10, weight: .bold)
+        big.fontSize = bounds.height * 0.45
+        big.alignmentMode = .center
+        big.foregroundColor = NSColor.white.cgColor
+        big.contentsScale = scale
+        big.frame = CGRect(x: 0, y: bounds.height * 0.3, width: bounds.width, height: bounds.height * 0.55)
+        let name = CATextLayer()
+        name.string = label
+        name.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        name.fontSize = bounds.height * 0.07
+        name.alignmentMode = .center
+        name.foregroundColor = NSColor.white.cgColor
+        name.contentsScale = scale
+        name.frame = CGRect(x: 0, y: bounds.height * 0.16, width: bounds.width, height: bounds.height * 0.1)
+        box.addSublayer(big)
+        box.addSublayer(name)
+        layer?.addSublayer(box)
+        identifyLayer = box
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak box] in
+            box?.removeFromSuperlayer()
+            if self?.identifyLayer === box { self?.identifyLayer = nil }
+        }
+    }
 
     /// Scale and position, like the web app: position is a percent of the
     /// screen, then the picture is scaled around its center.

@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "Outrangutan",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     targets: [
         // The rules for talking to the rundown and KeyWi Bird. No screen and no
         // network in here, so the tests can check every rule on their own.

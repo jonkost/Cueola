@@ -3,8 +3,9 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The control window: clock and transport on top, cue list in the middle,
-/// media and output controls along the bottom.
+/// The control window: clock and transport on top, the cue list or the pad
+/// board below, the Inspector on the right, and the everyday tools in the
+/// window's toolbar.
 struct ControlView: View {
     @ObservedObject var engine: Engine
     @ObservedObject var link: ShowLink
@@ -17,31 +18,17 @@ struct ControlView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            HStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    Picker("", selection: $tab) {
-                        Text("Cues").tag("cues")
-                        Text("Pads").tag("pads")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 220)
-                    .padding(.vertical, 8)
-                    Divider()
-                    if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
-                }
-                if showInspector {
-                    Divider()
-                    Group {
-                        if tab == "pads" { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
-                    }
-                    .frame(width: 330)
-                }
-            }
-            Divider()
-            footer
+            if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .inspector(isPresented: $showInspector) {
+            Group {
+                if tab == "pads" { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
+            }
+            .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
+        }
+        .toolbar { toolbar }
+        .navigationTitle("Outrangutan")
+        .navigationSubtitle(link.phase == .linked ? link.message : "")
         .sheet(isPresented: $showConnect) { ConnectView(link: link) }
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
@@ -59,6 +46,58 @@ struct ControlView: View {
         }
     }
 
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Picker("View", selection: $tab) {
+                Label("Cues", systemImage: "list.bullet.rectangle").tag("cues")
+                Label("Pads", systemImage: "square.grid.3x3.fill").tag("pads")
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.titleAndIcon)
+            .help("Switch between the cue list and the sound effect pads")
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button { chooseFiles() } label: { Label("Add Media", systemImage: "plus") }
+                .help(tab == "pads" ? "Add sounds to the pads" : "Add videos, sounds or stills to the cue list")
+            if tab == "cues" {
+                Menu {
+                    Button("Black") { engine.addMatte(color: "#000000", name: "Black") }
+                    Button("White") { engine.addMatte(color: "#FFFFFF", name: "White") }
+                    Button("Gray") { engine.addMatte(color: "#808080", name: "Gray") }
+                    Button("Chroma Green") { engine.addMatte(color: "#00B140", name: "Chroma green") }
+                    Button("Chroma Blue") { engine.addMatte(color: "#0047BB", name: "Chroma blue") }
+                } label: {
+                    Label("Add Matte", systemImage: "square.fill")
+                }
+                .help("Add a solid color picture. Change its color in the Inspector.")
+            }
+            Menu {
+                Button(engine.openOutputs.isEmpty ? "Open All Outputs" : "Close All Outputs") { engine.toggleOutput() }
+                Divider()
+                ForEach(engine.outputs) { output in
+                    Toggle(output.label, isOn: Binding(
+                        get: { engine.openOutputs.contains(output.id) },
+                        set: { $0 ? engine.openOutput(output.id) : engine.closeOutput(output.id) }
+                    ))
+                }
+                Divider()
+                Button("Identify Outputs") { engine.identifyOutputs() }.disabled(engine.openOutputs.isEmpty)
+                SettingsLink { Text("Outputs and Sound Settings…") }
+            } label: {
+                Label("Outputs", systemImage: engine.openOutputs.isEmpty ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+            } primaryAction: {
+                engine.toggleOutput()
+            }
+            .help(engine.openOutputs.isEmpty ? "Open the outputs" : "Close the outputs")
+            LinkBadge(link: link) { showConnect = true }
+            Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
+                .help(showInspector ? "Hide the Inspector (Command-I)" : "Show the Inspector (Command-I)")
+        }
+    }
+
     // MARK: Clock and transport
 
     private var header: some View {
@@ -66,55 +105,77 @@ struct ControlView: View {
             HStack(alignment: .center, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(engine.status.rawValue)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.subheadline.weight(.bold))
                         .fixedSize()
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(statusColor.opacity(0.25), in: Capsule())
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(statusColor.opacity(0.22), in: Capsule())
                         .foregroundStyle(statusColor)
                     Text(onAirText)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.title3.weight(.medium))
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
                     Text(standbyText)
-                        .font(.system(size: 13))
+                        .font(.callout)
                         .lineLimit(1)
                         .foregroundStyle(.tertiary)
+                    if let notice = engine.notice {
+                        Label(notice, systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                // SF Mono with fixed-width digits, so the clock never jiggles.
                 Text(clockText)
                     .font(.system(size: 54, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(engine.remaining == nil && engine.status != .pre ? Color.secondary : clockColor)
                     .fixedSize()
+                    .accessibilityLabel("Time left")
             }
 
             // The transport gets its own row, so every button stays a big
             // target however narrow the window is.
             HStack(spacing: 10) {
-                transportButton("GO", key: "Space", color: .green) { engine.go() }
-                transportButton(engine.status == .paused ? "Resume" : "Pause", key: "P", color: .yellow, action: engine.togglePause)
-                transportButton("Stop", key: "S", color: .orange, action: engine.stop)
-                transportButton("Fade", key: "F", color: .purple, action: engine.fadeStopAll)
-                transportButton("All Stop", key: "Esc", color: .red, action: engine.allStop)
+                transport("GO", symbol: "play.fill", key: "Space", color: .green, prominent: true) { engine.go() }
+                transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
+                          key: "P", color: .yellow, action: engine.togglePause)
+                transport("Stop", symbol: "stop.fill", key: "S", color: .orange, action: engine.stop)
+                transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: "F", color: .purple, action: engine.fadeStopAll)
+                transport("All Stop", symbol: "exclamationmark.octagon.fill", key: "Esc", color: .red, prominent: true, action: engine.allStop)
             }
         }
         .padding(16)
     }
 
-    private func transportButton(_ title: String, key: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Text(title).font(.system(size: 15, weight: .bold))
-                Text(key).font(.system(size: 10, weight: .medium)).opacity(0.7)
+    /// A native Mac button, extra large for show use. GO and All Stop are
+    /// filled with their color; the others are standard buttons whose
+    /// symbol carries the color, since a plain Mac button is always gray.
+    @ViewBuilder
+    private func transport(_ title: String, symbol: String, key: String, color: Color, prominent: Bool = false,
+                           action: @escaping () -> Void) -> some View {
+        let label = VStack(spacing: 2) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(prominent ? Color.white : color)
             }
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(color.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
-            .foregroundStyle(color)
-            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .font(.headline)
+            Text(key).font(.caption2).opacity(0.75)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        Group {
+            if prominent {
+                Button(action: action) { label }.buttonStyle(.borderedProminent).tint(color)
+            } else {
+                Button(action: action) { label }.buttonStyle(.bordered)
+            }
+        }
+        .controlSize(.extraLarge)
         .focusable(false)
+        .help("\(title) (\(key))")
     }
 
     // MARK: Cue list
@@ -122,12 +183,13 @@ struct ControlView: View {
     private var cueList: some View {
         Group {
             if engine.cues.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "square.and.arrow.down").font(.system(size: 34)).foregroundStyle(.tertiary)
-                    Text("Drag videos, sounds or stills here").font(.title3)
-                    Text("or use Add Media below.").foregroundStyle(.secondary)
+                ContentUnavailableView {
+                    Label("No Cues Yet", systemImage: "film.stack")
+                } description: {
+                    Text("Drag videos, sounds or stills here, or click Add Media in the toolbar.")
+                } actions: {
+                    Button("Add Media") { chooseFiles() }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $engine.standbyID) {
                     ForEach(Array(engine.cues.enumerated()), id: \.element.id) { index, cue in
@@ -135,6 +197,7 @@ struct ControlView: View {
                     }
                     .onMove { engine.cues.move(fromOffsets: $0, toOffset: $1) }
                 }
+                .listStyle(.inset(alternatesRowBackgrounds: true))
                 .onDeleteCommand {
                     if let id = engine.standbyID { engine.remove(ids: [id]) }
                 }
@@ -147,42 +210,49 @@ struct ControlView: View {
         let waiting = cue.id == engine.pendingCue?.id
         return HStack(spacing: 10) {
             Text("\(number)")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.body.weight(.semibold))
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 28, alignment: .trailing)
-            icon(cue)
-            Text(cue.name).font(.system(size: 15)).lineLimit(1)
+            icon(cue, onAir: onAir)
+            Text(cue.name).font(.body).lineLimit(1)
             if !cue.fileIsThere {
                 Label("File missing", systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
             }
             Spacer(minLength: 6)
             if !cue.armed { chip("SKIP", .gray) }
             if cue.preWait > 0 { chip("PRE \(Timecode.short(cue.preWait))", .yellow) }
             if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
-            if cue.loop { Image(systemName: "repeat").foregroundStyle(.secondary) }
+            if !cue.sfxPadId.isEmpty { Image(systemName: "square.grid.3x3.fill").foregroundStyle(.secondary).help("Brings a pad with it") }
+            if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
+            if cue.loop { Image(systemName: "repeat").foregroundStyle(.secondary).help("Loops") }
             if cue.xfade > 0 { Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary).help("Dissolves in") }
             if waiting { chip("PRE-WAIT", .orange, solid: true) }
             if onAir { chip("ON AIR", .red, solid: true) }
             Text(durationText(cue))
-                .font(.system(size: 13, design: .monospaced))
+                .font(.callout)
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 56, alignment: .trailing)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
         .opacity(cue.armed ? 1 : 0.55)
         .contextMenu {
             if cue.kind != .matte {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cue.url]) }
             }
             Button(cue.armed ? "Skip on GO" : "Fire on GO") { engine.update(cue.id) { $0.armed.toggle() } }
+            Divider()
             Button("Remove", role: .destructive) { engine.remove(ids: [cue.id]) }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
     }
 
     @ViewBuilder
-    private func icon(_ cue: Cue) -> some View {
+    private func icon(_ cue: Cue, onAir: Bool) -> some View {
         if cue.kind == .matte {
             RoundedRectangle(cornerRadius: 3)
                 .fill(Color(nsColor: NSColor(hex: cue.color) ?? .black))
@@ -191,6 +261,8 @@ struct ControlView: View {
                 .frame(width: 20)
         } else {
             Image(systemName: cue.kind.symbol)
+                .symbolRenderingMode(.hierarchical)
+                .symbolEffect(.variableColor.iterative, isActive: onAir && cue.kind == .audio)
                 .frame(width: 20)
                 .foregroundStyle(cue.kind == .audio ? Color.cyan : (cue.kind == .still ? Color.yellow : Color.purple))
         }
@@ -198,76 +270,20 @@ struct ControlView: View {
 
     private func chip(_ text: String, _ color: Color, solid: Bool = false) -> some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .bold))
+            .font(.caption2.weight(.bold))
             .padding(.horizontal, 7).padding(.vertical, 2)
             .background(solid ? color : color.opacity(0.2), in: Capsule())
             .foregroundStyle(solid ? Color.white : color)
-    }
-
-    // MARK: Media and output
-
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Button {
-                chooseFiles()
-            } label: {
-                Label("Add Media", systemImage: "plus")
-            }
-
-            Menu {
-                Button("Black") { engine.addMatte(color: "#000000", name: "Black") }
-                Button("White") { engine.addMatte(color: "#FFFFFF", name: "White") }
-                Button("Gray") { engine.addMatte(color: "#808080", name: "Gray") }
-                Button("Chroma green") { engine.addMatte(color: "#00B140", name: "Chroma green") }
-                Button("Chroma blue") { engine.addMatte(color: "#0047BB", name: "Chroma blue") }
-            } label: {
-                Label("Add Matte", systemImage: "square.fill")
-            }
-            .fixedSize()
-            .help("A solid color picture. Change its color in the Inspector.")
-
-            if let notice = engine.notice {
-                Label(notice, systemImage: "exclamationmark.circle")
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            LinkBadge(link: link) { showConnect = true }
-
-            Picker("Output screen", selection: $engine.outputScreen) {
-                Text("Second screen (automatic)").tag(String?.none)
-                ForEach(NSScreen.screens.map(\.localizedName), id: \.self) { name in
-                    Text(name).tag(String?.some(name))
-                }
-            }
-            .frame(maxWidth: 260)
-
-            Button {
-                showInspector.toggle()
-            } label: {
-                Image(systemName: "sidebar.right")
-            }
-            .help(showInspector ? "Hide the Inspector (Command-I)" : "Show the Inspector (Command-I)")
-
-            Button {
-                engine.toggleOutput()
-            } label: {
-                Label(engine.outputIsOpen ? "Close Output" : "Open Output",
-                      systemImage: engine.outputIsOpen ? "rectangle.slash" : "rectangle.on.rectangle")
-            }
-        }
-        .padding(12)
     }
 
     private func chooseFiles() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.movie, .audio, .image]
+        panel.allowedContentTypes = tab == "pads" ? [.audio] : [.movie, .audio, .image]
         panel.prompt = "Add"
-        if panel.runModal() == .OK { engine.add(urls: panel.urls) }
+        guard panel.runModal() == .OK else { return }
+        if tab == "pads" { engine.pads.add(urls: panel.urls) } else { engine.add(urls: panel.urls) }
     }
 
     // MARK: Words and colors

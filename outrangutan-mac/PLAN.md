@@ -60,9 +60,12 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Pads from the rundown and the deck | Built (step 3) | |
 | Pad search | Later | |
 | Sound chain: gain, 3-band EQ, compressor, master volume | Built for pads (step 3) | The same EQ points and compressor as the web app. |
-| Audio meters, audio interface channel routing | Step 4 | Each output picks any channel pair on the audio interface. |
+| Pad meter, pads on any channel pair of an audio interface | Built (step 4) | |
+| Cue sound device, a sound device per output | Built (step 4) | Cue sound plays on a device's first two channels. |
+| Cue sound meter, cue sound on any channel pair | Later | Needs cue sound to move onto the same audio engine as the pads. |
 | Record a sound effect | Step 3 | |
-| Multiple outputs, identify, pick a screen and audio device per output | Step 4 | Replaces the kiosk Chrome windows. No helper program to keep running. |
+| Multiple outputs, identify, pick a screen and audio device per output | Built (step 4) | Up to four outputs. A cue picks its output, or every output. Replaces the kiosk Chrome windows. |
+| Apple design pass | Built (step 4) | Toolbar, native Inspector with icon tabs (the house inspector standard), Settings window, Playback menu, SF Pro and SF Mono, standard empty screens, app icon from the brand art, the Mac's light or dark look. Needs macOS 14. |
 | Join a show by code, sign in, publish cues and what is on air | Built (step 5) | The rule above: same fields, same shape. |
 | Command queue, "got it" replies, panic lane, master volume from the deck | Built (step 5) | Every rule has its own test. |
 | Fix requests from the rundown, preflight report | Built (step 5) | Needs no clicks on the Mac: sound and outputs are always ready. |

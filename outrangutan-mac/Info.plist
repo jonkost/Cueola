@@ -8,6 +8,8 @@
 	<string>Outrangutan</string>
 	<key>CFBundleIdentifier</key>
 	<string>live.cueola.outrangutan</string>
+	<key>CFBundleIconFile</key>
+	<string>Outrangutan</string>
 	<key>CFBundleExecutable</key>
 	<string>Outrangutan</string>
 	<key>CFBundlePackageType</key>
@@ -17,7 +19,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.video</string>
 	<key>NSHighResolutionCapable</key>

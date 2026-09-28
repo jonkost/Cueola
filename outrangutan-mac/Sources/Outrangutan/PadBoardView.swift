@@ -77,6 +77,7 @@ struct PadBoardView: View {
                 }
             }
             Spacer()
+            LevelMeterView(meter: board.meter)
             Toggle("Several at once", isOn: $board.multiTrigger)
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -189,69 +190,109 @@ struct EmptyPadTile: View {
     }
 }
 
-/// Every setting for the selected pad.
+/// Every setting for the selected pad, one group at a time.
 struct PadInspectorView: View {
     @ObservedObject var board: PadBoard
+    @AppStorage("inspector.padTab") private var tab = "pad"
+
+    private let tabs = [
+        InspectorTab(id: "pad", title: "Pad", symbol: "square.grid.2x2"),
+        InspectorTab(id: "playing", title: "Playing", symbol: "play.circle"),
+        InspectorTab(id: "sound", title: "Sound", symbol: "slider.vertical.3"),
+        InspectorTab(id: "file", title: "File", symbol: "doc"),
+    ]
 
     var body: some View {
         if let pad = board.selectedPad {
-            Form {
-                Section("Pad") {
-                    TextField("Name", text: bind(pad, \.name))
-                    TextField("Emoji", text: Binding(get: { live(pad).emoji }, set: { v in board.update(pad.id) { $0.emoji = String(v.prefix(4)) } }))
-                    ColorPicker("Color", selection: Binding(
-                        get: { Color(nsColor: NSColor(hex: live(pad).color) ?? .systemPurple) },
-                        set: { c in board.update(pad.id) { $0.color = NSColor(c).hexString } }
-                    ), supportsOpacity: false)
-                    Picker("Hotkey", selection: bind(pad, \.key)) {
-                        Text("None").tag("")
-                        ForEach(PadBoard.keys, id: \.self) { Text($0.uppercased()).tag($0) }
-                    }
-                }
-                Section {
-                    HStack {
-                        Text("Volume")
-                        Slider(value: bind(pad, \.gain), in: 0...1.5)
-                        Text("\(Int((live(pad).gain * 100).rounded()))%").monospacedDigit().frame(width: 44, alignment: .trailing)
-                    }
-                    Picker("Hit again", selection: bind(pad, \.retrigger)) {
-                        ForEach(Retrigger.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Toggle("Loop", isOn: bind(pad, \.loop))
-                    number("Fade in", bind(pad, \.fadeIn), step: 0.1)
-                    number("Fade out", bind(pad, \.fadeOut), step: 0.1)
-                    number("Start at", bind(pad, \.trimIn), step: 0.1)
-                    number("Stop at", Binding(get: { live(pad).trimOut ?? 0 }, set: { v in board.update(pad.id) { $0.trimOut = v > 0 ? v : nil } }), step: 0.1)
-                } header: {
-                    Text("Playing")
-                } footer: {
-                    Text("Restart starts over. Layer plays another copy on top. Toggle stops it on the second hit. Fade out is used when the pad fades with its clip. Stop at 0 plays to the end.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Section("Sound") {
-                    eqSlider("Low", bind(pad, \.eq.low))
-                    eqSlider("Mid", bind(pad, \.eq.mid))
-                    eqSlider("High", bind(pad, \.eq.high))
-                    Toggle("Compressor", isOn: bind(pad, \.comp))
-                }
-                Section("File") {
-                    Text(pad.url.lastPathComponent).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    HStack {
-                        Button("Replace…") { replace(pad) }
-                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([pad.url]) }
-                        Spacer()
-                        Button("Clear pad", role: .destructive) { board.clear(pad.id) }
+            VStack(spacing: 0) {
+                InspectorTabs(tabs: tabs, selection: $tab)
+                Divider()
+                InspectorPage {
+                    switch tab {
+                    case "playing": playing(pad)
+                    case "sound": sound(pad)
+                    case "file": file(pad)
+                    default: general(pad)
                     }
                 }
             }
-            .formStyle(.grouped)
         } else {
-            VStack(spacing: 8) {
-                Image(systemName: "square.grid.3x3").font(.system(size: 28)).foregroundStyle(.tertiary)
-                Text("Right-click a pad and choose Edit, or click one to play it and see its settings.")
-                    .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 24)
+            InspectorEmpty(title: "No pad selected", symbol: "square.grid.3x3",
+                           message: "Click a pad to play it and see its settings, or right-click it and choose Edit.")
+        }
+    }
+
+    @ViewBuilder
+    private func general(_ pad: Pad) -> some View {
+        InspectorSection(title: "Pad") {
+            TextField("Name", text: bind(pad, \.name)).textFieldStyle(.roundedBorder)
+            InspectorRow("Emoji") {
+                TextField("Emoji", text: Binding(get: { live(pad).emoji }, set: { v in board.update(pad.id) { $0.emoji = String(v.prefix(4)) } }))
+                    .labelsHidden().textFieldStyle(.roundedBorder).frame(width: 70)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            InspectorRow("Color") {
+                ColorPicker("Color", selection: Binding(
+                    get: { Color(nsColor: NSColor(hex: live(pad).color) ?? .systemPurple) },
+                    set: { c in board.update(pad.id) { $0.color = NSColor(c).hexString } }
+                ), supportsOpacity: false).labelsHidden()
+            }
+            InspectorRow("Hotkey") {
+                Picker("Hotkey", selection: bind(pad, \.key)) {
+                    Text("None").tag("")
+                    ForEach(PadBoard.keys, id: \.self) { Text($0.uppercased()).tag($0) }
+                }
+                .labelsHidden().frame(width: 90)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playing(_ pad: Pad) -> some View {
+        InspectorSection(title: "Playing",
+                         note: "Restart starts over. Layer plays another copy on top. Toggle stops it on the second hit.") {
+            PercentSlider(label: "Volume", value: bind(pad, \.gain), range: 0...1.5)
+            InspectorRow("Hit again") {
+                Picker("Hit again", selection: bind(pad, \.retrigger)) {
+                    ForEach(Retrigger.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden().pickerStyle(.segmented).frame(width: 190)
+            }
+            InspectorRow("Loop") { Toggle("", isOn: bind(pad, \.loop)).labelsHidden().toggleStyle(.switch) }
+        }
+        InspectorSection(title: "Fades", note: "Fade out is used when the pad fades out with its cue.") {
+            NumberField(label: "Fade in", value: bind(pad, \.fadeIn), step: 0.1)
+            NumberField(label: "Fade out", value: bind(pad, \.fadeOut), step: 0.1)
+        }
+        InspectorSection(title: "Trim", note: "Stop at 0 plays to the end.") {
+            NumberField(label: "Start at", value: bind(pad, \.trimIn), step: 0.1)
+            NumberField(label: "Stop at", value: Binding(get: { live(pad).trimOut ?? 0 }, set: { v in board.update(pad.id) { $0.trimOut = v > 0 ? v : nil } }), step: 0.1)
+        }
+    }
+
+    @ViewBuilder
+    private func sound(_ pad: Pad) -> some View {
+        InspectorSection(title: "EQ", note: "Low at 180 Hz, mid at 1.1 kHz, high at 4.5 kHz, the same as the web app.") {
+            eqSlider("Low", bind(pad, \.eq.low))
+            eqSlider("Mid", bind(pad, \.eq.mid))
+            eqSlider("High", bind(pad, \.eq.high))
+        }
+        InspectorSection(title: "Dynamics") {
+            InspectorRow("Compressor") { Toggle("", isOn: bind(pad, \.comp)).labelsHidden().toggleStyle(.switch) }
+        }
+    }
+
+    @ViewBuilder
+    private func file(_ pad: Pad) -> some View {
+        InspectorSection(title: "File") {
+            Text(pad.url.lastPathComponent).foregroundStyle(pad.fileIsThere ? .secondary : Color.orange)
+                .lineLimit(1).truncationMode(.middle)
+            HStack {
+                Button("Replace…") { replace(pad) }
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([pad.url]) }
+            }
+        }
+        InspectorSection(title: "Remove") {
+            Button("Clear Pad", role: .destructive) { board.clear(pad.id) }
         }
     }
 
@@ -261,22 +302,11 @@ struct PadInspectorView: View {
         Binding(get: { live(pad)[keyPath: path] }, set: { v in board.update(pad.id) { $0[keyPath: path] = v } })
     }
 
-    private func number(_ label: String, _ value: Binding<Double>, step: Double) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            TextField(label, value: value, format: .number.precision(.fractionLength(0...2)))
-                .labelsHidden().multilineTextAlignment(.trailing).frame(width: 64)
-            Text("s").foregroundStyle(.secondary)
-            Stepper(label, value: value, in: 0...100000, step: step).labelsHidden()
-        }
-    }
-
     private func eqSlider(_ label: String, _ value: Binding<Double>) -> some View {
-        HStack {
-            Text(label).frame(width: 36, alignment: .leading)
-            Slider(value: value, in: -12...12, step: 0.5)
-            Text(String(format: "%+.1f dB", value.wrappedValue)).monospacedDigit().frame(width: 62, alignment: .trailing)
+        InspectorRow(label) {
+            Slider(value: value, in: -12...12, step: 0.5).frame(maxWidth: 150)
+            Text(String(format: "%+.1f dB", value.wrappedValue))
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 62, alignment: .trailing)
         }
     }
 
@@ -285,5 +315,50 @@ struct PadInspectorView: View {
         panel.allowedContentTypes = [.audio]
         panel.prompt = "Use"
         if panel.runModal() == .OK, let url = panel.url { board.assign(url: url, slot: pad.slot) }
+    }
+}
+
+/// The pads' level meter: two thin bars, green to yellow to red.
+struct LevelMeterView: View {
+    @ObservedObject var meter: LevelMeter
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("PADS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            VStack(spacing: 2) {
+                bar(meter.left)
+                bar(meter.right)
+            }
+            .frame(width: 90)
+            Circle()
+                .fill(meter.clipped ? Color.red : Color.secondary.opacity(0.25))
+                .frame(width: 7, height: 7)
+                .onTapGesture { meter.resetClip() }
+                .help(meter.clipped ? "The pads hit full level. Click to clear." : "Lights red if the pads hit full level.")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pad level")
+        .accessibilityValue("\(Int(max(meter.left, meter.right) * 100)) percent")
+    }
+
+    private func bar(_ level: Float) -> some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.2))
+                Capsule()
+                    .fill(LinearGradient(colors: [.green, .green, .yellow, .red], startPoint: .leading, endPoint: .trailing))
+                    .mask(alignment: .leading) {
+                        Rectangle().frame(width: g.size.width * CGFloat(min(1, Self.meterScale(level))))
+                    }
+            }
+        }
+        .frame(height: 4)
+    }
+
+    /// Shows level on a decibel scale, -48 dB to 0 dB, so quiet sounds still move.
+    static func meterScale(_ level: Float) -> Float {
+        guard level > 0 else { return 0 }
+        let db = 20 * log10(level)
+        return max(0, (db + 48) / 48)
     }
 }

@@ -327,7 +327,8 @@ final class ShowLink: ObservableObject {
                     "\(bad.count) bad cue\(bad.count == 1 ? "" : "s"), \(badPads.count) bad pad\(badPads.count == 1 ? "" : "s")")
         case "openOutput":
             engine.openOutput()
-            return (engine.output.isOpen, engine.output.isOpen ? "output open" : "output did not open")
+            let open = engine.openOutputs.count, total = engine.outputs.count
+            return (open > 0, open > 0 ? "\(open) of \(total) output\(total == 1 ? "" : "s") open" : "output did not open")
         case "arm", "armPlayback":
             return (true, "armed: the Mac app needs no click to play")
         case "syncMedia":

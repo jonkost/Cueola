@@ -14,6 +14,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Outrangutan "$APP/Contents/MacOS/Outrangutan"
 cp Info.plist "$APP/Contents/Info.plist"
+cp Resources/Outrangutan.icns "$APP/Contents/Resources/Outrangutan.icns"
 
 # Sign it for this Mac. Good enough to run on your own machines.
 codesign --force --sign - "$APP"

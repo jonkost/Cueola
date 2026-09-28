@@ -14,6 +14,8 @@ public struct LiveState: Equatable {
     public var duration: Double = 0      // seconds
     public var remaining: Double?        // seconds, nil for a held still
     public var offset: Double?           // seconds into a video or sound
+    /// Every output, for the rundown's Go Live checks.
+    public var outputList: [OutputLive] = []
     public var outputsOpen = 0
     public var outputsReady = 0
     public var outputsTotal = 1
@@ -22,6 +24,14 @@ public struct LiveState: Equatable {
     public var firstCueName = ""
 
     public init() {}
+}
+
+/// One output as the rundown sees it.
+public struct OutputLive: Equatable {
+    public var id: Int
+    public var label: String
+    public var open: Bool
+    public init(id: Int, label: String, open: Bool) { self.id = id; self.label = label; self.open = open }
 }
 
 public enum LivePacket {
@@ -61,10 +71,34 @@ public enum LivePacket {
     /// Same shape as outputStatus() in the web app. The Mac has one native
     /// output, so there is no kiosk helper and no separate window program.
     public static func outputs(_ s: LiveState, now: Double) -> [String: Any] {
-        let open = s.outputsOpen > 0
-        let item: [String: Any] = [
-            "id": "1",
-            "label": "Output 1",
+        let list = s.outputList.isEmpty ? [OutputLive(id: 1, label: "Output 1", open: s.outputsOpen > 0)] : s.outputList
+        let items = list.map { item(s, $0, now: now) }
+        let open = list.filter(\.open).count
+        let closed = list.filter { !$0.open }
+        let status = open == 0 ? "closed" : (closed.isEmpty ? "ready" : "degraded")
+        let detail: String
+        switch status {
+        case "ready": detail = "\(open) of \(list.count) outputs ready"
+        case "degraded": detail = "\(open) of \(list.count) outputs ready · " + closed.map { $0.label + " closed" }.joined(separator: ", ")
+        default: detail = "No output window open"
+        }
+        return [
+            "status": status,
+            "detail": detail,
+            "open": open,
+            "ready": open,
+            "total": list.count,
+            "items": items,
+            "kioskMediaMissing": 0,
+            "helper": ["wanted": false, "connected": false, "version": "", "chromeFound": false],
+        ]
+    }
+
+    private static func item(_ s: LiveState, _ o: OutputLive, now: Double) -> [String: Any] {
+        let open = o.open
+        return [
+            "id": String(o.id),
+            "label": o.label,
             "status": open ? "ready" : "closed",
             "detail": open ? "Output on screen" : "Output window closed",
             "outputInstanceId": "",
@@ -81,16 +115,6 @@ public enum LivePacket {
             "mode": "native",
             "mediaMissing": 0,
             "foreignWindow": false,
-        ]
-        return [
-            "status": open ? "ready" : "closed",
-            "detail": open ? "1 of 1 outputs ready" : "No output window open",
-            "open": s.outputsOpen,
-            "ready": s.outputsReady,
-            "total": s.outputsTotal,
-            "items": [item],
-            "kioskMediaMissing": 0,
-            "helper": ["wanted": false, "connected": false, "version": "", "chromeFound": false],
         ]
     }
 

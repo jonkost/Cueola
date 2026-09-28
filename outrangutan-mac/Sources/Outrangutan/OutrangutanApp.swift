@@ -6,10 +6,10 @@ struct OutrangutanApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup("Outrangutan") {
+        // One show, one control window.
+        Window("Outrangutan", id: "main") {
             ControlView(engine: appDelegate.engine, link: appDelegate.link)
-                .frame(minWidth: 900, minHeight: 560)
-                .preferredColorScheme(.dark)
+                .frame(minWidth: 960, minHeight: 600)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -24,6 +24,38 @@ struct OutrangutanApp: App {
                 }
                 .keyboardShortcut("i")
             }
+            PlaybackCommands(engine: appDelegate.engine)
+        }
+
+        Settings {
+            SettingsView(engine: appDelegate.engine)
+        }
+    }
+}
+
+/// The Playback menu: every show control, with its key.
+///
+/// The keys are written into the item names instead of being set as menu
+/// shortcuts. A menu shortcut on a plain key (Space, S) could fire while
+/// someone is typing a cue name; the app's own key handler already skips
+/// text boxes.
+struct PlaybackCommands: Commands {
+    @ObservedObject var engine: Engine
+
+    var body: some Commands {
+        CommandMenu("Playback") {
+            Button("GO (Space)") { engine.go() }
+            Button(engine.status == .paused ? "Resume (P)" : "Pause (P)") { engine.togglePause() }
+            Button("Stop (S)") { engine.stop() }
+            Button("Fade and Stop All (F)") { engine.fadeStopAll() }
+            Button("All Stop (Esc)") { engine.allStop() }
+            Divider()
+            Button(engine.openOutputs.isEmpty ? "Open All Outputs" : "Close All Outputs") { engine.toggleOutput() }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("Identify Outputs") { engine.identifyOutputs() }
+                .disabled(engine.openOutputs.isEmpty)
+            Divider()
+            Button("Stop All Pads") { engine.pads.stopAll() }
         }
     }
 }
@@ -37,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        (Appearance(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system).apply()
         // Test mode stays in the background so it never catches keys someone
         // is typing in another app.
         _ = link

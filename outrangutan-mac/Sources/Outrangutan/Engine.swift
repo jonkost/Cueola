@@ -13,6 +13,7 @@ final class Deck {
     var soundLevel: Double = 1      // 0 is silent
     var held = false                // parked on its last frame: finished
     var fadingOut = false
+    var views: [OutputView] = []    // the outputs this deck's picture is on
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
 
@@ -38,11 +39,13 @@ final class Deck {
     var remaining: Double? { end.map { max(0, $0 - current) } }
 
     /// Loads a cue and calls `ended` when it reaches its end (or trim out).
-    func load(_ cue: Cue, ended: @escaping () -> Void) {
+    func load(_ cue: Cue, device: String?, ended: @escaping () -> Void) {
         clearWatchers()
         self.cue = cue
         held = false
         fadingOut = false
+        // Which sound output this player uses. nil is the Mac's default.
+        player.audioOutputDeviceUniqueID = device
         let item = AVPlayerItem(url: cue.url)
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
@@ -105,7 +108,10 @@ final class Engine: ObservableObject {
 
     @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?() } }
     @Published var standbyID: UUID? { didSet { if standbyID != oldValue { onTransport?() } } }
-    @Published var outputScreen: String? { didSet { save(); if output.isOpen { output.open(on: outputScreen) } } }
+    /// The outputs, in order. There is always at least one.
+    @Published var outputs: [OutputConfig] { didSet { outputsChanged() } }
+    /// Where sound goes.
+    @Published var audio: AudioSettings { didSet { audioChanged() } }
 
     @Published private(set) var status: Status = .ready
     @Published private(set) var pictureCue: Cue?
@@ -116,7 +122,8 @@ final class Engine: ObservableObject {
     @Published private(set) var preRemaining: Double?
     @Published private(set) var pendingCue: Cue?
     @Published private(set) var durations: [UUID: Double] = [:]
-    @Published private(set) var outputIsOpen = false
+    /// Outputs whose window is open now.
+    @Published private(set) var openOutputs: Set<Int> = []
     /// Master volume, 0 to 1.2, like the web fader. The Mac plays 1.0 at most.
     @Published private(set) var masterGain: Double = 1
     @Published var notice: String?
@@ -130,10 +137,10 @@ final class Engine: ObservableObject {
     /// Called on every clock tick while something is counting.
     var onTick: (() -> Void)?
 
-    let output = OutputWindowController()
     /// The sound effect board.
     let pads: PadBoard
-    private var view: OutputView { output.pictureView }
+    private var windows: [Int: OutputWindowController] = [:]
+    private var stillViews: [OutputView] = []
     private let fader = Fader()
     private let videoDecks = [Deck(name: "a", slot: .a), Deck(name: "b", slot: .b)]
     private let soundDecks = [Deck(name: "sa", slot: nil), Deck(name: "sb", slot: nil)]
@@ -165,12 +172,14 @@ final class Engine: ObservableObject {
             show.cues[i].wireID = Cue.newWireID(offsetMs: i)
         }
         cues = show.cues
-        outputScreen = show.outputScreen
+        outputs = (show.outputs?.isEmpty == false) ? show.outputs! : [OutputConfig(id: 1, screen: show.outputScreen)]
+        audio = show.audio ?? AudioSettings()
         masterGain = show.masterGain ?? 1
         standbyID = show.cues.first?.id
         pads = PadBoard(banks: show.banks, pads: show.pads, multiTrigger: show.multiTrigger)
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
+        pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
         save()
         loadDurations()
         startClock()
@@ -334,14 +343,15 @@ final class Engine: ObservableObject {
     private func beginVideo(_ cue: Cue) -> WireResult {
         let deck = videoDecks.first { $0 !== pictureDeck } ?? videoDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue) { [weak self, weak deck] in
+        deck.load(cue, device: soundDevice(for: cue)) { [weak self, weak deck] in
             guard let self, let deck, deck.cue?.id == cue.id else { return }
             self.reachedEnd(deck)
         }
         let dissolve = cue.xfade > 0 && (pictureDeck != nil || stillCue != nil)
         deck.pictureLevel = (dissolve || cue.fadeIn > 0) ? 0 : 1
         deck.soundLevel = deck.pictureLevel
-        view.showVideo(deck.player, in: deck.slot!, cue: cue, opacity: Float(deck.pictureLevel))
+        deck.views = views(for: cue)
+        deck.views.forEach { $0.showVideo(deck.player, in: deck.slot!, cue: cue, opacity: Float(deck.pictureLevel)) }
         apply(deck)
         deck.start()
         takeOverPicture(with: dissolve ? cue.xfade : 0, curve: cue.fadeCurve)
@@ -361,7 +371,7 @@ final class Engine: ObservableObject {
     private func beginSound(_ cue: Cue) -> WireResult {
         let deck = soundDecks.first { $0 !== soundDeck } ?? soundDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue) { [weak self, weak deck] in
+        deck.load(cue, device: audio.cueDevice) { [weak self, weak deck] in
             guard let self, let deck, deck.cue?.id == cue.id else { return }
             self.reachedEnd(deck)
         }
@@ -400,8 +410,10 @@ final class Engine: ObservableObject {
         let slot: PictureSlot = stillCue == nil ? stillSlot : (stillSlot == .s1 ? .s2 : .s1)
         let dissolve = cue.xfade > 0 && (pictureDeck != nil || stillCue != nil)
         let startLevel: Double = (dissolve || cue.fadeIn > 0) ? 0 : 1
-        view.showStill(image, in: slot, cue: cue, opacity: Float(startLevel))
+        let targets = views(for: cue)
+        targets.forEach { $0.showStill(image, in: slot, cue: cue, opacity: Float(startLevel)) }
         takeOverPicture(with: dissolve ? cue.xfade : 0, curve: cue.fadeCurve)
+        stillViews = targets
         stillCue = cue
         stillSlot = slot
         stillHeld = cue.duration <= 0
@@ -437,15 +449,16 @@ final class Engine: ObservableObject {
         }
         if let leaving = stillCue {
             let oldSlot = stillSlot
+            let oldViews = stillViews
             pads.cueLeftAir(leaving.id)
             stillCue = nil
             stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil; stillLeft = nil
             fader.cancel("still")
             if seconds > 0 {
                 fader.run("still-out-\(oldSlot.rawValue)", from: 1, to: 1, seconds: seconds, apply: { _ in },
-                          done: { [weak self] in self?.view.hide(oldSlot) })
+                          done: { oldViews.forEach { $0.hide(oldSlot) } })
             } else {
-                view.hide(oldSlot)
+                oldViews.forEach { $0.hide(oldSlot) }
             }
         }
     }
@@ -506,7 +519,7 @@ final class Engine: ObservableObject {
                 self?.stillLevel = v; self?.applyStill()
             }, done: { [weak self] in
                 guard let self, self.stillSlot == slot, self.stillCue?.id == cue.id else { return }
-                self.view.hide(slot); self.stillCue = nil; self.pads.cueLeftAir(cue.id); self.refresh()
+                self.stillViews.forEach { $0.hide(slot) }; self.stillCue = nil; self.pads.cueLeftAir(cue.id); self.refresh()
             })
         }
         refresh()
@@ -626,9 +639,10 @@ final class Engine: ObservableObject {
             s.duration = still.duration
             s.remaining = stillHeld ? nil : (stillLeft ?? stillEndsAt.map { max(0, $0.timeIntervalSinceNow) })
         }
-        s.outputsOpen = output.isOpen ? 1 : 0
+        s.outputList = outputs.map { OutputLive(id: $0.id, label: $0.label, open: openOutputs.contains($0.id)) }
+        s.outputsOpen = s.outputList.filter(\.open).count
         s.outputsReady = s.outputsOpen
-        s.outputsTotal = 1
+        s.outputsTotal = outputs.count
         s.gain = masterGain
         s.firstCueId = cues.first { $0.armed }?.wireID ?? ""
         s.firstCueName = cues.first { $0.armed }?.name ?? ""
@@ -674,24 +688,69 @@ final class Engine: ObservableObject {
         for d in [pictureDeck, soundDeck].compactMap({ $0 }) where d.cue?.id == id {
             d.cue = cue
             apply(d)
-            if let slot = d.slot { view.restyle(slot, cue) }
+            if let slot = d.slot { d.views.forEach { $0.restyle(slot, cue) } }
         }
         if stillCue?.id == id {
             stillCue = cue
-            view.restyle(stillSlot, cue)
+            stillViews.forEach { $0.restyle(stillSlot, cue) }
         }
     }
 
     // MARK: Output
 
+    /// Opens every output, or closes them all if any is open.
     func toggleOutput() {
-        if output.isOpen { output.close() } else { output.open(on: outputScreen) }
-        outputIsOpen = output.isOpen
+        if openOutputs.isEmpty { outputs.forEach { openOutput($0.id) } }
+        else { outputs.forEach { closeOutput($0.id) } }
+    }
+
+    /// Opens every output (the Go Live check's "open the output").
+    func openOutput() {
+        outputs.forEach { openOutput($0.id) }
+    }
+
+    func openOutput(_ id: Int) {
+        guard let config = outputs.first(where: { $0.id == id }) else { return }
+        window(id).open(on: config.screen, title: config.label)
+        openOutputs.insert(id)
         onTransport?()
     }
 
-    func openOutput() {
-        if !output.isOpen { toggleOutput() }
+    func closeOutput(_ id: Int) {
+        windows[id]?.close()
+        openOutputs.remove(id)
+        onTransport?()
+    }
+
+    /// Shows each output's number and name on it for three seconds, so you
+    /// can tell which screen is which.
+    func identifyOutputs() {
+        for config in outputs where openOutputs.contains(config.id) {
+            window(config.id).pictureView.identify(number: config.id, label: config.label)
+        }
+    }
+
+    func addOutput() {
+        guard outputs.count < OutputConfig.most else { return }
+        let id = (1...OutputConfig.most).first { n in !outputs.contains { $0.id == n } } ?? outputs.count + 1
+        outputs.append(OutputConfig(id: id))
+    }
+
+    func removeOutput(_ id: Int) {
+        guard outputs.count > 1 else { return }
+        closeOutput(id)
+        outputs.removeAll { $0.id == id }
+        windows[id] = nil
+    }
+
+    /// What each output shows now, for tests.
+    func outputsShowing() -> String {
+        outputs.map { o in "\(o.label): \(windows[o.id]?.pictureView.showing.joined(separator: " + ") ?? "")" }
+            .joined(separator: " | ")
+    }
+
+    func outputLabel(_ id: Int) -> String {
+        id == 0 ? "Every output" : (outputs.first { $0.id == id }?.label ?? "Output \(id)")
     }
 
     // MARK: Inside
@@ -717,18 +776,19 @@ final class Engine: ObservableObject {
 
     private func apply(_ d: Deck) {
         d.player.volume = Float(min(1, masterGain) * (d.cue?.volume ?? 1) * d.soundLevel)
-        if let slot = d.slot { view.setOpacity(slot, Float(d.pictureLevel)) }
+        if let slot = d.slot { d.views.forEach { $0.setOpacity(slot, Float(d.pictureLevel)) } }
     }
 
     private func applyStill() {
-        view.setOpacity(stillSlot, Float(stillLevel))
+        stillViews.forEach { $0.setOpacity(stillSlot, Float(stillLevel)) }
     }
 
     private func clearDeck(_ d: Deck) {
         if let leaving = d.cue { pads.cueLeftAir(leaving.id) }
         fader.cancel(d.name)
         d.clear()
-        if let slot = d.slot { view.hide(slot) }
+        if let slot = d.slot { d.views.forEach { $0.hide(slot) } }
+        d.views = []
         if pictureDeck === d { pictureDeck = nil }
         if soundDeck === d { soundDeck = nil }
     }
@@ -740,7 +800,8 @@ final class Engine: ObservableObject {
         fader.cancel("still")
         if let leaving = stillCue { pads.cueLeftAir(leaving.id) }
         stillCue = nil
-        view.hide(.s1); view.hide(.s2)
+        for w in windows.values { w.pictureView.hide(.s1); w.pictureView.hide(.s2) }
+        stillViews = []
     }
 
     private func stopSound() {
@@ -810,7 +871,46 @@ final class Engine: ObservableObject {
     }
 
     private func save() {
-        ShowStore.save(ShowFile(cues: cues, outputScreen: outputScreen, masterGain: masterGain,
+        ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
                                 pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger))
+    }
+
+    // MARK: Outputs and sound
+
+    private func window(_ id: Int) -> OutputWindowController {
+        if let w = windows[id] { return w }
+        let w = OutputWindowController()
+        w.onClose = { [weak self] in self?.openOutputs.remove(id); self?.onTransport?() }
+        windows[id] = w
+        return w
+    }
+
+    /// The outputs a cue shows on: its own, or every one for "every output".
+    /// A cue pointed at an output that was removed uses the first output.
+    private func views(for cue: Cue) -> [OutputView] {
+        if cue.output == 0 { return outputs.map { window($0.id).pictureView } }
+        let id = outputs.contains { $0.id == cue.output } ? cue.output : outputs[0].id
+        return [window(id).pictureView]
+    }
+
+    /// A video's sound goes to its output's sound device if it has one,
+    /// else to the cue sound device.
+    private func soundDevice(for cue: Cue) -> String? {
+        if cue.output != 0, let d = outputs.first(where: { $0.id == cue.output })?.audioDevice { return d }
+        return audio.cueDevice
+    }
+
+    private func outputsChanged() {
+        save()
+        // Move open windows to a newly picked screen, and keep titles current.
+        for config in outputs where openOutputs.contains(config.id) {
+            window(config.id).open(on: config.screen, title: config.label)
+        }
+        onTransport?()
+    }
+
+    private func audioChanged() {
+        save()
+        pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
     }
 }

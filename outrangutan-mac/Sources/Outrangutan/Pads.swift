@@ -91,6 +91,24 @@ struct PadBank: Identifiable, Codable, Equatable {
     }
 }
 
+/// A left and right level meter, 0 to 1. Kept apart from the pad board so
+/// only the meter redraws when the level moves.
+final class LevelMeter: ObservableObject {
+    @Published private(set) var left: Float = 0
+    @Published private(set) var right: Float = 0
+    @Published private(set) var clipped = false
+
+    /// Takes the loudest sample of the latest slice of sound. The meter falls
+    /// back slowly, like a real one.
+    func take(_ l: Float, _ r: Float) {
+        left = max(l, left * 0.82)
+        right = max(r, right * 0.82)
+        if l >= 0.99 || r >= 0.99 { clipped = true }
+    }
+
+    func resetClip() { clipped = false }
+}
+
 /// The sound effect board: banks of pads, each with its own EQ, compressor
 /// and volume, all running on the Mac's audio engine. Sounds load into
 /// memory ahead of time, so a pad fires the moment it is hit.
@@ -109,6 +127,8 @@ final class PadBoard: ObservableObject {
     /// Pads sounding now: when each started and how long it runs (nil loops).
     @Published private(set) var sounding: [String: (start: Date, length: Double?)] = [:]
 
+    /// The pads' level, for the meter.
+    let meter = LevelMeter()
     /// Called after any change that should be saved and republished.
     var onChange: (() -> Void)?
     /// Called each time a pad fires, with how long it runs (nil for a loop).
@@ -130,6 +150,19 @@ final class PadBoard: ObservableObject {
         currentBankID = b[0].id
         audio.attach(bus)
         audio.connect(bus, to: audio.mainMixerNode, format: nil)
+        // Measure what the pads send out, for the meter.
+        bus.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            guard let data = buffer.floatChannelData else { return }
+            let n = Int(buffer.frameLength), chans = Int(buffer.format.channelCount)
+            var peaks: [Float] = [0, 0]
+            for c in 0..<min(2, chans) {
+                var m: Float = 0
+                for i in 0..<n { m = max(m, abs(data[c][i])) }
+                peaks[c] = m
+            }
+            if chans == 1 { peaks[1] = peaks[0] }
+            DispatchQueue.main.async { self?.meter.take(peaks[0], peaks[1]) }
+        }
         // When the sound hardware changes (an interface plugged in or out),
         // the engine stops. Start it again and carry on.
         NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio, queue: .main) { [weak self] _ in
@@ -194,6 +227,45 @@ final class PadBoard: ObservableObject {
                       done: { [weak self] in self?.stop(id) })
         }
     }
+
+    /// Sends the pads to a sound device, on a chosen pair of its channels
+    /// (0 is channels 1 and 2, 2 is channels 3 and 4, and so on). nil is the
+    /// Mac's default output. Stops whatever pads are sounding.
+    func setOutput(device uid: String?, firstChannel: Int) {
+        channels.values.forEach { $0.stopAll() }
+        sounding.removeAll()
+        audio.stop()
+        if let unit = audio.outputNode.audioUnit, let dev = AudioDevices.device(uid: uid) ?? AudioDevices.defaultOutput() {
+            var id = dev.objectID
+            AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                                 &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            // The channel map says which of our two channels feeds each of
+            // the device's channels; -1 leaves a channel silent.
+            let total = dev.channels
+            var map = [Int32](repeating: -1, count: total)
+            if total >= 2 {
+                let first = min(max(0, firstChannel), total - 2)
+                map[first] = 0
+                map[first + 1] = 1
+            } else if total == 1 {
+                map[0] = 0
+            }
+            let size = UInt32(map.count * MemoryLayout<Int32>.size)
+            if AudioUnitSetProperty(unit, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, &map, size) != noErr {
+                AudioUnitSetProperty(unit, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Global, 0, &map, size)
+            }
+            channelMapNote = "\(dev.name), channels \(map.firstIndex(of: 0).map { "\($0 + 1) and \($0 + 2)" } ?? "1")"
+        }
+        // Two channels into the device; the map places them.
+        let rate = audio.outputNode.outputFormat(forBus: 0).sampleRate
+        if rate > 0, let stereo = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2) {
+            audio.connect(audio.mainMixerNode, to: audio.outputNode, format: stereo)
+        }
+        startAudio()
+    }
+
+    /// Where the pads are going, in words, for the Settings window.
+    @Published private(set) var channelMapNote = ""
 
     func setMaster(_ gain: Double) {
         masterGain = gain

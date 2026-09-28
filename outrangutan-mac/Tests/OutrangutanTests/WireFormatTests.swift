@@ -78,3 +78,23 @@ final class FadeCurveTests: XCTestCase {
         }
     }
 }
+
+/// Several outputs read like the web app's outputStatus().
+final class OutputsPacketTests: XCTestCase {
+    func testOneOfTwoOpenIsDegraded() {
+        var s = LiveState()
+        s.outputList = [OutputLive(id: 1, label: "Program", open: true), OutputLive(id: 2, label: "IMAG", open: false)]
+        let o = LivePacket.outputs(s, now: 1)
+        XCTAssertEqual(o["status"] as? String, "degraded")
+        XCTAssertEqual(o["total"] as? Int, 2)
+        XCTAssertEqual(o["open"] as? Int, 1)
+        XCTAssertEqual(o["detail"] as? String, "1 of 2 outputs ready · IMAG closed")
+        XCTAssertEqual((o["items"] as? [[String: Any]])?.map { $0["id"] as? String }, ["1", "2"])
+    }
+
+    func testAllOpenIsReady() {
+        var s = LiveState()
+        s.outputList = [OutputLive(id: 1, label: "Program", open: true)]
+        XCTAssertEqual(LivePacket.outputs(s, now: 1)["status"] as? String, "ready")
+    }
+}

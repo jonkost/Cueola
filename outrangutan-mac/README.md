@@ -15,21 +15,31 @@ The app lands in `build/Outrangutan.app`. Double-click it to open it, or drag
 it to Applications.
 
 Xcode must be installed. You do not need to switch Xcode on first, because
-the build script points at it for you.
+the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 
 ## Use it
 
+- The toolbar holds the everyday tools: **Cues / Pads**, **Add Media**,
+  **Add Matte** (a solid color picture), **Outputs**, the connection light,
+  and the **Inspector** button.
 - Drag videos, sounds or stills into the window, or click **Add Media**.
-  **Add Matte** adds a solid color picture.
 - Click a cue to stand it by. Drag cues to reorder them.
 - The **Inspector** on the right (Command-I) holds every setting for the
-  cue standing by:
+  cue standing by. Its icon tabs show one group at a time:
+  - **Cue:** name, notes, Fire on GO, and a pad that comes with the cue.
   - **Timing:** pre-wait, what happens after it starts (Manual, Continue,
     Follow), how long a still stays up, and what happens at the end.
-  - **Trim and sound:** start at, stop at, loop, volume.
+  - **Trim and Sound:** start at, stop at, loop, volume.
   - **Fades:** fade in, fade out, dissolve in, and the fade's curve.
-  - **Picture:** framing, size and position, or a matte's color.
-  - **Fire on GO:** turn it off and GO skips the cue.
+  - **Picture:** which output it shows on, framing, size and position, or a
+    matte's color.
+- **Outputs** in the toolbar opens or closes every output. Its menu opens
+  one at a time and has **Identify**, which puts each output's number on its
+  screen for three seconds.
+- **Settings** (Command-comma) holds the look (match the Mac, dark or light),
+  the outputs (name, screen, and a sound device for each one's video), and
+  where sound goes (cue sound, and the pads' device and channel pair).
+- The **Playback** menu lists every show control with its key.
 - **Open Output** puts the picture on the second screen. With one screen it
   opens as a normal window.
 
@@ -118,6 +128,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   commands the rundown and KeyWi Bird send. No internet is used.
 - `pads`: loading pads, Restart, Layer and Toggle, a hit from the rundown, a
   pad tied to a cue, Stop letting pads ring, PANIC, and hotkeys.
+- `outputs`: two outputs, a cue on each and one on every output, what the
+  rundown hears, Identify, sound devices, pad routing and the pad meter.
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
@@ -128,7 +140,11 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 |---|---|
 | `OutrangutanApp.swift` | Starts the app, the show keys, keeps macOS from slowing it down |
 | `Engine.swift` | The cue list, what is on air, GO, Pause, Stop, All Stop, the clock |
-| `ControlView.swift` | The control window |
+| `ControlView.swift` | The control window and its toolbar |
+| `InspectorKit.swift` | Inspector parts: icon tabs, flat sections, rows |
+| `SettingsView.swift` | Settings: look, outputs, sound |
+| `Outputs.swift` | What an output and the sound settings remember |
+| `AudioDevices.swift` | The Mac's sound outputs |
 | `InspectorView.swift` | Every setting for the cue standing by |
 | `Fader.swift` | Every fade, from one steady clock |
 | `Pads.swift` | The sound effect board and its sound paths |
