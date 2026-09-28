@@ -5108,7 +5108,13 @@ function followSessionMove(newCode, isMover = false) {
 function addCustomSource(key) {
   const val = prompt(`Add custom source for ${key}:`);
   if (!val||!val.trim()) return;
-  const clean = val.trim();
+  saveSessionSource(key, val);
+}
+
+// Add one name to the show's source list (a hidden default comes back).
+function saveSessionSource(key, val) {
+  const clean = String(val || '').trim();
+  if (!clean) return;
   const defaults = SESSION_SOURCE_DEFAULTS[key] || [];
   if (!sessionCustomSources.__removed) sessionCustomSources.__removed = {};
   if (!sessionCustomSources.__removed[key]) sessionCustomSources.__removed[key] = [];
@@ -7652,7 +7658,7 @@ const INFO_POPS = {
 Object.assign(INFO_POPS, {
   'cue-ready-take': { title: 'The two lines', lesson: 'cueola-build', section: 'know',
     body: 'Every cue is two beats the director says out loud, in order. The first line sets it up (READY a camera, STANDBY a mic or a look, ROLL a clip). The second line is the go (TAKE the camera, GO on the mic or the look, CUE the talent). Each department has its own words for the two beats, and the labels here use them. Pick from the buttons to fill both lines, or type them the way you would say them.' },
-  'cue-cell-video': { title: 'Camera cues', lesson: 'cueola-build', section: 'steps', body: 'Which camera goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer.' },
+  'cue-cell-video': { title: 'Video cues', lesson: 'cueola-build', section: 'steps', body: 'Which source goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer. A Media wipe covers the change with an animated clip from the switcher.' },
   'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'STANDBY names the source that is next. GO is what happens to it: a mic opens or closes, music goes up to full or under the voices.' },
   'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'ROLL is how the clip starts. OUT is the plan for getting out when it ends (back to a camera, roll the next clip). Link the clip under More and it rolls by itself when the director takes the row; pre-roll is a countdown before it is on air.' },
   'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. Type what it reads so the graphics operator can build it.' },
@@ -8287,22 +8293,22 @@ function buildFreeTextCueFields(type, d) {
 // every department has its own words for them, and the editor uses those.
 const CUE_EDITOR = {
   video: {
-    title: 'Camera',
+    title: 'Video',
     lines: { ready: 'READY', readyHint: 'frame it', take: 'TAKE', takeHint: 'put it on air', readyEg: 'Ready CAM 1 · Wide', takeEg: 'Take CAM 1' },
     pickers: [
-      { key:'src',   label:'Camera', chips: () => getSources('video'), custom:'Another source' },
+      { key:'src',   label:'Source', chips: () => getSources('video'), custom:'Another source', saveTo:'video' },
       { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','Close-up','2-shot','OTS'], optional:true },
-      { key:'trans', label:'Transition', chips: () => ['Take','Dissolve','Wipe'], optional:true },
+      { key:'trans', label:'Transition', chips: () => ['Take','Dissolve','Wipe','Media wipe'], optional:true },
     ],
     ready: p => p.src ? `Ready ${p.src}${p.shot ? ` · ${p.shot}` : ''}` : '',
     take:  p => p.src ? `${p.trans || 'Take'} ${p.src}` : '',
-    hint: 'Pick the camera, then the shot.',
+    hint: 'Pick the source, then the shot.',
   },
   audio: {
     title: 'Audio',
     lines: { ready: 'STANDBY', readyHint: 'what is next', take: 'GO', takeHint: 'what happens', readyEg: 'Standby Host mic', takeEg: 'Open Host mic' },
     pickers: [
-      { key:'src',    label:'Source', chips: () => getSources('audio'), custom:'Another source' },
+      { key:'src',    label:'Source', chips: () => getSources('audio'), custom:'Another source', saveTo:'audio' },
       { key:'action', label:'Action', chips: () => ['Open','Close','Up','Under'] },
     ],
     ready: p => p.src ? `Standby ${p.src}` : '',
@@ -8345,7 +8351,7 @@ const CUE_EDITOR = {
     title: 'Script',
     lines: { ready: 'STANDBY', readyHint: 'who is next', take: 'CUE', takeHint: 'they start', readyEg: 'Standby Host', takeEg: 'Cue Host' },
     pickers: [
-      { key:'who', label:'Speaker', chips: () => getSources('scriptWho'), custom:'Another name', store:'speaker' },
+      { key:'who', label:'Speaker', chips: () => getSources('scriptWho'), custom:'Another name', store:'speaker', saveTo:'scriptWho' },
     ],
     ready: p => p.who ? `Standby ${p.who}` : '',
     take:  p => p.who ? `Cue ${p.who}` : '',
@@ -8399,12 +8405,52 @@ function ccPickerHTML(type, picker, d) {
   if (picker.input) {
     return `<div class="cc-section">${label}<input class="field-in" id="${id}" value="${esc(current)}" placeholder="${esc(picker.input)}" maxlength="120" autocomplete="off" oninput="ccPickInput('${picker.key}',this.value)"></div>`;
   }
-  const chips = picker.chips().map(c => {
+  const typed = current && !picker.chips().includes(current) ? current : '';
+  const custom = picker.custom ? `<input class="field-in cc-custom-in" id="${id}" value="${esc(typed)}" placeholder="${esc(picker.custom)}" maxlength="80" autocomplete="off" oninput="ccPickInput('${picker.key}',this.value,true)">` : '';
+  // A name typed here can be saved to the show, so it becomes a button on
+  // every cue of this kind (the same list the Admin panel edits).
+  const save = picker.custom && picker.saveTo ? `<button type="button" class="cc-save-src" id="${id}-save" onclick="ccSaveTypedSource('${picker.key}')"${ccCanSaveTyped(picker, typed) ? '' : ' hidden'}>${ccSaveTypedLabel(typed)}</button>` : '';
+  return `<div class="cc-section">${label}<div class="cc-chip-grid" id="${id}-chips">${ccChipsHTML(picker, current)}</div>${custom}${save}</div>`;
+}
+
+function ccChipsHTML(picker, current) {
+  return picker.chips().map(c => {
     const val = esc(JSON.stringify(String(c)));
     return `<button type="button" class="cc-chip${current === c ? ' sel' : ''}" aria-pressed="${current === c}" onclick="ccPickChip('${picker.key}',${val},this)">${esc(String(c))}</button>`;
   }).join('');
-  const custom = picker.custom ? `<input class="field-in cc-custom-in" id="${id}" value="${esc(current && !picker.chips().includes(current) ? current : '')}" placeholder="${esc(picker.custom)}" maxlength="80" autocomplete="off" oninput="ccPickInput('${picker.key}',this.value,true)">` : '';
-  return `<div class="cc-section">${label}<div class="cc-chip-grid" id="${id}-chips">${chips}</div>${custom}</div>`;
+}
+
+// Save to show: offered only for a typed name the show's list does not have yet.
+function ccCanSaveTyped(picker, value) {
+  const clean = String(value || '').trim().toLowerCase();
+  return Boolean(clean) && !picker.chips().some(c => String(c).toLowerCase() === clean);
+}
+function ccSaveTypedLabel(value) {
+  return `${sfIcon('action.add')} Save ${value ? `“${esc(value)}”` : 'it'} to the show`;
+}
+function ccRefreshSaveButton(key) {
+  const picker = CUE_EDITOR[cueConfigType]?.pickers.find(p => p.key === key);
+  const btn = document.getElementById(`ccp-${key}-save`);
+  if (!picker || !btn) return;
+  const value = document.getElementById(`ccp-${key}`)?.value.trim() || '';
+  btn.hidden = !ccCanSaveTyped(picker, value);
+  if (!btn.hidden) btn.innerHTML = ccSaveTypedLabel(value);
+}
+function ccSaveTypedSource(key) {
+  const ed = CUE_EDITOR[cueConfigType];
+  const picker = ed?.pickers.find(p => p.key === key);
+  const input = document.getElementById(`ccp-${key}`);
+  const value = input?.value.trim() || '';
+  if (!picker?.saveTo || !value) return;
+  if (!ccCanSaveTyped(picker, value)) { toast(`${value} is already in the show.`); return; }
+  saveSessionSource(picker.saveTo, value);
+  // The typed name is now a chip: show it lit and empty the box.
+  _ccPick[key] = value;
+  const grid = document.getElementById(`ccp-${key}-chips`);
+  if (grid) grid.innerHTML = ccChipsHTML(picker, value);
+  input.value = '';
+  ccRefreshSaveButton(key);
+  toast(`${value} saved to the show. It is a button on every ${ed.title} cue now.`);
 }
 
 function buildCueConfigFields(type, d) {
@@ -8434,11 +8480,15 @@ function ccPickChip(key, value, el) {
   });
   const custom = document.getElementById(`ccp-${key}`);
   if (custom && custom.classList.contains('cc-custom-in')) custom.value = '';
+  ccRefreshSaveButton(key);
   ccCompose();
 }
 function ccPickInput(key, value, isCustom) {
   _ccPick[key] = String(value || '').trim();
-  if (isCustom) document.querySelectorAll(`#ccp-${key}-chips .cc-chip`).forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
+  if (isCustom) {
+    document.querySelectorAll(`#ccp-${key}-chips .cc-chip`).forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
+    ccRefreshSaveButton(key);
+  }
   ccCompose();
 }
 // Write both lines from the pickers. A line someone typed by hand is theirs:

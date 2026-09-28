@@ -42,9 +42,9 @@ const ed = await page.evaluate(() => ({
   title: document.getElementById('cueConfigTitle').textContent.trim(),
 }));
 if (shots) await page.screenshot({ path: join(shots, 'shot-editor-video.png') });
-check('video editor: READY/TAKE plus three pickers, no tabs', ed.open && !ed.tabs && ed.sections.join(',') === 'Camera,Shot (optional),Transition (optional)', ed.sections.join(','));
+check('video editor: READY/TAKE plus three pickers, no tabs', ed.open && !ed.tabs && ed.sections.join(',') === 'Source,Shot (optional),Transition (optional)', ed.sections.join(','));
 check('video editor has under 30 controls (was 47)', ed.controls < 30, String(ed.controls));
-check('editor title and lines carry ⓘ buttons', ed.info >= 2 && /Camera cue/.test(ed.title), ed.title);
+check('editor title and lines carry ⓘ buttons', ed.info >= 2 && /Video cue/.test(ed.title), ed.title);
 
 // One tap on a camera and a shot writes both lines.
 await page.tap('#ccp-src-chips .cc-chip:nth-child(2)');
@@ -110,6 +110,35 @@ await page.tap('#cueConfigModal .btn-primary');
 await page.waitForTimeout(200);
 const au = await page.evaluate(() => beats[beats.length - 1].cues.audio);
 check('audio cue from the add flow: 4 taps to a finished cell', au.on === 'Standby Host' && au.off === 'Open Host', JSON.stringify(au));
+
+// Media wipe is a transition on the video card.
+await page.evaluate(() => openCueConfig(beats[6].id, 'video'));
+await page.waitForTimeout(200);
+await page.tap('#ccp-src-chips .cc-chip:first-child');
+await page.tap('#ccp-trans-chips .cc-chip:nth-child(4)');
+const mw = await page.evaluate(() => document.getElementById('cc-off-text').value);
+check('Media wipe fills the TAKE line', mw === 'Media wipe CAM 1', mw);
+await page.evaluate(() => hideModal('cueConfigModal'));
+
+// Save to show: a typed source becomes a button on every cue of that kind.
+await page.evaluate(() => openCueConfig(beats[5].id, 'audio'));
+await page.waitForTimeout(200);
+const saveHidden = await page.evaluate(() => document.getElementById('ccp-src-save')?.hidden);
+await page.fill('#ccp-src', "Jon's Mic");
+const saveShown = await page.evaluate(() => ({ hidden: document.getElementById('ccp-src-save').hidden, text: document.getElementById('ccp-src-save').textContent.trim() }));
+check('Save to show appears only once a new name is typed', saveHidden === true && !saveShown.hidden && /Jon's Mic/.test(saveShown.text), JSON.stringify(saveShown));
+if (shots) await page.screenshot({ path: join(shots, 'shot-editor-save-source.png') });
+await page.tap('#ccp-src-save');
+await page.waitForTimeout(100);
+const afterSave = await page.evaluate(() => ({ list: getSources('audio').includes("Jon's Mic"), lit: document.querySelector('#ccp-src-chips .cc-chip.sel')?.textContent.trim(), box: document.getElementById('ccp-src').value, hidden: document.getElementById('ccp-src-save').hidden, take: document.getElementById('cc-off-text').value }));
+check("saved name joins the show list, lights as a chip, keeps the lines", afterSave.list && afterSave.lit === "Jon's Mic" && afterSave.box === '' && afterSave.hidden && afterSave.take === "Open Jon's Mic", JSON.stringify(afterSave));
+await page.evaluate(() => hideModal('cueConfigModal'));
+await page.evaluate(() => openCueConfig(beats[7].id, 'audio'));
+await page.waitForTimeout(200);
+check('the saved name is a button on the next audio cue', await page.evaluate(() => [...document.querySelectorAll('#ccp-src-chips .cc-chip')].some(c => c.textContent.trim() === "Jon's Mic")));
+await page.fill('#ccp-src', 'host');
+check('no Save button for a name the show already has', await page.evaluate(() => document.getElementById('ccp-src-save').hidden));
+await page.evaluate(() => hideModal('cueConfigModal'));
 
 // Segment kind hides duration and first cue.
 await page.evaluate(() => { openAddRow(); arSelectStyle('segment'); });

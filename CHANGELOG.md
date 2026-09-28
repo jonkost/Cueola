@@ -1,5 +1,19 @@
 # Changelog
 
+## Next release (not pushed yet)
+
+### Cue cards
+- The video cue card says Video, and its first picker is Source.
+- New transition on the video card: Media wipe. It fills the TAKE line as
+  "Media wipe CAM 1".
+- Type a new source on a Video or Audio card (or a new Speaker on a Script
+  card) and a "Save to the show" button appears. One tap adds it to the
+  show's list, so it is a button on every cue of that kind, for everyone.
+  The Admin panel's source list shows it too.
+
+### Front page
+- The Planda Bear card has its "Show code required" label back.
+
 ## v3.0.1: Joining a show works again (built 2026-09-28)
 
 ### Fixed
