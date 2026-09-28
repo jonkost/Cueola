@@ -43,6 +43,19 @@ test('the time normalizer turns nothing into a time', () => {
   assert.equal(normalize('9:05 pm'), '21:05');
 });
 
+test('the call sheet preview and PDF show --:-- for a person with no call time', () => {
+  const body = fn('callSheetPreviewHTML');
+  assert.match(body, /paperTime\(p\.call \|\| ''\)/);
+  assert.doesNotMatch(body, /p\.call \|\| data\.call/);
+  // paperTime itself: nothing in, --:-- out.
+  const src = fn('paperTime');
+  const timeTo24 = fn('timeTo24');
+  const paperTime = new Function(`${timeTo24}\n${src}\nreturn paperTime;`)();
+  assert.equal(paperTime(''), '--:--');
+  assert.equal(paperTime(undefined), '--:--');
+  assert.equal(paperTime('12:30'), '12:30 PM');
+});
+
 test('the checklist push never stamps default text into blank rows', () => {
   const body = fn('pushTodoToProductionSchedule');
   assert.match(body, /normalizeProductionChecklistRow\(row, -1\)/);

@@ -61,6 +61,17 @@
 - A row whose cue map was saved as empty no longer stops the whole show from
   opening.
 
+### Planda Bear: plain words
+
+- Its messages, hints and tooltips say what happened in student words.
+  "Saved" instead of "saved to Firestore", "Could not preview the call
+  sheet" instead of "preview blocked", "Assigned to" instead of "Who owes
+  this item", "Paperwork saves" instead of "PB saves", "show" instead of
+  "session". The name Planda Bear stays where it names the place.
+- Nothing moved and no control changed. Old saves read and print as before.
+- Call sheet preview and PDF: a person with no call time shows --:-- again.
+  It used to borrow the sheet's crew call, so a blank looked like 12:30.
+
 ### Checks
 
 - New browser smoke `scripts/tests/join-smoke.browser.mjs`: signs in as a
