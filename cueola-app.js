@@ -4421,7 +4421,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
           : `<span class="aa-sub-marker" aria-hidden="true">and</span>`}
         <select class="admin-in aa-position" data-role-field="positionId" aria-label="Position">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
         ${isLead ? `<button class="aa-add-pos" type="button" onclick="addRoleAssignmentRowForRow(${i})" data-tip="Add another position for this student" aria-label="Add another position for this student">${sfIcon('action.add')}<span>Position</span></button>` : ''}
-        <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position row" aria-label="Remove this position row">${sfIcon('action.close')}</button>
+        <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position" aria-label="Remove this position">${sfIcon('action.close')}</button>
       </div>
       <details class="aa-paperwork">
         <summary>${esc(summary)}</summary>
@@ -4570,9 +4570,9 @@ function pbAssignmentRosterStripHTML(draftRows) {
     const profileId = matches.length === 1 ? (model?.profileIdFor?.(matches[0]) || matches[0].profileId || '') : '';
     const assigned = assignedKeys.has(key) || (profileId && assignedKeys.has(profileId));
     // Assigned people stay tappable: a student can hold several positions.
-    if (assigned && profileId) return `<button class="pb-roster-chip pb-roster-assigned" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Assigned. Tap to add another position for ${esc(name)}">${sfIcon('marker.ready')} ${esc(name)}</button>`;
-    if (assigned) return `<span class="pb-roster-chip pb-roster-assigned" data-tip="Has an assignment row">${sfIcon('marker.ready')} ${esc(name)}</span>`;
-    if (profileId) return `<button class="pb-roster-chip pb-roster-add" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Add an assignment row for ${esc(name)}">+ ${esc(name)}</button>`;
+    if (assigned && profileId) return `<button class="pb-roster-chip pb-roster-assigned" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Add another position for ${esc(name)}">${sfIcon('marker.ready')} ${esc(name)}</button>`;
+    if (assigned) return `<span class="pb-roster-chip pb-roster-assigned">${sfIcon('marker.ready')} ${esc(name)}</span>`;
+    if (profileId) return `<button class="pb-roster-chip pb-roster-add" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Assign a position to ${esc(name)}">+ ${esc(name)}</button>`;
     return `<span class="pb-roster-chip pb-roster-noprofile" data-tip="${matches.length > 1 ? 'Several profiles match this name: pick them in a row manually' : 'No saved profile yet: they create one at the front door'}">${esc(name)}</span>`;
   }).join('');
   return `<div class="admin-src-row u-mb10" id="pbRosterStrip">
@@ -4912,7 +4912,7 @@ async function saveRoleAssignmentsFromAdmin() {
     rerenderRoleAssignments(confirmedRoleAssignmentRows);
     renderPlandaBearAssignmentsCard();
     setAssignmentSaveState('saved', `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
-    toast('Assignments saved to Firestore.');
+    toast('Assignments saved.');
     return true;
   } catch (error) {
     // If the editor's rows left the DOM mid-save (a rebuild replaced the hub
@@ -4946,7 +4946,7 @@ async function retryRoleAssignmentLoad() {
 }
 
 async function reloadRoleAssignmentsAfterConflict() {
-  if (!confirm('Load the server assignment copy and discard this local draft?')) return false;
+  if (!confirm('Load the saved assignments and discard your changes?')) return false;
   return hydrateRoleAssignments({ force:true });
 }
 
@@ -6897,10 +6897,10 @@ async function openPersonInfo(name) {
       <div class="pi-stat"><b>${stats.posts}</b><span>Notes</span></div>
       <div class="pi-stat"><b>${stats.replies}</b><span>Replies</span></div>
       <div class="pi-stat"><b>${stats.todosDone}</b><span>To-Dos done</span></div>
-      <div class="pi-stat"><b>${paperworkSaves.length}</b><span>PB saves</span></div>
+      <div class="pi-stat"><b>${paperworkSaves.length}</b><span>Paperwork saves</span></div>
     </div>
     ${stats.todosOpen ? `<div class="pi-card u-mt7">Open to-dos assigned to them: <b>${stats.todosOpen}</b></div>` : ''}
-    ${sectionLine ? `<div class="pi-sec">Paperwork touched</div><div class="pi-card">${sectionLine}</div>` : ''}
+    ${sectionLine ? `<div class="pi-sec">Paperwork edited</div><div class="pi-card">${sectionLine}</div>` : ''}
     ${lastTouch ? `<div class="pi-sec">Last contribution</div><div class="pi-card">${esc(pbAgo(lastTouch))}</div>` : (paperworkSaves.length || stats.posts ? '' : `<div class="pi-card u-mt7">No paperwork saves or notes from ${esc(name)} in this session yet.</div>`)}`;
 }
 
@@ -11335,7 +11335,7 @@ function maybeShowReadyBeforeShowPrompt(proceed) {
     <div class="ready-prompt-list">
       ${rows.map(r => `<div class="ready-prompt-row${r.done ? ' ok' : ''}">${sfIcon(r.done ? 'marker.ready' : 'action.close')}<span>${esc(r.item)}</span></div>`).join('')}
     </div>
-    <div class="u-note-sm u-mt10">This review shows once per session. Sign items off any time in the Production Schedule.</div>
+    <div class="u-note-sm u-mt10">This review shows once per show. Sign items off any time in the Production Schedule.</div>
     <button class="btn-full btn-primary u-mt10" onclick="dismissReadyBeforeShowPrompt(true)">Go Live</button>
     <button class="btn-full btn-secondary u-mt10" onclick="dismissReadyBeforeShowPrompt(false)">Back to Rundown</button>
   </div>`;
@@ -20540,7 +20540,7 @@ function pbSchedulePatchGridReconcile() {
     const anyRecent = [...document.querySelectorAll('[data-patch-kind]')].some(i => pbFieldRecentlyEdited(i.id));
     if (editing || anyRecent) { pbSchedulePatchGridReconcile(); return; }
     pbRenderPatchBody();
-    toast('Patch sheet updated by a collaborator.');
+    toast('Patch sheet updated by someone else.');
   }, 1500);
 }
 function pbRenderPatchBody() {
@@ -20727,8 +20727,8 @@ function savePaperworkItem(id=currentPaperworkItemId(), showToastOnSave=true) {
   if (id === 'safety-plan') { saveSafetyPlan(showToastOnSave); paperworkDirty = false; return; }
   if (id === 'video-patch' || id === 'audio-comms-patch') { savePatchSheet(showToastOnSave); if (!_pbPatchGridDiverged) paperworkDirty = false; return; }
   if (id === 'stage-plot') { saveStagePlot(showToastOnSave); paperworkDirty = false; return; }
-  if (id === 'production-notes') { saveProductionNoteDraft(); paperworkDirty = false; if (showToastOnSave) toast('Published notes save automatically. Draft kept.'); return; }
-  if (showToastOnSave) toast('Rundown is already part of the package.');
+  if (id === 'production-notes') { saveProductionNoteDraft(); paperworkDirty = false; if (showToastOnSave) toast('Notes save on their own. Your draft is kept.'); return; }
+  if (showToastOnSave) toast('The rundown is already in the paperwork export.');
 }
 
 function renderPaperworkNav(id, slotId='') {
@@ -20861,7 +20861,7 @@ function renderPlandaBearPaperworkManager() {
   }).join('');
   wrap.innerHTML = `<div class="pb-assign-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork for this show</div>
-    <div class="u-note-sm u-mb8">What this show code requires. Off means hidden for the whole crew and skipped in the package export. Saved work is kept and comes back when an item is turned back on. Production Notes is always on.</div>
+    <div class="u-note-sm u-mb8">Choose which paperwork this show needs. Off hides it from the crew and leaves it out of the export; saved work comes back when it is turned on again. Production Notes is always on.</div>
     <div class="pb-pw-list">${rows}</div>
   </div>`;
 }
@@ -20962,7 +20962,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
     _pbAssignCardFp = cardFp;
     wrap.innerHTML = `<div class="pb-assign-card pb-assign-editor">
       <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
-      <div class="u-note-sm u-mb8">Choose a saved profile, position, and required paperwork. The saved roster shows here for the whole crew. Changes remain unsaved until Firestore confirms <b>Save assignments</b>.</div>
+      <div class="u-note-sm u-mb8">Choose a profile, position and required paperwork for each person. The crew sees this roster. Nothing is saved until you press <b>Save assignments</b>.</div>
       <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
       <div class="admin-src-row u-mb10">
         <span class="admin-src-label">Positions</span>
@@ -20990,7 +20990,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   if (adminSession && (session.code || session.isDemo || session.isExpert)) {
     wrap.innerHTML = `<div class="pb-assign-card">
       <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
-      <div class="u-note">This workspace is not on a shared show code. Open Planda Bear with the show code to set position assignments.</div>
+      <div class="u-note">No show code. Open Planda Bear with a show code to assign positions.</div>
     </div>`;
     return;
   }
@@ -21167,7 +21167,7 @@ function plandaBearCommentSectionOptions(selected='Overall') {
 
 async function addPlandaBearComment(section, slotId) {
   if (!pbIsInstructor()) {
-    toast('Only instructors can add Planda Bear comments.');
+    toast('Only instructors can add comments.');
     return;
   }
   const scope = slotId || 'pbCommentsHub';
@@ -22849,7 +22849,7 @@ function pbRenderComposerTags() {
   const chips = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
     `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" data-tip="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
   const assign = pbComposerTag === 'todo'
-    ? `<label class="pb-assign-pick" data-tip="Assign this to-do to someone in the session">Assign:
+    ? `<label class="pb-assign-pick" data-tip="Assign this to someone on the show">Assign:
         <select onchange="pbSetComposerAssignee(this.value)">
           <option value="">Anyone</option>
           ${pbAssigneeOptions().map(n => `<option value="${esc(n)}"${pbComposerAssignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
@@ -22890,7 +22890,7 @@ function pbRenderComposerChecklist() {
     <div class="pb-cl-row">
       <span class="pb-cl-box" aria-hidden="true"></span>
       <input class="pb-cl-input" type="text" value="${esc(it.text)}" placeholder="To-do item ${i + 1}" oninput="pbChecklistEdit(${i}, this.value)" onkeydown="pbChecklistKeydown(event, ${i})" aria-label="Checklist item ${i + 1}">
-      <select class="pb-cl-assign" onchange="pbChecklistAssign(${i}, this.value)" data-tip="Who owes this item" aria-label="Assign checklist item ${i + 1}">
+      <select class="pb-cl-assign" onchange="pbChecklistAssign(${i}, this.value)" data-tip="Assigned to" aria-label="Assign checklist item ${i + 1}">
         <option value="">Anyone</option>
         ${opts.map(n => `<option value="${esc(n)}"${it.assignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
       </select>
@@ -23182,7 +23182,7 @@ async function pbSendAudioToOutrangutan(fileId, name) {
       if (res && res.ok) { toast(`Downloaded “${fname}” and added it to Outrangutan’s SFX board.`); return; }
     } catch {}
   }
-  toast(`Downloaded “${fname}”. Open Outrangutan → SFX Board and add it to a pad, or pull it there with the SFX tab’s Import from Production Notes.`);
+  toast(`Downloaded “${fname}”. In Outrangutan, open the SFX Board and add it to a pad.`);
 }
 
 // ── Outrangutan SFX pull bridge ─────────────────────────────────────────────
@@ -23420,7 +23420,7 @@ function pbPushNoteToSchedule(noteId) {
 }
 
 function pbOpenOwes() {
-  if (!pbIsInstructor()) { toast('Only instructors can open the who-owes-what view.'); return; }
+  if (!pbIsInstructor()) { toast('Only instructors can open the assignments view.'); return; }
   showModal('pbOwesModal');
   pbRenderOwes();                                   // instant, from local state
   loadPlandaBearNotes().then(pbRenderOwes);         // then refreshed from the cloud
@@ -23442,7 +23442,7 @@ function pbRenderOwes() {
         <span class="pb-owes-count">${r.items.length} open</span>
       </div>
       <ul class="pb-owes-items">${r.items.map(it => `
-        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" data-tip="Jump to this note">${esc(it.text.slice(0, 120))}</button><button type="button" class="pb-owes-push" onclick="pbPushOwesItem('${it.noteId}','${it.itemId}')" data-tip="Add to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button></li>`).join('')}</ul>
+        <li><button type="button" class="pb-owes-jump" onclick="pbOwesJump('${it.noteId}')" data-tip="Jump to this note">${esc(it.text.slice(0, 120))}</button><button type="button" class="pb-owes-push" onclick="pbPushOwesItem('${it.noteId}','${it.itemId}')" data-tip="Add to the Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button></li>`).join('')}</ul>
     </div>`).join('');
 }
 
@@ -23490,7 +23490,7 @@ function pbNoteFootHTML(note, replyCount) {
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
     ${mine ? `<button type="button" class="pb-note-act" onclick="pbStartEditNote('${note.id}')">${sfIcon('action.edit')} Edit</button>` : ''}
     ${pbIsInstructor() ? `<button type="button" class="pb-note-act" onclick="pbTogglePin('${note.id}')">${sfIcon('action.pin')} ${note.pinned ? 'Unpin' : 'Pin'}</button>` : ''}
-    ${pbIsInstructor() && ((note.tag === 'todo' && !note.done) || (note.checklist || []).some(it => !it.done)) ? `<button type="button" class="pb-note-act" onclick="pbPushNoteToSchedule('${note.id}')" data-tip="Add the open to-dos to the Production Schedule's Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button>` : ''}
+    ${pbIsInstructor() && ((note.tag === 'todo' && !note.done) || (note.checklist || []).some(it => !it.done)) ? `<button type="button" class="pb-note-act" onclick="pbPushNoteToSchedule('${note.id}')" data-tip="Add the open to-dos to the Ready Before Show checklist">${sfIcon('content.calendar')} Schedule</button>` : ''}
     <button type="button" class="pb-note-act export-action" onclick="exportProductionNoteById('${note.id}')">${sfIcon('action.export')} PDF</button>
     ${pbCanManageNote(note) ? `<button type="button" class="pb-note-act danger" onclick="deletePlandaBearNote('${note.id}')">${sfIcon('action.delete')} Delete</button>` : ''}
     ${pbSeenByHTML(note)}
@@ -24144,7 +24144,7 @@ async function showProductionNotesPreview() {
       'Export Notes Log PDF', 'exportProductionNotesPDF()', 'production-notes', options);
   } catch (error) {
     lastProductionNotesExportSnapshot = null;
-    toast(`Notes preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the notes: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -24158,13 +24158,13 @@ async function exportProductionNotesPDF() {
       includeNotes:true,
       documentType:'production-notes-log',
     });
-    toast('Building notes log PDF...');
+    toast('Building the notes PDF…');
     const stamp = new Date(snapshot.exportedAt).toISOString().slice(0,10);
     const html = productionNotesThreadHTML(snapshot.notes, snapshot.production.name, paperworkSectionNumber('production-notes', snapshot));
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
-      toast(`Notes log PDF downloaded · ${result.pageCount} pages.`);
+      toast(`Notes PDF downloaded · ${result.pageCount} pages.`);
     } catch (error) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
@@ -24172,7 +24172,7 @@ async function exportProductionNotesPDF() {
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     }
   } catch (error) {
-    toast(`Notes export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export the notes: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -24263,7 +24263,7 @@ function pnNoteCardHTML(note) {
     ${atts ? `<div class="pn-card-atts">${sfIcon('action.attach')} ${atts} file${atts > 1 ? 's' : ''}</div>` : ''}
     <div class="pn-card-acts">
       ${canTarget && hasText ? `
-        <button type="button" class="pn-act-btn pn-act-notes" onclick="pnAddToRowNotes('${note.id}')" data-tip="Copy note text to the target row's notes field">
+        <button type="button" class="pn-act-btn pn-act-notes" onclick="pnAddToRowNotes('${note.id}')" data-tip="Add this note to the row's notes">
           ${sfIcon('content.note')} Row Notes
         </button>
         <button type="button" class="pn-act-btn pn-act-script" onclick="pnAddAsScript('${note.id}')" data-tip="Set as script cue text on the target row">
@@ -24411,7 +24411,7 @@ function openPaperworkItem(id) {
   // D6: disabled types are hidden for everyone — deep links, presence opens,
   // and stale buttons all bounce here instead of opening a hidden editor.
   if (!paperworkTypeEnabled(id)) {
-    toast('That paperwork type is turned off for this session.');
+    toast('That paperwork is turned off for this show.');
     return;
   }
   activePaperworkItemId = id;
@@ -25069,7 +25069,7 @@ async function showCallSheetPreview() {
       'Export Call Sheet PDF', 'downloadCallSheetPDF()', 'call-sheet', options);
   } catch (error) {
     lastCallSheetExportSnapshot = null;
-    toast(`Call sheet preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the call sheet: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -25888,7 +25888,7 @@ function deleteStagePlot() {
   }
   if (!stagePlotsWorking) return;
   if (stagePlotsWorking.length <= 1) {
-    toast('A session always keeps at least one stage plot.');
+    toast('A show always keeps at least one stage plot.');
     return;
   }
   const idx = resolveActiveStagePlotIndex();
@@ -26281,7 +26281,7 @@ function renderPlotLayerBar() {
     <button type="button" class="plot-flow-btn${plotFlowMode ? ' on' : ''}" onclick="togglePlotFlowMode()" aria-pressed="${plotFlowMode}" data-tip="Draw signal flow on the ${esc(plotLayerDef(plotActiveLayer)?.label || '')} layer: click the source, then the destination. Shortcut: F">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h5c5 0 5-10 10-10"/><path d="M15.5 3.5 19 7l-3.5 3.5"/></svg><span>${plotFlowMode ? 'Drawing Flow' : 'Draw Flow'}</span>
     </button>
-    <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF with each layer on its own page plus the combined plot">
+    <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF: each layer on its own page, then all layers together">
       ${sfIcon('action.download')}<span>Layer Set PDF</span>
     </button>`;
 }
@@ -26548,7 +26548,7 @@ function renderPlotPalette(data=null) {
   }).join('');
   const manageBar = canManage ? `<div class="plot-bank-manage-row">
     <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage Bank'}</button>
-    ${plotBankManage ? '<div class="plot-insp-hint">Tap gear to hide it from students. Anything already placed stays on the plot.</div>' : ''}
+    ${plotBankManage ? '<div class="plot-insp-hint">Tap an item to hide it from students. Placed items stay on the plot.</div>' : ''}
   </div>` : '';
   host.innerHTML = manageBar + groups;
 }
@@ -26646,7 +26646,7 @@ function renderPlotInspector() {
       <select class="field-in" id="plot-floor-select" onchange="updateStagePlotFloor(this.value)">
         ${PLOT_FLOOR_TEMPLATES.map(t => `<option value="${t.id}" ${floorNow.id === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
       </select>
-      <div class="plot-insp-hint">Assign the floor plan for your learning space. Picking a room sizes the space to match it.</div>`
+      <div class="plot-insp-hint">Pick a room to size the space to match it.</div>`
       : `<div class="plot-insp-hint">${esc(floorNow.label)}. ${canShapeSpace ? 'Set the space size below.' : 'Your instructor assigns the floor plan and space size.'}</div>`}
     </div>
     <div class="plot-insp-h">Space size (feet)</div>
@@ -26966,7 +26966,7 @@ async function prepareStagePlotRasters(snapshot) {
   _stagePlotRasterCache = { fingerprint: snapshot.fingerprint, byKey };
   // Silent raster failure used to make the exported figure quietly differ
   // from the preview (SVG fallback renders differently). Say it happened.
-  if (failed) toast(`${failed} stage plot figure${failed === 1 ? '' : 's'} could not pre-render; the PDF uses the live drawing instead (may differ slightly).`);
+  if (failed) toast(`${failed} stage plot drawing${failed === 1 ? '' : 's'} may look slightly different in the PDF.`);
 }
 
 let lastStagePlotExportSnapshot = null;
@@ -27011,7 +27011,7 @@ async function showStagePlotPreview() {
       'Export Stage Plot PDF', 'downloadStagePlotPDF()', 'stage-plot', options);
   } catch (error) {
     lastStagePlotExportSnapshot = null;
-    toast(`Stage plot preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the stage plot: ${paperworkExportFailureMessage(error)}`);
   }
 }
 async function downloadStagePlotPDF() {
@@ -27026,7 +27026,7 @@ async function downloadStagePlotPDF() {
     snapshot = previewIsOpen ? lastStagePlotExportSnapshot
       : await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers, plotId: activeStagePlotId });
   } catch (error) {
-    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const plots = getStagePlots(snapshot.prePro);
@@ -27054,7 +27054,7 @@ async function exportStagePlotLayerSetPDF() {
       plotLayerSets: PLOT_LAYER_SET_PAGES, plotId: activeStagePlotId,
     });
   } catch (error) {
-    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const plots = getStagePlots(snapshot.prePro);
@@ -27733,10 +27733,10 @@ function canManageCallSheetStructure() {
 // pointing at this sheet's paperwork label are stripped with a toast naming
 // the affected students. Session History remains the undo of last resort.
 function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
-  if (!canManageCallSheetStructure()) { toast('Only an instructor or admin can delete a call sheet.'); return; }
+  if (!canManageCallSheetStructure()) { toast('Only instructors and admins can delete a call sheet.'); return; }
   const data = saveCallSheetStateLocally(false);
   const sheets = getCallSheets(data);
-  if (sheets.length <= 1) { toast('A session always keeps at least one call sheet.'); return; }
+  if (sheets.length <= 1) { toast('A show always keeps at least one call sheet.'); return; }
   const idx = Math.max(0, Math.min(Number(index) || 0, sheets.length - 1));
   const sheet = sheets[idx];
   const sheetLabel = `Call Sheet: ${callSheetDisplayName(sheet, idx)}`.toLowerCase();
@@ -28714,7 +28714,7 @@ async function showPreProPackagePreview() {
     showPaperPreview('PDF Package Preview', preProPackageHTML(false, snapshot), 'Export PDF Package', 'exportPreProPackagePDF()', null, options);
   } catch (error) {
     lastPackageExportSnapshot = null;
-    toast(`Package preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the package: ${paperworkExportFailureMessage(error)}`);
   }
 }
 function pbTogglePackageNotes(on) {
@@ -29694,7 +29694,7 @@ function renderCallSheetPeople() {
     const hasPeople = callSheetPeople.some(p => ['name','position','email','phone'].some(k => String(p?.[k] || '').trim()));
     const rosterCount = hasPeople ? 0 : getRoleAssignments().filter(row => String(row?.person || '').trim()).length;
     rosterHint.hidden = !rosterCount;
-    if (rosterCount) rosterHint.textContent = `The roster already lists ${rosterCount} ${rosterCount === 1 ? 'person' : 'people'} with positions. Tap Fill from roster to add them all at once.`;
+    if (rosterCount) rosterHint.textContent = `${rosterCount} ${rosterCount === 1 ? 'person' : 'people'} on the roster ${rosterCount === 1 ? 'has' : 'have'} a position. Tap Fill from roster to add them.`;
   }
 }
 
@@ -29722,7 +29722,7 @@ function addCallSheetPerson() {
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
-  if (!roster.length) { toast('No saved role assignments yet. Assign positions on the Planda Bear hub first.'); return; }
+  if (!roster.length) { toast('No positions assigned yet. Assign positions on the Planda Bear hub first.'); return; }
   // Group person -> joined positions, in roster order.
   const byPerson = new Map();
   roster.forEach(row => {
@@ -29809,7 +29809,7 @@ async function downloadCallSheetPDF() {
       documentType:'call-sheet',
     });
   } catch (error) {
-    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const sheets = getCallSheets(snapshot.prePro);
@@ -29831,7 +29831,7 @@ async function downloadCallSheetPDF() {
       const result = await printPaperHTML(html, options);
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
-      toast(`Could not render the saved call sheet: ${paperworkExportFailureMessage(printError)}`);
+      toast(`Could not build the call sheet PDF: ${paperworkExportFailureMessage(printError)}`);
     }
   }
 }
@@ -29873,7 +29873,7 @@ async function exportPreProPackagePDF() {
         ...(groupActive() ? { groupId: activeGroupId, groupName: activeGroupName() } : {}),
       });
   } catch (error) {
-    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const html = preProPackageHTML(true, snapshot);
@@ -29881,7 +29881,7 @@ async function exportPreProPackagePDF() {
   const cleanFileName = (snapshot.production.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
   try {
     const result = await exportPaperHTMLAsPDF(html, `${cleanFileName}-plandabear-package.pdf`, options);
-    toast(`Planda Bear package PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Paperwork package PDF downloaded · ${result.pageCount} pages.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
@@ -29889,7 +29889,7 @@ async function exportPreProPackagePDF() {
       const result = await printPaperHTML(html, options);
       toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
     } catch (printError) {
-      toast(`Could not render the saved package: ${paperworkExportFailureMessage(printError)}`);
+      toast(`Could not build the package PDF: ${paperworkExportFailureMessage(printError)}`);
     }
   }
 }
@@ -29908,7 +29908,7 @@ async function exportPDF() {
       documentType:'rundown',
     });
   } catch (error) {
-    toast(`Export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export: ${paperworkExportFailureMessage(error)}`);
     return;
   }
   const cleanFileName = `${(snapshot.production.name || 'cueola-rundown').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-rundown'}.pdf`;
