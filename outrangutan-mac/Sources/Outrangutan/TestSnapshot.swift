@@ -45,6 +45,7 @@ enum TestSnapshot {
         let steps: Steps
         switch scenario {
         case "link": steps = linkSteps(engine: engine, link: link, note: note, state: state, snap: snap)
+        case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
             (1.0, {
@@ -94,6 +95,52 @@ enum TestSnapshot {
             (0.8, { state("after GO 3"); snap("4-sound") }),
             (0.2, { engine.allStop() }),
             (0.5, { state("after All Stop"); snap("5-allstop") }),
+        ]
+    }
+
+    /// Step 2 rules: pre-wait, a still timer that follows into a dissolve, a
+    /// trimmed video that holds its last frame, Continue, a matte, a trimmed
+    /// loop, Pause and Fade. Uses a pretend cue list; the real show is untouched.
+    private static func timingSteps(engine: Engine, note: @escaping (String) -> Void,
+                                    state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func file(_ name: String, _ kind: CueKind, _ label: String) -> Cue {
+            Cue(name: label, path: media.appendingPathComponent(name).path, kind: kind, wireID: Cue.newWireID())
+        }
+        var still = file("still-16x9.png", .still, "1 Still, pre-wait 1, up 1.5, Follow")
+        still.preWait = 1; still.duration = 1.5; still.continueMode = .autoFollow
+        var video = file("bars-16x9.mp4", .video, "2 Bars, last 5 s, dissolve 1, hold")
+        video.trimIn = 95; video.xfade = 1; video.endAction = .hold
+        var sound = file("demo-applause.wav", .audio, "3 Applause, fade in, Continue")
+        sound.fadeIn = 0.5; sound.continueMode = .autoContinue
+        var matte = Cue.matte(named: "4 Red matte, dissolve 0.5", color: "#C8102E")
+        matte.xfade = 0.5
+        var loop = file("bars-4x3.mp4", .video, "5 Bars 4x3, 10 to 13 s, loop")
+        loop.trimIn = 10; loop.trimOut = 13; loop.loop = true
+        return [
+            (1.0, {
+                engine.cues = [still, video, sound, matte, loop]
+                engine.standbyID = engine.cues[0].id
+                engine.openOutput()
+            }),
+            (0.5, { engine.go() }),
+            (0.4, { state("a GO on the still: waiting out its pre-wait"); note("   pre-wait left: \(engine.preRemaining.map { String(format: "%.1f", $0) } ?? "-")") }),
+            (1.0, { state("b the still is up, its timer counting"); snap("t-b-still") }),
+            (1.6, { state("c the timer ended, Follow started the video under a dissolve") }),
+            (0.4, { snap("t-c-dissolve") }),
+            (5.5, { state("d the trimmed video ended and holds its last frame") }),
+            (0.1, { engine.go() }),
+            (0.8, { state("e GO: applause fades in, Continue brought up the matte"); snap("t-e-matte") }),
+            (0.2, { engine.standbyID = engine.cues[4].id; engine.go() }),
+            (4.2, { state("f the 3 second loop has gone round (clock stays under 3 s)") }),
+            (0.1, { engine.togglePause() }),
+            (0.6, { state("g paused") }),
+            (0.1, { engine.togglePause() }),
+            (0.4, { state("h carrying on") }),
+            (0.1, { engine.fadeStopAll() }),
+            (0.5, { state("i half way through Fade") }),
+            (0.9, { state("j after Fade"); snap("t-j-end") }),
         ]
     }
 

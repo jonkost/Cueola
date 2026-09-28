@@ -20,7 +20,16 @@ the build script points at it for you.
 ## Use it
 
 - Drag videos, sounds or stills into the window, or click **Add Media**.
+  **Add Matte** adds a solid color picture.
 - Click a cue to stand it by. Drag cues to reorder them.
+- The **Inspector** on the right (Command-I) holds every setting for the
+  cue standing by:
+  - **Timing:** pre-wait, what happens after it starts (Manual, Continue,
+    Follow), how long a still stays up, and what happens at the end.
+  - **Trim and sound:** start at, stop at, loop, volume.
+  - **Fades:** fade in, fade out, dissolve in, and the fade's curve.
+  - **Picture:** framing, size and position, or a matte's color.
+  - **Fire on GO:** turn it off and GO skips the cue.
 - **Open Output** puts the picture on the second screen. With one screen it
   opens as a normal window.
 
@@ -33,8 +42,8 @@ the build script points at it for you.
 | Esc | All Stop: everything off, output to black |
 
 Sounds play on their own lane, so a sound effect never knocks the picture
-off air. A still holds until the next picture cue. A video that reaches its
-end cuts to black.
+off air. A still holds until the next picture cue, or counts down when it has
+a time. While paused, GO carries on, like the web app.
 
 The show saves itself after every change, to
 `~/Library/Application Support/Outrangutan/show.json`.
@@ -88,6 +97,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `transport` (the default): GO, Pause, All Stop pressed on this Mac.
 - `link`: a pretend show record plays the rundown's part and sends the same
   commands the rundown and KeyWi Bird send. No internet is used.
+- `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
+  video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
 
 ## What is inside
@@ -97,6 +108,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `OutrangutanApp.swift` | Starts the app, the show keys, keeps macOS from slowing it down |
 | `Engine.swift` | The cue list, what is on air, GO, Pause, Stop, All Stop, the clock |
 | `ControlView.swift` | The control window |
+| `InspectorView.swift` | Every setting for the cue standing by |
+| `Fader.swift` | Every fade, from one steady clock |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, and saving the show |
 | `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |
@@ -112,4 +125,5 @@ so `swift test` can check each one:
 | `CommandInbox.swift` | Which commands run, which are old, retries, a stop beating older fires |
 | `LivePacket.swift` | What is on air, in the rundown's words |
 | `FirestoreValue.swift` | The cloud's written form of values |
+| `FadeCurve.swift` | The three fade shapes, the same as the web app |
 | `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |

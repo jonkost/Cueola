@@ -64,3 +64,17 @@ final class WireFormatTests: XCTestCase {
         XCTAssertEqual((p["armed"] as? [String: Any])?["armed"] as? Bool, true)
     }
 }
+
+/// Fade shapes must match curveK in the web app.
+final class FadeCurveTests: XCTestCase {
+    func testShapes() {
+        XCTAssertEqual(FadeCurve.linear.shape(0.25), 0.25, accuracy: 1e-9)
+        XCTAssertEqual(FadeCurve.s.shape(0.25), 0.25 * 0.25 * (3 - 0.5), accuracy: 1e-9)
+        XCTAssertEqual(FadeCurve.log.shape(0.5), pow(0.5, 2.2), accuracy: 1e-9)
+        for c in FadeCurve.allCases {
+            XCTAssertEqual(c.shape(0), 0, accuracy: 1e-9)
+            XCTAssertEqual(c.shape(1), 1, accuracy: 1e-9)
+            XCTAssertEqual(c.shape(2), 1, accuracy: 1e-9, "past the end stays at the end")
+        }
+    }
+}

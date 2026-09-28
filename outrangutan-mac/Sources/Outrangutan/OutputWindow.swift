@@ -1,6 +1,14 @@
 import AppKit
 import AVFoundation
 
+/// The four picture layers on the output. Two video layers let one clip
+/// dissolve into the next; two still layers do the same for stills and
+/// mattes.
+enum PictureSlot: String, CaseIterable {
+    case a, b, s1, s2
+    var isStill: Bool { self == .s1 || self == .s2 }
+}
+
 /// The output: the picture that goes to air.
 ///
 /// On a second screen it fills that screen edge to edge, with no title bar
@@ -8,7 +16,7 @@ import AVFoundation
 /// can still see it while you build the show.
 final class OutputWindowController {
     private var window: NSWindow?
-    private let pictureView = OutputView()
+    let pictureView = OutputView()
 
     var isOpen: Bool { window?.isVisible ?? false }
 
@@ -46,68 +54,151 @@ final class OutputWindowController {
         window?.orderOut(nil)
         window = nil
     }
-
-    func showVideo(_ player: AVPlayer) { pictureView.showVideo(player) }
-    func showStill(_ image: NSImage) { pictureView.showStill(image) }
-    func black() { pictureView.black() }
-    /// 1 is full picture, 0 is black. Used by Fade.
-    func setLevel(_ level: Float) { pictureView.setLevel(level) }
 }
 
-/// Black background with one layer for video and one for stills.
+/// Black background with the four picture layers.
 final class OutputView: NSView {
-    private let videoLayer = AVPlayerLayer()
-    private let stillLayer = CALayer()
+    private let videoA = AVPlayerLayer()
+    private let videoB = AVPlayerLayer()
+    private let still1 = CALayer()
+    private let still2 = CALayer()
+    private var frames: [PictureSlot: Cue] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer = CALayer()
         layer?.backgroundColor = NSColor.black.cgColor
-        videoLayer.videoGravity = .resizeAspect
-        videoLayer.backgroundColor = NSColor.black.cgColor
-        stillLayer.contentsGravity = .resizeAspect
-        for sub in [videoLayer, stillLayer] {
+        for sub in [videoA, videoB, still1, still2] {
             sub.isHidden = true
-            sub.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull()]
+            sub.opacity = 1
+            sub.backgroundColor = NSColor.clear.cgColor
+            sub.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(),
+                           "opacity": NSNull(), "transform": NSNull(), "zPosition": NSNull(),
+                           "backgroundColor": NSNull()]
             layer?.addSublayer(sub)
         }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    private func layerFor(_ slot: PictureSlot) -> CALayer {
+        switch slot {
+        case .a: return videoA
+        case .b: return videoB
+        case .s1: return still1
+        case .s2: return still2
+        }
+    }
+
     override func layout() {
         super.layout()
+        quietly {
+            for slot in PictureSlot.allCases {
+                let l = layerFor(slot)
+                l.transform = CATransform3DIdentity
+                l.frame = bounds
+                if let cue = frames[slot] { place(l, cue) }
+            }
+        }
+    }
+
+    /// Puts a video player on a layer, on top of the others.
+    func showVideo(_ player: AVPlayer, in slot: PictureSlot, cue: Cue, opacity: Float) {
+        quietly {
+            guard let l = layerFor(slot) as? AVPlayerLayer else { return }
+            l.player = player
+            frames[slot] = cue
+            style(slot, cue)
+            l.opacity = opacity
+            l.isHidden = false
+            raise(slot)
+        }
+    }
+
+    /// Shows a still picture or a matte color on a still layer, on top.
+    func showStill(_ image: NSImage?, in slot: PictureSlot, cue: Cue, opacity: Float) {
+        quietly {
+            let l = layerFor(slot)
+            l.contents = image
+            frames[slot] = cue
+            style(slot, cue)
+            l.opacity = opacity
+            l.isHidden = false
+            raise(slot)
+        }
+    }
+
+    /// Applies a cue's framing to a layer that is already showing, for
+    /// changes made in the Inspector while the cue is on air.
+    func restyle(_ slot: PictureSlot, _ cue: Cue) {
+        guard frames[slot] != nil else { return }
+        quietly {
+            frames[slot] = cue
+            style(slot, cue)
+        }
+    }
+
+    private func style(_ slot: PictureSlot, _ cue: Cue) {
+        let l = layerFor(slot)
+        if let v = l as? AVPlayerLayer {
+            v.videoGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
+        } else {
+            l.backgroundColor = cue.kind == .matte ? (NSColor(hex: cue.color) ?? .black).cgColor : NSColor.clear.cgColor
+            l.contentsGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
+        }
+        place(l, cue)
+    }
+
+    func setOpacity(_ slot: PictureSlot, _ value: Float) {
+        quietly { layerFor(slot).opacity = value }
+    }
+
+    func hide(_ slot: PictureSlot) {
+        quietly {
+            let l = layerFor(slot)
+            l.isHidden = true
+            if slot.isStill { l.contents = nil; l.backgroundColor = NSColor.clear.cgColor }
+            if let v = l as? AVPlayerLayer { v.player = nil }
+            frames[slot] = nil
+        }
+    }
+
+    func black() { PictureSlot.allCases.forEach(hide) }
+
+    /// Scale and position, like the web app: position is a percent of the
+    /// screen, then the picture is scaled around its center.
+    private func place(_ l: CALayer, _ cue: Cue) {
+        let dx = bounds.width * cue.posX / 100
+        let dy = -bounds.height * cue.posY / 100   // + is down on the web, up on a Mac layer
+        l.transform = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), cue.scale, cue.scale, 1)
+    }
+
+    private func raise(_ slot: PictureSlot) {
+        let top = PictureSlot.allCases.map { layerFor($0).zPosition }.max() ?? 0
+        layerFor(slot).zPosition = top + 1
+    }
+
+    private func quietly(_ body: () -> Void) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        videoLayer.frame = bounds
-        stillLayer.frame = bounds
+        body()
         CATransaction.commit()
     }
+}
 
-    func showVideo(_ player: AVPlayer) {
-        videoLayer.player = player
-        videoLayer.isHidden = false
-        stillLayer.isHidden = true
+extension NSColor {
+    /// "#RRGGBB" to a color.
+    convenience init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = Int(s, radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255,
+                  blue: CGFloat(v & 0xFF) / 255, alpha: 1)
     }
 
-    func showStill(_ image: NSImage) {
-        stillLayer.contents = image
-        stillLayer.isHidden = false
-        videoLayer.isHidden = true
-    }
-
-    func setLevel(_ level: Float) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        videoLayer.opacity = level
-        stillLayer.opacity = level
-        CATransaction.commit()
-    }
-
-    func black() {
-        videoLayer.isHidden = true
-        stillLayer.isHidden = true
-        stillLayer.contents = nil
+    var hexString: String {
+        let c = usingColorSpace(.sRGB) ?? self
+        return String(format: "#%02X%02X%02X", Int(round(c.redComponent * 255)), Int(round(c.greenComponent * 255)), Int(round(c.blueComponent * 255)))
     }
 }

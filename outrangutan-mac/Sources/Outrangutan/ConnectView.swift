@@ -3,6 +3,8 @@ import SwiftUI
 extension Notification.Name {
     /// Opens "Connect to a show" (File menu, Command-K).
     static let showConnect = Notification.Name("OutrangutanShowConnect")
+    /// Shows or hides the Inspector (View menu, Command-I).
+    static let toggleInspector = Notification.Name("OutrangutanToggleInspector")
 }
 
 /// "Connect to a show": sign in like the web front door, then type the

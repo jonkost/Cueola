@@ -8,7 +8,7 @@ struct OutrangutanApp: App {
     var body: some Scene {
         WindowGroup("Outrangutan") {
             ControlView(engine: appDelegate.engine, link: appDelegate.link)
-                .frame(minWidth: 720, minHeight: 480)
+                .frame(minWidth: 900, minHeight: 560)
                 .preferredColorScheme(.dark)
         }
         .commands {
@@ -17,6 +17,12 @@ struct OutrangutanApp: App {
                     NotificationCenter.default.post(name: .showConnect, object: nil)
                 }
                 .keyboardShortcut("k")
+            }
+            CommandGroup(after: .sidebar) {
+                Button("Show or Hide Inspector") {
+                    NotificationCenter.default.post(name: .toggleInspector, object: nil)
+                }
+                .keyboardShortcut("i")
             }
         }
     }

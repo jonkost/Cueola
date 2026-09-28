@@ -50,10 +50,11 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Autosave | Built (step 1) | Saved on this Mac after every change. |
 | Output window | Built (step 1), one screen | Fills its own screen edge to edge, above the menu bar. |
 | Fade and Stop All | Built (step 5, for the deck's Fade key) | One second, picture and sound together. |
-| Fades with curves, crossfades | Step 2 | Smooth to the frame, set in frames or seconds. |
-| Pre-wait, continue modes, end actions, still timers | Step 2 | Same rules as the web version (see its notes on stills). |
-| Trim in and out, loop, volume, fit, scale, position | Step 2 | Exact to the frame. |
-| Solid color mattes, program preview | Step 2 | |
+| Fades with curves, crossfades | Built (step 2) | A true dissolve: the new picture fades up over the old one, no dip to black. Fade out now works (the web app keeps the setting but never uses it). |
+| Pre-wait, continue modes, end actions, still timers | Built (step 2) | Same rules as the web version, including its still rules. Pause also holds a pre-wait and a still's timer. |
+| Trim in and out, loop, volume, fit, scale, position | Built (step 2) | Trim stops on the exact frame. |
+| Solid color mattes | Built (step 2) | |
+| Program preview in the control window | Later | |
 | Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop, search | Step 3 | Sounds load into memory before the show, so a pad fires with no delay. |
 | Sound chain: gain, 3-band EQ, compressor, meters, master volume | Step 3 | Real audio meters, and each output picks any channel pair on the audio interface. |
 | Record a sound effect | Step 3 | |
