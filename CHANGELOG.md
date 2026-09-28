@@ -11,8 +11,41 @@
   show's list, so it is a button on every cue of that kind, for everyone.
   The Admin panel's source list shows it too.
 
+### Flowmingo Op is back
+- The front page's Flowmingo card has its Remote Op button again. It opens
+  the Op screen: type a show code (or tap one of your shows) and run that
+  show's talent display from any computer, without going Live.
+- Same controls as Script Op, in the same simple order: Play, Speed and
+  Size up front; Brake, Boost, direction, slates and the scrubber behind
+  More. Tabs: Playback, On air, Clocks, Display, Screen. All the hotkeys
+  work (Space, hold Up and Down, Left and Right, F, R, H, M, Esc).
+- The talent screen's Open Remote Operator button, the Guide's Remote Op
+  lesson button and old #flowop links open it again.
+- When the Op screen moves the prompter, Script Op in Live waits five
+  seconds before it moves it again, so two operators do not fight.
+  Clocks, cues, questions and slates never wait.
+
+### Fixed
+- The Speed and Size sliders in Live's Script Op panel were squeezed to a
+  stub. They are full width again.
+
+### Instructor dashboard
+- A fresh coat everywhere, looks only: Cancel on the left and the main
+  button on the right in every sheet, sentence-case labels, calmer panels,
+  44px touch targets, and phone layouts that no longer run off the side.
+- The show code on "Show created" always fits its box, however long it is.
+- Session cards: facts on top, one row of buttons below with Open last.
+- Session Setup: Next Episode and Danger Zone are two clean rows again; the
+  group names box hides when groups are off.
+- Confirm dialogs no longer show an empty text box. "Fork this show" reads
+  "Copy this show".
+
 ### Front page
 - The Planda Bear card has its "Show code required" label back.
+
+### Add a row
+- A new row starts as Flex. Pick Timed to give it a length.
+- The First cue buttons sit in two even rows, icon beside the name.
 
 ## v3.0.1: Joining a show works again (built 2026-09-28)
 

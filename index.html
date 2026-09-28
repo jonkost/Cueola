@@ -99,9 +99,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    stays for controls with no ring of their own: buttons, checkboxes, radios,
    ranges, bare selects. Forced colors strips box-shadow rings, so the
    outline returns there. */
-:is(.field-in,.sp-weather-entry,.admin-in,.pb-board-search,#pbNoteInput,#pbReplyInput,.pb-editbox textarea,.pt-setup-input,.pt-cueola-input,#pt-script-input):focus-visible{outline:none}
+:is(.field-in,.sp-weather-entry,.admin-in,.pb-board-search,#pbNoteInput,#pbReplyInput,.pb-editbox textarea,.pt-setup-input,.pt-cueola-input,#pt-script-input,.flowop-code):focus-visible{outline:none}
 @media (forced-colors: active){
-:is(.field-in,.sp-weather-entry,.admin-in,.pb-board-search,#pbNoteInput,#pbReplyInput,.pb-editbox textarea,.pt-setup-input,.pt-cueola-input,#pt-script-input):focus-visible{outline:2px solid Highlight;outline-offset:2px}
+:is(.field-in,.sp-weather-entry,.admin-in,.pb-board-search,#pbNoteInput,#pbReplyInput,.pb-editbox textarea,.pt-setup-input,.pt-cueola-input,#pt-script-input,.flowop-code):focus-visible{outline:2px solid Highlight;outline-offset:2px}
 }
 :is(.btn-primary,.save-btn,.ls-pact-btn,.ls-btn,.pb-chat-tool,.pb-attach-add,.pb-post-btn,.ar-back,.ar-next,.paperwork-back){display:inline-flex;align-items:center;justify-content:center;gap:6px}
 :is(.pb-note-act,.pb-tag-chip,.ltr-edit-btn){display:inline-flex;align-items:center;gap:5px}
@@ -2684,7 +2684,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
 .scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
-#pt-text strong{font-weight:1000;color:var(--pt-text,#fff);text-shadow:none;background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
+#pt-text strong,.flowop-script strong{font-weight:1000;color:var(--pt-text,#fff);text-shadow:none;background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
 
 /* Reading line */
 /* Read line center = stage center (bar-h + half the stage), the same point
@@ -3120,7 +3120,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   align-items:center;
   justify-content:flex-start;
 }
-.pt-theme-dot:not(.ui-theme-tile){
+.pt-theme-dot:not(.ui-theme-tile),.flowop-theme-dot:not(.ui-theme-tile){
   width:26px;
   height:26px;
   padding:0;
@@ -3151,6 +3151,20 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   background:color-mix(in srgb,var(--pt-bg,#08090f) 42%,transparent);
 }
 .flow-clock-fields input,.flow-wrap-custom input{font-family:var(--sans);font-weight:700}
+.flowop-side{
+  padding:14px;
+  gap:12px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--pt-accent) 5%,transparent),transparent 160px),color-mix(in srgb,var(--pt-bg) 82%,black);
+}
+.flowop-panel{
+  border-radius:var(--ui-radius-group);
+  padding:13px;
+}
+#flowOpPlayBtn{
+  min-height:46px;
+  font-size:16px;
+  font-weight:900;
+}
 .prompt-op-panel.flow-control-panel{gap:10px}
 /* Inspector-standard panels: sections are flat pages under the tabs — text
    headers + hairlines, no nested cards. */
@@ -3190,7 +3204,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 }
 
 /* Shared liquid controls pass: toolbars stay translucent, content stays solid. */
-:is(.topbar,.bot-bar,.ls-bar,.follow-bar,.pb-board-toolbar,.ls-script-toolbar,.ls-editor-actions){
+:is(.topbar,.bot-bar,.ls-bar,.follow-bar,.pb-board-toolbar,.ls-script-toolbar,.ls-editor-actions,.flowop-top){
   background:var(--liquid-fill-strong);
   border-color: transparent;
   box-shadow:var(--glass-highlight);
@@ -3221,7 +3235,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
 }
 .tbtn-live:hover{background:#f2554c}
-:is(.pt-btn.active,.flow-control-section .pt-btn.active,#entryThemeGear.active,#notifBellBtn.on){
+:is(.pt-btn.active,.flow-control-section .pt-btn.active,#flowOpPlayBtn.active,#entryThemeGear.active,#notifBellBtn.on){
   background:color-mix(in srgb,var(--pt-accent,var(--accent)) 24%,var(--s2));
   border-color:transparent;
   color:var(--pt-accent,var(--accent));
@@ -3354,6 +3368,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-control-slider{
   grid-template-columns:minmax(46px,auto) 42px minmax(0,1fr) 42px!important;
 }
+/* A slider with no end-cap buttons (Speed and Size, since the 3.0 trim) is a
+   label and a full-width track; the four-column grid squeezed the track into
+   the 42px button slot. */
+.flow-control-slider:not(:has(.pt-btn)){grid-template-columns:minmax(46px,auto) minmax(0,1fr)!important}
 /* Slider end-caps and nudges can be circles — so they are (operator motif). */
 .flow-control-slider .pt-btn,.pt-icon-btn{
   min-width:42px;
@@ -3364,7 +3382,8 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
   border-radius:50%;
 }
 input.pt-range,
-#promptypus input[type="range"]{
+#promptypus input[type="range"],
+#flowOp input[type="range"]{
   -webkit-appearance:none;
   appearance:none;
   height:40px;
@@ -3376,14 +3395,16 @@ input.pt-range,
   accent-color:var(--pt-accent,var(--accent));
 }
 input.pt-range::-webkit-slider-runnable-track,
-#promptypus input[type="range"]::-webkit-slider-runnable-track{
+#promptypus input[type="range"]::-webkit-slider-runnable-track,
+#flowOp input[type="range"]::-webkit-slider-runnable-track{
   height:12px;
   border-radius:999px;
   background:linear-gradient(90deg,color-mix(in srgb,var(--pt-accent,var(--accent)) 52%,transparent),color-mix(in srgb,var(--pt-accent,var(--accent)) 18%,rgba(255,255,255,.16)));
   border:1px solid transparent;
 }
 input.pt-range::-webkit-slider-thumb,
-#promptypus input[type="range"]::-webkit-slider-thumb{
+#promptypus input[type="range"]::-webkit-slider-thumb,
+#flowOp input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none;
   width:32px;
   height:32px;
@@ -3394,14 +3415,16 @@ input.pt-range::-webkit-slider-thumb,
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35);
 }
 input.pt-range::-moz-range-track,
-#promptypus input[type="range"]::-moz-range-track{
+#promptypus input[type="range"]::-moz-range-track,
+#flowOp input[type="range"]::-moz-range-track{
   height:12px;
   border-radius:999px;
   background:color-mix(in srgb,var(--pt-accent,var(--accent)) 32%,rgba(255,255,255,.16));
   border:1px solid transparent;
 }
 input.pt-range::-moz-range-thumb,
-#promptypus input[type="range"]::-moz-range-thumb{
+#promptypus input[type="range"]::-moz-range-thumb,
+#flowOp input[type="range"]::-moz-range-thumb{
   width:30px;
   height:30px;
   border-radius:50%;
@@ -3470,6 +3493,62 @@ input.pt-range::-moz-range-thumb,
 .pt-edit-actions .pt-btn{padding:7px 18px}
 .pt-save-btn{background:rgba(200,169,126,.15);border-color:transparent;color:var(--pt-accent,#c8a97e)}
 
+/* Standalone Flowmingo Op */
+#flowOp{background:var(--pt-bg,#08090f);color:var(--pt-text,#d6e8f0);--pt-bg:#08090f;--pt-text:#d6e8f0;--pt-accent:#7eb8c8;--pt-ui-bg:rgba(15,15,25,.92);--pt-ui-border:rgba(126,184,200,.25);--pt-size:52px;--pt-align:center}
+.flowop-top{min-height:56px;display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(280px,440px) auto;gap:12px;align-items:center;padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));border-bottom: 1px solid transparent;background:var(--pt-ui-bg);-webkit-backdrop-filter:blur(var(--liquid-blur));backdrop-filter:blur(var(--liquid-blur));position:relative;z-index:10}
+.flowop-title-wrap{min-width:0}
+.flowop-kicker{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-accent);opacity:.72;line-height:1.2}
+.flowop-title{font-family:var(--syne);font-size:18px;font-weight:800;color:var(--pt-text);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flowop-connect{display:grid;grid-template-columns:minmax(120px,1fr) auto auto;gap:8px;align-items:center;min-width:0}
+.flowop-code{background:rgba(0,0,0,.36);border: 1px solid transparent;border-radius:8px;padding:8px 10px;color:var(--pt-text);font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;min-width:0;outline:none}
+.flowop-code:focus{border-color:var(--pt-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent) 25%,transparent)}
+.flowop-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent);white-space:nowrap;opacity:.78}
+.flowop-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(390px,420px);background:linear-gradient(180deg,color-mix(in srgb,var(--pt-accent) 5%,transparent),transparent 120px)}
+.flowop-preview{position:relative;overflow:hidden;display:flex;justify-content:center;align-items:flex-start;border-right: 1px solid transparent;min-width:0}
+.flowop-preview::before,.flowop-preview::after{content:'';position:absolute;left:0;right:0;height:24%;pointer-events:none;z-index:2}
+.flowop-preview::before{top:0;background:linear-gradient(to bottom,var(--pt-bg),transparent)}
+.flowop-preview::after{bottom:0;background:linear-gradient(to top,var(--pt-bg),transparent)}
+.flowop-readline{position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent) 18%,var(--pt-accent) 82%,transparent 100%);opacity:.72;z-index:3;pointer-events:none}
+.flowop-script{width:min(900px,88vw);padding:18vh 28px 36vh;font-family:var(--display);font-size:var(--pt-size);font-weight:600;line-height:1.55;text-align:var(--pt-align);color:var(--pt-text);white-space:pre-wrap;word-break:break-word;letter-spacing:0;opacity:.96}
+.flowop-script p{margin:0;min-height:1.55em}
+.flowop-side{min-width:0;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:color-mix(in srgb,var(--pt-bg) 78%,black)}
+.flowop-panel{border: 1px solid transparent;background:var(--pt-ui-bg);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:11px}
+.flowop-panel-title{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:0;text-transform:none;color:var(--pt-accent);opacity:.9}
+.flowop-session-title{font-family:var(--syne);font-size:18px;font-weight:800;line-height:1.2;color:var(--pt-text)}
+.flowop-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.flowop-meta-item{border: 1px solid transparent;border-radius:8px;padding:8px;background:rgba(0,0,0,.16);min-width:0}
+.flowop-meta-label{font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:var(--pt-accent);opacity:.65;margin-bottom:3px}
+.flowop-meta-value{font-family:var(--mono);font-size:12px;color:var(--pt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flowop-controls{display:flex;flex-direction:column;gap:0}
+/* The controls panel is the one box; the tabbed inspector runs edge-to-edge inside it. */
+.flowop-controls-panel{padding:0;overflow:hidden}
+/* The side column scrolls; its panels keep their full height instead of
+   shrinking (overflow:hidden would let the controls panel collapse). */
+.flowop-side>.flowop-panel{flex-shrink:0}
+.flowop-controls-panel .insp-head{border-top-left-radius:inherit;border-top-right-radius:inherit}
+.flowop-controls .pt-ctrl-group{display:flex;align-items:center;gap:8px}
+#flowOpPlayBtn{width:100%;padding:9px;font-size:13px;border-color:transparent;background:color-mix(in srgb,var(--pt-accent) 16%,transparent);color:var(--pt-accent);border-radius:10px}
+#flowOpPlayBtn.active{background:color-mix(in srgb,var(--pt-accent) 38%,transparent)}
+.flowop-theme-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border: 1.5px solid color-mix(in srgb,var(--pt-text,#fff) 26%,transparent);transition:transform .15s var(--ease),box-shadow .2s var(--ease);flex-shrink:0;padding:0}
+.flowop-theme-dot:hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
+.flowop-theme-dot.active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg),0 0 0 4px var(--pt-accent)}
+.flowop-note{font-size:12px;line-height:1.5;color:var(--pt-text);opacity:.62}
+/* The Hotkeys panel reuses the talent screen's key-first hint rows (.pt-hint-row,
+   key chip leading, dim description trailing); the card container brings the mono
+   face itself, so this panel restates it. */
+.flowop-panel .pt-hint-row{font-family:var(--mono);font-size:13px;line-height:1.9}
+.flowop-empty{font-family:var(--mono);font-size:14px;color:var(--pt-accent);opacity:.72;text-align:center;padding:30vh 24px}
+@media(max-width:900px){
+  .flowop-top{height:auto;grid-template-columns:auto minmax(0,1fr);align-items:center;padding:8px 10px;gap:8px}
+  .flowop-title-wrap{min-width:0}
+  .flowop-connect{grid-template-columns:minmax(0,1fr) auto}
+  .flowop-connect,.flowop-top>.pt-btn:last-child{grid-column:1/-1}
+  .flowop-status{grid-column:1/-1}
+  .flowop-main{grid-template-columns:1fr;grid-template-rows:minmax(210px,32vh) minmax(0,1fr)}
+  .flowop-preview{min-height:0;border-right:none;border-bottom: 1px solid transparent}
+  .flowop-side{max-height:none;min-height:0}
+}
+
 /* ── Basic Liquid Glass: Planda Bear + Flowmingo ──
    Glass stays on navigation and grouping surfaces; reading and form surfaces
    retain stronger opacity so the visual update never competes with the work. */
@@ -3517,12 +3596,12 @@ input.pt-range::-moz-range-thumb,
    zone re-declaration here carried ID specificity that defeated the
    ring-bearing fields' outline suppression (double box) and is gone. */
 
-#promptypus{
+:is(#promptypus,#flowOp){
   --flow-glass-surface:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 72%,transparent);
   --flow-glass-strong:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 86%,transparent);
   --flow-glass-edge:color-mix(in srgb,var(--pt-accent,#7eb8c8) 30%,rgba(255,255,255,.16));
 }
-#promptypus :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box){
+:is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
   background:var(--flow-glass-surface);
   border-color:var(--flow-glass-edge);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
@@ -3531,20 +3610,20 @@ input.pt-range::-moz-range-thumb,
 }
 #promptypus #pt-bar{box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
 #promptypus #pt-panel{border-radius:24px}
-#promptypus :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn){
+:is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn){
   background:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 48%,transparent);
   border-color:var(--flow-glass-edge);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.09);
 }
-#promptypus :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):hover{
+:is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):hover{
   background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 14%,var(--flow-glass-strong));
 }
-#promptypus .pt-btn.active{
+:is(#promptypus,#flowOp) .pt-btn.active{
   background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 22%,var(--flow-glass-strong));
   border-color:transparent;
   color:var(--pt-accent,#7eb8c8);
 }
-#promptypus :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):focus-visible{
+:is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):focus-visible{
   outline:2px solid color-mix(in srgb,var(--pt-accent,#7eb8c8) 78%,white);
   outline-offset:2px;
 }
@@ -3553,10 +3632,12 @@ input.pt-range::-moz-range-thumb,
   backdrop-filter:blur(var(--liquid-blur)) saturate(125%);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(125%);
 }
-#promptypus :is(.pt-setup-input,.pt-cueola-input,#pt-script-input){
+:is(#promptypus,#flowOp) :is(.pt-setup-input,.pt-cueola-input,#pt-script-input,.flowop-code){
   background:color-mix(in srgb,var(--pt-bg,#08090f) 72%,transparent);
 }
-#promptypus[data-pt-theme="white"]{
+#flowOp .flowop-side{background:color-mix(in srgb,var(--pt-bg) 70%,transparent)}
+#flowOp .flowop-panel{border-radius:16px}
+:is(#promptypus,#flowOp)[data-pt-theme="white"]{
   --flow-glass-surface:rgba(255,255,255,.78);
   --flow-glass-strong:rgba(255,255,255,.9);
   --flow-glass-edge:rgba(0,0,0,.16);
@@ -3566,7 +3647,7 @@ input.pt-range::-moz-range-thumb,
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
-  #promptypus :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box){background:var(--pt-ui-bg)}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 
 @media(prefers-reduced-transparency:reduce){
@@ -3574,16 +3655,16 @@ input.pt-range::-moz-range-thumb,
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.plandabear-settings-btn,.paperwork-back,.pb-chat-tool,.pb-tag-chip,.pb-attach-add,.pb-mini-btn),
-  #promptypus :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box){
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
   }
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
-  #promptypus :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box){background:var(--pt-ui-bg)}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 @media(prefers-contrast:more){
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
-  #promptypus :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
 }
 
 /* ── Planda Bear layout (owner redesign Aug 2026) ──
@@ -5073,9 +5154,10 @@ input.pt-range::-moz-range-thumb,
       <div class="e-card e-card-app flowmingo-card oc-cyan">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
         <div class="ec-title">Flow<span class="brand-hi">mingo</span></div>
-        <div class="ec-desc">Open the script display for talent. Operators drive it from Script Op once the show is live.</div>
+        <div class="ec-desc">Open the script display for talent, or run a remote operator without going live in Cueola.</div>
         <div class="ec-actions">
           <button class="ec-mini-btn" onclick="event.stopPropagation();openPrompterApp()">Talent Display</button>
+          <button class="ec-mini-btn" onclick="event.stopPropagation();openFlowmingoOperator()">Remote Op</button>
         </div>
       </div>
       <div class="e-card e-card-app outrangutan-card oc-accent">
@@ -5431,7 +5513,7 @@ input.pt-range::-moz-range-thumb,
     <div class="pt-setup-card">
       <div class="pt-setup-logo"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
       <h2 class="pt-setup-title">Connect Flowmingo to your show</h2>
-      <p class="pt-setup-sub">Tap your show, or enter the show code from Script Op.</p>
+      <p class="pt-setup-sub">Tap your show, or enter the show code from your Script Op or Flowmingo Op.</p>
       <div class="pt-setup-yours" id="pt-setup-yours" hidden></div>
       <div class="pt-setup-row">
         <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" onkeydown="if(event.key==='Enter')ptSetupConnect()">
@@ -5502,7 +5584,10 @@ input.pt-range::-moz-range-thumb,
         <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
         <span class="pt-cueola-status" id="pt-cueola-status"></span>
       </div>
-      <div class="pt-cueola-help">Link a Cueola show code to keep Flowmingo synced. Script Op in Live (and its pop-out window) can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
+      <div class="pt-cueola-help">Link a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
+      <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
+        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
+      </div>
       <hr class="pt-modal-sep">
       <h2>Edit / Load Script</h2>
       <div class="pt-upload-bar">
@@ -5537,6 +5622,59 @@ input.pt-range::-moz-range-thumb,
         <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Load Script</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     FLOWMINGO OP — STANDALONE REMOTE
+══════════════════════════════════════════ -->
+<div class="screen" id="flowOp">
+  <div class="flowop-top">
+    <button class="pt-back-btn" onclick="exitFlowmingoOperator()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cueola</span></button>
+    <div class="flowop-title-wrap">
+      <div class="flowop-kicker">Standalone remote</div>
+      <div class="flowop-title" id="flowOpTitle">Flowmingo Op</div>
+    </div>
+    <div class="flowop-connect">
+      <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SHOW CODE" maxlength="20" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
+      <button class="pt-btn" id="flowOpLoadBtn" onclick="flowOpLoadSession()">Load</button>
+      <span class="flowop-status" id="flowOpStatus">Not connected</span>
+    </div>
+    <button class="pt-btn" onclick="openPrompterFromFlowOp()">Talent Screen</button>
+  </div>
+  <div class="flowop-main">
+    <div class="flowop-preview">
+      <div class="flowop-readline"></div>
+      <div class="flowop-script" id="flowOpScriptPreview">
+        <div class="flowop-empty">Load a show code to control Flowmingo remotely.</div>
+      </div>
+    </div>
+    <aside class="flowop-side">
+      <section class="flowop-panel">
+        <div class="flowop-panel-title">Session</div>
+        <div id="flowOpSessionMeta">
+          <div class="flowop-session-title">No session loaded</div>
+          <div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>
+        </div>
+      </section>
+      <section class="flowop-panel flowop-controls-panel">
+        <div id="flowOpControls"></div>
+      </section>
+      <section class="flowop-panel">
+        <div class="flowop-panel-title">Hotkeys</div>
+        <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">LEFT / RIGHT</span><span class="pt-hint-desc">text size</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">OPT + DOWN</span><span class="pt-hint-desc">reverse</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">OPT + UP</span><span class="pt-hint-desc">forward</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">fullscreen</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">reset</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">hide controls</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">mirror</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">ESC</span><span class="pt-hint-desc">exit</span></div>
+      </section>
+    </aside>
   </div>
 </div>
 
@@ -6861,8 +6999,15 @@ input.pt-range::-moz-range-thumb,
 .join-your-sessions .fd-sessions { margin-top:0; max-height:220px; overflow-y:auto; }
 .join-yours-label { font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); margin:0 0 6px; }
 .join-altcode-label { font-size:12.5px; color:var(--text3); margin:8px 0 2px; }
-#promptypus .fd-sessions { max-width:420px; margin:10px auto 0; }
-#promptypus .fd-session { background:rgba(0,0,0,.3); border-color: transparent; color:var(--pt-text); }
+/* Flowmingo Remote Op empty state offers the same rows on its dark chrome.
+   The script surface normally pads deep for prompter copy; when it holds the
+   choices it tightens up and scrolls so the rows survive short viewports. */
+#flowOp .flowop-script:has(> .flowop-choices) { padding:40px 28px 48px; }
+#flowOp .flowop-preview:has(.flowop-choices) { overflow-y:auto; }
+#flowOp .flowop-preview:has(.flowop-choices) .flowop-readline { display:none; }
+#flowOp .flowop-choices { padding:0; font-family:var(--sans); font-size:14px; }
+:is(#flowOp,#promptypus) .fd-sessions { max-width:420px; margin:10px auto 0; }
+:is(#flowOp,#promptypus) .fd-session { background:rgba(0,0,0,.3); border-color: transparent; color:var(--pt-text); }
 /* Talent door: assigned-show rows on the Connect card and in the Link a show overlay. */
 #pt-setup-yours { margin:0 0 12px; width:100%; }
 #pt-setup-yours .fd-sessions { margin:8px auto 0; }
@@ -6871,12 +7016,13 @@ input.pt-range::-moz-range-thumb,
 :is(#pt-setup-yours,#pt-cueola-yours) .join-yours-label { font:700 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--pt-text3,var(--text3)); }
 #ws-talent-link { flex:1 1 auto; min-width:0; font-family:var(--mono); font-size:12px; }
 #lsCallerBanner { margin-top:8px; }
-/* The talent screen re-fills .fd-session, which out-specifies the shared hover
-   fill, so its rows need their own. */
-#promptypus .fd-session:hover { border-color:transparent; background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,rgba(0,0,0,.3)); }
-#promptypus .fd-code { color:var(--pt-accent); }
-#promptypus .fd-show { color:var(--pt-text); }
-#promptypus .fd-open { color:var(--pt-accent); opacity:.7; }
+/* #flowOp re-fills .fd-session, which out-specifies the shared hover fill, so
+   the Flow Op rows need their own. */
+:is(#flowOp,#promptypus) .fd-session:hover { border-color:transparent; background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,rgba(0,0,0,.3)); }
+:is(#flowOp,#promptypus) .fd-code { color:var(--pt-accent); }
+:is(#flowOp,#promptypus) .fd-show { color:var(--pt-text); }
+:is(#flowOp,#promptypus) .fd-open { color:var(--pt-accent); opacity:.7; }
+#flowOp .join-yours-label { color:var(--pt-accent); }
 @media (pointer:coarse) { .fd-link, .fd-session, .jis-btn { min-height:44px; } }
 /* Hidden sessions (2026-09-03): an admin can tuck old class sessions out of
    the front-door list and every session picker. The row wraps the session
@@ -7133,7 +7279,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=5a89bf75b3"></script>
+<script src="cueola-app.js?v=1e77ac9598"></script>
 <script src="outrangutan/outrangutan.js?v=d75f53816e"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

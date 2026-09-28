@@ -2226,6 +2226,11 @@ let callSheetMealsProvided = ''; // '' | 'provided' | 'not-provided'
 let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise, sunset, emoji, source, forecastDate, place, updatedAt }
 let liveClockRunning = false;
 let paperworkDirty = false;
+let flowmingoRemoteOverrideUntil = 0;
+// How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
+// Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
+// clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
+const FLOWMINGO_REMOTE_OVERRIDE_MS = 5000;
 let collapsedSegments = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('cueola_collapsed_segs')||'[]')); }
   catch { return new Set(); }
@@ -2268,6 +2273,7 @@ function leaveSessionForFrontPage() {
   document.getElementById('rundown')?.classList.remove('on');
   document.getElementById('liveshow')?.classList.remove('on');
   document.getElementById('promptypus')?.classList.remove('on');
+  document.getElementById('flowOp')?.classList.remove('on');
   document.getElementById('entry')?.classList.add('on');
   sessionStorage.removeItem('cueola_screen');
   setSessionCodeInUrl('');   // a reload after leaving must not rejoin
@@ -2959,9 +2965,6 @@ const LEARNING_LESSONS = [
   {
     id:'flowmingo-remote',
     area:'Flowmingo',
-    // Narrated copy (title, intro, navigation, steps, callouts) is frozen: the
-    // Kokoro MP3 is hashed from it. The "remote" action now opens the Script Op
-    // pop-out (openFlowmingoRemoteDoor); re-record before rewording.
     title:'Run The Remote Prompter',
     time:'5 min',
     intro:'Flowmingo Remote Op is the dedicated control surface for the talent display. It is meant to work from another tab, window, or device.',
@@ -2981,8 +2984,8 @@ const LEARNING_LESSONS = [
       ['Control ownership','If Flowmingo Remote Op is active, Script Op pauses its own remote control briefly so operators do not fight each other.'],
       ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its show code.']
     ],
-    checks:['I can open the Script Op pop-out.','I know the hotkeys.','I know how to read sent versus applied status.'],
-    actions:[['Open the pop-out','remote']]
+    checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
+    actions:[['Open Remote Op','remote']]
   },
   {
     id:'outrangutan',
@@ -3469,7 +3472,7 @@ function openGuideAction(action) {
   else if (action === 'profile') window.CueolaIdentity?.openHub?.();
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
-  else if (action === 'remote') openFlowmingoRemoteDoor(ptLinkedCueolaCode || session.code || '');
+  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
   else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
   else if (action === 'keywi') openControlSurface();
 }
@@ -5368,6 +5371,10 @@ document.addEventListener('cueola-identity-change', () => {
     if (document.getElementById('modal-prepro-join')?.classList.contains('on')) populateJoinSessionChoices('pp', 'pickAssignedPreProSession');
     // Talent door (9/4 A3): re-list assigned shows, and finish a link that was
     // waiting on a sign-in.
+    if (document.getElementById('flowOp')?.classList.contains('on') && !flowOpCode && !flowOpData) {
+      flowOpSessionRenderFingerprint = '';
+      flowOpRenderSession(null);
+    }
     if (isFlowmingoTalentActive()) ptOnIdentityMaybeChanged();
   } catch {}
 });
@@ -6393,7 +6400,9 @@ function setupFirestore() {
           // replay here on boot). Doc-delivered controls ignore the output
           // target, which is stale after any talent reload.
           if (!prompterSessionController.accepts(control, { allowLegacy:true, ignoreTarget:true })) return;
-          applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
+          if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
+            flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
+          }
         });
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
@@ -6928,7 +6937,7 @@ function isInteractiveTarget(target) {
     'button', 'input', 'textarea', 'select', 'option', 'a', 'label', 'summary',
     '[role="button"]', '[role="slider"]', '[contenteditable="true"]',
     '[data-live-interactive]', '.ls-sidebar', '.prompt-op-panel',
-    '.modal', '.overlay', '.scrollable'
+    '.flowop-controls', '.modal', '.overlay', '.scrollable'
   ].join(',')));
 }
 
@@ -13714,6 +13723,7 @@ function adoptPrompterTalentState(state={}) {
   const observedPlaying = typeof state.running === 'boolean' ? state.running : state.playing;
   if (typeof observedPlaying === 'boolean') {
     ptPlaying = observedPlaying;
+    flowOpPlaying = observedPlaying;
     ptSyncPlayIcons(ptPlaying);
     notifyControlSurfaceState();
     if (_prompterHasRecentTalent()) {
@@ -13731,16 +13741,19 @@ function adoptPrompterTalentState(state={}) {
     ptFontSize = Math.max(24, Math.min(120, Number(state.size)));
     document.documentElement.style.setProperty('--pt-size', `${ptFontSize}px`);
     ptEl('promptypus')?.style.setProperty('--pt-size', `${ptFontSize}px`);
+    flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
   }
   if (['left','center','right'].includes(state.align)) {
     ptAlign = state.align;
     document.documentElement.style.setProperty('--pt-align', ptAlign);
     ptEl('promptypus')?.style.setProperty('--pt-align', ptAlign);
+    flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
   }
   renderTalentPositionIndicator();   // D11.2: ▶ rail tracks the adopted position
   if (state.theme && PT_THEMES[state.theme]) {
     ptThemeName = state.theme;
     ptSetTheme(state.theme);
+    flowOpSetTheme(state.theme);
   }
   if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
   if (typeof state.rowInfoOn === 'boolean') ptRowInfoOn = state.rowInfoOn;
@@ -13749,17 +13762,23 @@ function adoptPrompterTalentState(state={}) {
   if (typeof state.techSlateOn === 'boolean' || typeof state.colorBarsOn === 'boolean') {
     ptTechSlateOn = state.techSlateOn === true;
     ptColorBarsOn = state.colorBarsOn === true;
+    flowOpTechSlate = ptTechSlateOn;
+    flowOpColorBarsOn = ptColorBarsOn;
     syncTechButtons();
   }
   if (typeof state.questionOn === 'boolean') {
     ptQuestionOn = state.questionOn;
     ptQuestionText = state.questionOn ? String(state.questionText || '') : '';
+    flowOpQuestionOn = ptQuestionOn;
+    flowOpQuestionText = ptQuestionText;
   }
   if (state.clockState && typeof state.clockState === 'object') {
     ptClockState = { ...ptClockState, ...state.clockState };
+    flowOpClockState = { ...ptClockState };
   }
   if (typeof state.questionOn === 'boolean' || (state.clockState && typeof state.clockState === 'object')) {
     renderPromptOpClockPreview();
+    if (flowOpCode) flowOpRenderControls(false);
   }
   prompterSessionController.setTransport({
     running:ptPlaying,
@@ -13769,6 +13788,7 @@ function adoptPrompterTalentState(state={}) {
     lastCommandId:state.lastCommandId,
     status:ptPlaying ? 'running' : 'paused',
   });
+  flowOpSyncControls();
   renderLivePrompterControls();
 }
 
@@ -13798,7 +13818,8 @@ function _handlePrompterControlAck(msg) {
     const status = pending.action === 'seek_text' && msg.findMiss
       ? 'No script line matches that text' : `${label} applied`;
     const tone = pending.action === 'seek_text' && msg.findMiss ? 'error' : 'ok';
-    markLivePrompterStatus(status, tone);
+    if (pending.origin === 'flowop') flowOpSetStatus(status, tone === 'error');
+    else markLivePrompterStatus(status, tone);
   }
 }
 
@@ -14207,6 +14228,7 @@ function _dropTalentTransportMirror() {
   if (isFlowmingoTalentActive()) return;
   if (ptPlaying) {
     ptPlaying = false;
+    flowOpPlaying = false;
     ptSyncPlayIcons(false);
   }
   prompterSessionController.setTransport({ running:false, status:'paused' });
@@ -14674,6 +14696,9 @@ async function scriptOperatorExecuteCommand(command) {
       const applied = scriptOperatorApplyPreview(action);
       return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
     }
+    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+      return { ok:false, error:'Flowmingo Op currently owns transport controls' };
+    }
     const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
     const wrapMatch = action.match(/^wrapup_(\d+(?:\.\d+)?)$/);
     const countToMatch = action.match(/^clock_until_(\d+)_label_/);
@@ -15082,7 +15107,7 @@ function clearPrompter() {
 }
 
 function buildPrompterControl(action, source='script-op', payload=null) {
-  ensurePrompterProtocolIdentity({ productionCode:session.code });
+  ensurePrompterProtocolIdentity({ productionCode:source === 'flowmingo-op' ? flowOpCode : session.code });
   const command = prompterSessionController.buildCommand(action, payload || {});
   return {
     ...command,
@@ -15106,7 +15131,7 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
   if (!control?.action) return false;
   _postPrompterMessage(control);
   trackPrompterControl(control, origin, quiet);
-  const code = String(codeOverride || control.productionCode || session.code || '').trim().toUpperCase();
+  const code = String(codeOverride || control.productionCode || session.code || flowOpCode || '').trim().toUpperCase();
   if (window._firebaseReady && code) {
     _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
     const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
@@ -15129,7 +15154,8 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
       'prompter.controlQueue': mergedQueue,
       'prompter.updatedAt':control.ts,
     }).catch(err => {
-      markLivePrompterStatus(firebaseConnectionLabel(err, 'Send failed'), 'error');
+      if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
+      else markLivePrompterStatus(firebaseConnectionLabel(err, 'Send failed'), 'error');
     });
   }
   return true;
@@ -15138,7 +15164,8 @@ function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverri
 function flushPrompterCommandQueue(outputId) {
   const queued = prompterSessionController.takeQueuedCommands(outputId);
   queued.forEach(control => {
-    dispatchPrompterCommand(control, 'live', isQuietPrompterControl(control.action), control.productionCode);
+    const origin = control.source === 'flowmingo-op' ? 'flowop' : 'live';
+    dispatchPrompterCommand(control, origin, isQuietPrompterControl(control.action), control.productionCode);
   });
   return queued.length;
 }
@@ -15210,7 +15237,8 @@ function trackPrompterControl(control, origin='live', quiet=false) {
   clearTimeout(_pendingPrompterControls[control.controlId]?.failTimer);
   const waitTimer = setTimeout(() => {
     if (!_pendingPrompterControls[control.controlId]) return;
-    markLivePrompterStatus(`${label} sent`, 'busy');
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · waiting for talent`);
+    else markLivePrompterStatus(`${label} sent`, 'busy');
   }, _prompterHasRecentTalent() ? 900 : 0);
   const failTimer = setTimeout(() => {
     if (!_pendingPrompterControls[control.controlId]) return;
@@ -15218,30 +15246,10 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     delete _pendingPrompterControls[control.controlId];
     pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
     markPrompterToggleState(control.action, 'failed');
-    markLivePrompterStatus('No talent ack', 'busy');
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
+    else markLivePrompterStatus('No talent ack', 'busy');
   }, 5000);
   _pendingPrompterControls[control.controlId] = { action:control.action, origin, waitTimer, failTimer };
-}
-
-// The standalone Flowmingo Op screen and the in-Live operator overlay are gone
-// (owner 2026-09 debloat): the Script Op panel and its pop-out window are the
-// two operator surfaces. The old #flowop / ?operator doors and the Guide's
-// "remote" action land here so they never dead-end: a Live host in this window
-// opens the pop-out for the show; otherwise the talent screen's "Link a show"
-// door opens with a one-line toast saying where the controls live now.
-function openFlowmingoRemoteDoor(codeOverride='') {
-  const code = String(codeOverride || '').trim().toUpperCase();
-  const hostCode = String(session?.code || '').trim().toUpperCase();
-  const liveHost = document.getElementById('liveshow')?.classList.contains('on')
-    && hostCode && !session.isDemo && (!code || code === hostCode);
-  if (liveHost) return openScriptOpPopout();
-  openPrompterApp();
-  ptOpenEdit();
-  const input = ptEl('pt-cueola-code-input');
-  if (input && code) input.value = code;
-  toast(code
-    ? `Remote operator controls now live in Script Op. Link ${code} here for the talent screen, or go Live in Cueola and open the Script Op pop-out.`
-    : 'Remote operator controls now live in Script Op: go Live in Cueola and open the Script Op pop-out.', 5000);
 }
 
 function openPrompterApp() {
@@ -15561,12 +15569,17 @@ function sendPrompterPreviewControl(action) {
 // used to omit overlay state, so a sent overlay toggle never updated the sender's
 // local mirrors: slates and the question flag could not offer their off action,
 // and the clock size label stuck on M. Mirror overlay-family actions into this
-// window's own state at send time; the talent ack then trues everything up.
-function applyOperatorOverlayMirror(action, payload=null) {
+// window's own state at send time (model: flowOpApplyControlPreview, which does
+// the same for the Op screen); the talent ack then trues everything up.
+function applyOperatorOverlayMirror(action, payload=null, origin='live') {
   if (!action) return;
   if (!(action.startsWith('slate_') || action.startsWith('question_')
       || action.startsWith('clock_') || action.startsWith('wrapup_')
       || action.startsWith('overlays_') || action.startsWith('rowinfo_'))) return;
+  if (origin === 'flowop') {
+    flowOpApplyControlPreview(action, true, payload);
+    return;
+  }
   if (action === 'overlays_clear') {
     ptTechSlateOn = false;
     ptColorBarsOn = false;
@@ -15587,6 +15600,10 @@ function applyOperatorOverlayMirror(action, payload=null) {
 }
 
 function sendPrompterControl(action, payload=null) {
+  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+    markLivePrompterStatus('Flowmingo Op has control', 'busy');
+    return false;   // strict false: a deck key can flash the refusal
+  }
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op', payload);
   applyOperatorOverlayMirror(action, payload);
@@ -15621,7 +15638,7 @@ function sendPrompterControl(action, payload=null) {
 // The session doc can carry this control right now: Firebase is up and a
 // show code resolves (same resolution as dispatchPrompterCommand's write).
 function prompterControlDocPathAvailable(control, codeOverride='') {
-  const code = String(codeOverride || control?.productionCode || session.code || '').trim();
+  const code = String(codeOverride || control?.productionCode || session.code || flowOpCode || '').trim();
   return Boolean(window._firebaseReady && code);
 }
 
@@ -15698,9 +15715,28 @@ let livePrompterDraftTimer = null;
 let livePrompterStatusTimer = null;
 let livePrompterDraftDirty = false;
 let livePrompterDraftVersion = 0;
+let flowOpCode = '';
+let flowOpSub = null;
+let flowOpData = null;
+let flowOpPlaying = false;
+let flowOpReturnScreen = 'entry';
+let flowOpKeydownHandler = null;
+let flowOpKeyupHandler = null;
+let flowOpLastRemoteControlTs = 0;
+let _flowOpTalentHeartbeatTs = 0;   // dedup: last doc heartbeat ts the Flowmingo Op reader fed in
+let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'talent online' label)
 let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
+let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
 let ptColorBarsOn = false;    // generated NTSC bars on the talent display
+let flowOpColorBarsOn = false;
 let ptQuestionOn = false;
+let flowOpQuestionOn = false;
+let flowOpQuestionText = '';
+let flowOpClockState = { mode:'off', label:'', targetTs:0, size:1 };
+let flowOpSessionRenderFingerprint = '';
+let flowOpControlsRenderFingerprint = '';
+let flowOpDeferredControlsDisabled = null;
+let flowOpControlsRenderCount = 0;
 let ptQuestionText = '';       // D12.6: current QUESTION card copy ('' = generic)
 // Prepared question cards for the lane (The Break Room demo or a seeded
 // session's questionLane field). Surfaced as datalist suggestions under the
@@ -17122,6 +17158,22 @@ function syncTechButtons() {
     bars.classList.toggle('muted', anyOn && !ptColorBarsOn);
     bars.setAttribute('aria-pressed', ptColorBarsOn ? 'true' : 'false');
   }
+  // The standalone Flowmingo Op keeps its own mirror of the slates.
+  const flowAnyOn = flowOpTechSlate || flowOpColorBarsOn;
+  const flowTech = document.getElementById('flow-tech-btn');
+  if (flowTech) {
+    patchIconLabelButton(flowTech, 'state.warning', flowOpTechSlate ? 'Back on air' : 'Tech Difficulty');
+    flowTech.classList.toggle('active', flowOpTechSlate);
+    flowTech.classList.toggle('muted', flowAnyOn && !flowOpTechSlate);
+    flowTech.setAttribute('aria-pressed', flowOpTechSlate ? 'true' : 'false');
+  }
+  const flowBars = document.getElementById('flow-bars-btn');
+  if (flowBars) {
+    patchIconLabelButton(flowBars, 'content.display', flowOpColorBarsOn ? 'Back on air' : 'Color bars');
+    flowBars.classList.toggle('active', flowOpColorBarsOn);
+    flowBars.classList.toggle('muted', flowAnyOn && !flowOpColorBarsOn);
+    flowBars.setAttribute('aria-pressed', flowOpColorBarsOn ? 'true' : 'false');
+  }
 }
 
 // Operator quick action (Script Op): throw up the stand-by slate AND record the
@@ -18260,9 +18312,11 @@ function renderPromptOpClockPreview() {
 }
 
 function applyClockActionToState(action, target='talent') {
-  const current = ptClockState;
+  const isFlow = target === 'flowop';
+  const current = isFlow ? flowOpClockState : ptClockState;
   const update = patch => {
     const next = { ...current, ...patch };
+    if (isFlow) { flowOpClockState = next; return; }
     ptClockState = next;
     if (next.size !== current.size && isFlowmingoTalentActive()) ptPersistOverlaySize(next.size);
   };
@@ -18285,6 +18339,7 @@ function applyClockActionToState(action, target='talent') {
     update({ mode:'wrap', label:'Wrap up', targetTs:Date.now() + sec * 1000, wrapSec:sec });
   } else if (action === 'clock_size_up') update({ size:Math.min(4, (current.size ?? 1) + 1) });
   else if (action === 'clock_size_down') update({ size:Math.max(0, (current.size ?? 1) - 1) });
+  if (isFlow) { flowOpRenderClockPreview(); return; }
   ptRenderClockOverlay();
   renderPromptOpClockPreview();
 }
@@ -18308,11 +18363,13 @@ function pushChatQuestion(scope) {
   const input = document.getElementById(`${scope}-question-input`);
   const text = String(input?.value || '').replace(/\s+/g, ' ').trim().slice(0, 280);
   if (!text) return clearChatQuestion(scope);
-  sendPrompterControl('question_on', { text });
+  if (scope === 'flow') flowOpSendControl('question_on', false, { text });
+  else sendPrompterControl('question_on', { text });
 }
 
 function clearChatQuestion(scope) {
-  sendPrompterControl('question_off');
+  if (scope === 'flow') flowOpSendControl('question_off');
+  else sendPrompterControl('question_off');
 }
 
 // Owner 2026-08-24: the overlay card is one way to hand talent a question;
@@ -18411,6 +18468,12 @@ function applyQuestionAction(action, target='talent', text='') {
   // D12.6 questions lane: one card at a time, last write wins. A bare
   // question_on (legacy flag) keeps the generic card text.
   const card = on ? String(text || '').slice(0, 280) : '';
+  if (target === 'flowop') {
+    flowOpQuestionOn = on;
+    flowOpQuestionText = card;
+    flowOpRenderClockPreview();
+    return;
+  }
   ptQuestionOn = on;
   ptQuestionText = card;
   ptRenderClockOverlay();
@@ -18590,7 +18653,8 @@ function buildCountdownActionFromInput(scope) {
   const input = document.getElementById(`${scope}-clock-time`);
   const target = nextClockTargetFromHHMM(input?.value || '');
   if (!target) {
-    markLivePrompterStatus('Set a countdown time', 'busy');
+    if (scope === 'flow') flowOpSetStatus('Set a countdown time first', true);
+    else markLivePrompterStatus('Set a countdown time', 'busy');
     return '';
   }
   return `clock_until_${target}_label_${encodePrompterActionText('Countdown')}`;
@@ -18599,13 +18663,13 @@ function buildCountdownActionFromInput(scope) {
 function sendCountdownClock(scope='lsq') {
   const action = buildCountdownActionFromInput(scope);
   if (!action) return;
-  sendPrompterControl(action);
+  scopedPrompterSend(scope, action);
 }
 
 function sendDurationClock(scope='lsq') {
   const input = document.getElementById(`${scope}-duration-min`);
   const mins = Math.max(1, Math.min(999, parseInt(input?.value || '5', 10) || 5));
-  sendPrompterControl(`clock_duration_${mins * 60}`);
+  scopedPrompterSend(scope, `clock_duration_${mins * 60}`);
 }
 
 // One wrap control: the minutes field (default 5) and Send. The deck's WRAP
@@ -18613,7 +18677,12 @@ function sendDurationClock(scope='lsq') {
 function sendWrapUp(scope='lsq', minsOverride=null) {
   const input = document.getElementById(`${scope}-wrap-min`);
   const mins = Math.max(1, Math.min(999, parseInt(minsOverride ?? input?.value ?? '5', 10) || 5));
-  sendPrompterControl(`wrapup_${mins * 60}`);
+  scopedPrompterSend(scope, `wrapup_${mins * 60}`);
+}
+
+// 'flow' is the standalone Flowmingo Op screen; every other scope is Script Op.
+function scopedPrompterSend(scope, action, payload=null) {
+  return scope === 'flow' ? flowOpSendControl(action, false, payload) : sendPrompterControl(action, payload);
 }
 
 // No Question button any more: Push card turns the indicator on, Clear all
@@ -18628,14 +18697,15 @@ function toggleQuestionIndicator(scope='lsq') {
 // overlays turns it off, and the lane says "Question is up" while it is.
 function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
   const dis = disabled ? ' disabled' : '';
-  const state = ptClockState;
+  const isFlow = scope === 'flow';
+  const state = isFlow ? flowOpClockState : ptClockState;
   const mode = state?.mode || 'off';
-  const questionOn = ptQuestionOn;
-  const send = action => `sendPrompterControl('${action}')`;
+  const questionOn = isFlow ? flowOpQuestionOn : ptQuestionOn;
+  const send = action => isFlow ? `flowOpSendControl('${action}')` : `sendPrompterControl('${action}')`;
   const btn = (symbol, label, onclick, active=false, className='', attrs='') =>
     `<button class="pt-btn${className ? ` ${className}` : ''}${active ? ' active' : ''}" onclick="${onclick}" aria-pressed="${active ? 'true' : 'false'}"${attrs ? ` ${attrs}` : ''}${dis}>${sfIcon(symbol)}<span>${label}</span></button>`;
   return `<div class="flow-clock-stack">
-    <div class="flow-clock-preview" id="${scope}ClockPreview"></div>
+    <div class="flow-clock-preview" id="${isFlow ? 'flowOpClockPreview' : `${scope}ClockPreview`}"></div>
     <div class="flow-control-section flow-clock-section">
       <div class="flow-control-title">Clock</div>
       <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
@@ -18657,10 +18727,10 @@ function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
         <button type="button" class="pt-btn pt-question-lane-push" data-question-push onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
-        <button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>
+        ${isFlow ? '' : `<button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>`}
       </div>
       <div class="pt-question-state" data-question-state role="status"${questionOn ? '' : ' hidden'}>${sfIcon('notification.unread')}<span data-question-state-label>Question is up</span></div>
-      <div class="field-hint">Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.</div>
+      <div class="field-hint">${isFlow ? 'Push card shows the question to the talent as a card. Enter pushes, Esc clears.' : 'Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.'}</div>
       <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
         ${btn('action.reset', 'Clear all overlays', send('overlays_clear'), false, '', 'data-overlays-clear data-tip="Drop the clock, wrap, question, and slates in one go"')}
       </div>
@@ -18685,6 +18755,659 @@ function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
     </div>
     </details>
   </div>`;
+}
+
+// ── Flowmingo Op: the standalone remote ──────────────────────────────────
+// Its own screen (#flowOp): type a show code on any computer and drive that
+// show's talent display, no Live window needed (owner 2026-09-28: back after
+// the 3.0 trim). It writes the same prompter controls as Script Op, over the
+// session doc, and keeps its own mirror of the talent's state. The controls
+// follow Script Op's simple set: the first things up front, the rest behind
+// More, and every hotkey still works.
+function flowOpEl(id) {
+  return document.getElementById(id);
+}
+
+function flowOpSetStatus(text, isError=false) {
+  const el = flowOpEl('flowOpStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isError ? '#f05252' : '';
+}
+
+function flowOpSetSpeed(val) {
+  ptTargetSpeed = Math.max(5, Math.min(200, parseFloat(val) || 60));
+  ptLiveSpeed = ptTargetSpeed;
+}
+
+function flowOpSetSize(val) {
+  ptFontSize = Math.max(24, Math.min(120, parseInt(val) || 52));
+  flowOpEl('flowOp')?.style.setProperty('--pt-size', `${ptFontSize}px`);
+}
+
+function flowOpSetAlign(a) {
+  ptAlign = ['left','center','right'].includes(a) ? a : 'center';
+  flowOpEl('flowOp')?.style.setProperty('--pt-align', ptAlign);
+}
+
+function flowOpSetTheme(name) {
+  name = normalizeCueolaTheme(name);
+  const t = PT_THEMES[name];
+  const screen = flowOpEl('flowOp');
+  if (!screen || !t) return;
+  ptThemeName = name;
+  screen.dataset.ptTheme = name;
+  screen.style.setProperty('--pt-bg', t.bg);
+  screen.style.setProperty('--pt-text', t.text);
+  screen.style.setProperty('--pt-accent', t.accent);
+  screen.style.setProperty('--pt-ui-bg', t.uiBg);
+  screen.style.setProperty('--pt-ui-border', t.uiBorder);
+  screen.style.background = name === 'flamingo'
+    ? 'linear-gradient(135deg,#330512 0%,#411b48 50%,#3b1429 100%)'
+    : name === 'koala'
+      ? 'linear-gradient(135deg,#1f1f1e 0%,#262626 50%,#404040 100%)'
+      : name === 'panda'
+        ? 'linear-gradient(135deg,#000000 0%,#1e1e1e 50%,#000000 100%)'
+        : name === 'outrangutan'
+          ? '#100c09'
+        : name === 'prepbear'
+          ? 'linear-gradient(135deg,#080912 0%,#14172a 50%,#2f357c 100%)'
+          : t.bg;
+  try { localStorage.setItem('cueola_prompter_theme', name); } catch {}
+}
+
+let flowOpClockPreviewTimer = null;
+function flowOpRenderClockPreview() {
+  const el = flowOpEl('flowOpClockPreview');
+  if (!el) return;
+  const state = flowOpClockState || {};
+  const clockOn = state.mode && state.mode !== 'off';
+  const left = (Number(state.targetTs) || 0) - Date.now();
+  const value = !clockOn ? 'Off'
+    : state.mode === 'timeofday' ? formatTimeOfDay()
+      : fmtClockOverlay(left, state.mode !== 'wrap');
+  const label = !clockOn ? 'Clock' : (state.label || (state.mode === 'wrap' ? 'Wrap up' : 'Clock'));
+  el.classList.toggle('off', !clockOn);
+  el.innerHTML = `<div class="pt-clock-mini ${state.mode || 'off'}">
+    <span>${esc(label)}</span>
+    <strong>${esc(value)}</strong>
+    ${flowOpQuestionOn ? `<em>${esc(flowOpQuestionText ? `“${flowOpQuestionText.slice(0, 80)}${flowOpQuestionText.length > 80 ? '…' : ''}”` : 'Question is up')}</em>` : ''}
+  </div>`;
+  if (clockOn && !flowOpClockPreviewTimer) flowOpClockPreviewTimer = setInterval(flowOpRenderClockPreview, 500);
+  if (!clockOn && flowOpClockPreviewTimer) {
+    clearInterval(flowOpClockPreviewTimer);
+    flowOpClockPreviewTimer = null;
+  }
+}
+
+function setFlowOpSlateState(kind) {
+  flowOpTechSlate = kind === 'tech';
+  flowOpColorBarsOn = kind === 'bars';
+  syncTechButtons();
+}
+
+// Mirror a control into the Op screen's own state: at send time for its own
+// controls, and for foreign controls seen on the session doc.
+function flowOpApplyControlPreview(action, quiet=false, payload=null) {
+  if (!action) return;
+  if (action.startsWith('speed_set_')) {
+    flowOpSetSpeed(action.replace('speed_set_', ''));
+  } else if (action.startsWith('size_set_')) {
+    flowOpSetSize(action.replace('size_set_', ''));
+  } else if (action.startsWith('theme_')) {
+    flowOpSetTheme(action.replace('theme_', ''));
+  } else if (action.startsWith('seek_')) {
+    // Cue moves live on the talent; there is no local position to mirror.
+  } else if (action === 'overlays_clear') {
+    setFlowOpSlateState('off');
+    applyClockActionToState('clock_off', 'flowop');
+    applyQuestionAction('question_off', 'flowop');
+  } else if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action.startsWith('clock_until_') || action.startsWith('clock_duration_') || action.startsWith('wrapup_')) {
+    applyClockActionToState(action, 'flowop');
+  } else if (action === 'question_on' || action === 'question_off') {
+    applyQuestionAction(action, 'flowop', payload?.text);
+  } else {
+    switch (action) {
+      case 'slate_tech_on': setFlowOpSlateState('tech'); break;
+      case 'slate_tech_off': setFlowOpSlateState('off'); break;
+      case 'slate_bars_on': setFlowOpSlateState('bars'); break;
+      case 'slate_bars_off': setFlowOpSlateState('off'); break;
+      case 'rowinfo_on': ptRowInfoOn = true; break;
+      case 'rowinfo_off': ptRowInfoOn = false; break;
+      case 'pause': flowOpPlaying = false; break;
+      case 'resume': flowOpPlaying = true; break;
+      case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
+      case 'speed_down': flowOpSetSpeed(ptTargetSpeed - 10); break;
+      case 'size_up': flowOpSetSize(ptFontSize + 4); break;
+      case 'size_down': flowOpSetSize(ptFontSize - 4); break;
+      case 'align_left': flowOpSetAlign('left'); break;
+      case 'align_center': flowOpSetAlign('center'); break;
+      case 'align_right': flowOpSetAlign('right'); break;
+      case 'direction_reverse': ptReversing = true; break;
+      case 'direction_forward': ptReversing = false; break;
+      case 'brake_start': ptBraking = true; break;
+      case 'brake_stop': ptBraking = false; break;
+      case 'boost_start': ptBoosting = true; break;
+      case 'boost_stop': ptBoosting = false; break;
+      default: break;
+    }
+  }
+  flowOpSyncControls();
+  if (flowOpCode) flowOpRenderControls(false);
+  if (!quiet && !action.endsWith('_stop') && !action.includes('_set_')) {
+    flowOpSetStatus(`${prompterControlLabel(action)} sent`);
+  }
+}
+
+// Icon tabs pick one flat group, the same inspector standard as the Script Op
+// drawer, remembered per machine.
+const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display', screen: 'Screen' };
+const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script', screen: 'action.fullscreen' };
+function opInspHeadHTML(scope) {
+  return `<div class="insp-head op-insp-head">
+    <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
+      ${Object.keys(OP_INSP_LABELS).map(key =>
+        `<button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="${key}" onclick="opInspTab('${scope}','${key}')"><span class="sf-symbol" data-symbol="${OP_INSP_ICONS[key]}" aria-hidden="true"></span><span class="insp-tab-lbl">${OP_INSP_LABELS[key]}</span></button>`).join('')}
+    </div>
+  </div>`;
+}
+function opInspTab(scope, key) {
+  if (!OP_INSP_LABELS[key]) key = 'transport';
+  document.querySelectorAll(`.op-insp[data-insp-scope="${scope}"]`).forEach(panel => {
+    panel.querySelectorAll('.insp-tab').forEach(b => {
+      const on = b.getAttribute('data-insp') === key;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panel.querySelectorAll('.insp-pane').forEach(p => p.classList.toggle('on', p.getAttribute('data-insp-pane') === key));
+  });
+  try { localStorage.setItem(`cueola_op_insp_tab_${scope}`, key); } catch {}
+}
+function opInspRestoreTab(scope) {
+  let key = 'transport';
+  try { key = localStorage.getItem(`cueola_op_insp_tab_${scope}`) || 'transport'; } catch {}
+  opInspTab(scope, key);
+}
+
+function flowOpControlsHTML(disabled=false) {
+  const dis = disabled ? ' disabled' : '';
+  const playAction = flowOpPlaying ? 'pause' : 'resume';
+  const hold = (action, label) => `<button class="pt-btn" onpointerdown="flowOpSendControl('${action}_start')" onpointerup="flowOpSendControl('${action}_stop')" onpointerleave="flowOpSendControl('${action}_stop')" onpointercancel="flowOpSendControl('${action}_stop')" onlostpointercapture="flowOpSendControl('${action}_stop')"${dis}>${label}</button>`;
+  const drag = `onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''"`;
+  const transport = `<div class="flow-control-section flow-control-transport">
+      <div class="flow-control-title">Playback</div>
+      <div class="flow-control-grid one">
+        <button class="pt-btn${flowOpPlaying ? ' active' : ''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY}<span>${flowOpPlaying ? 'Pause' : 'Play'}</span></button>
+      </div>
+    </div>
+    <div class="flow-control-section flow-control-display">
+      <div class="flow-control-title">Speed &amp; Size</div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Speed</span>
+        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" aria-label="Speed" ${drag} oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
+      </div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Size</span>
+        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" aria-label="Text size" ${drag} oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
+      </div>
+    </div>
+    ${scriptOpMoreHTML(`<div class="flow-control-section flow-control-transport-extras">
+      <div class="flow-control-title">Hold &amp; direction</div>
+      <div class="flow-control-grid four">
+        ${hold('brake', 'Brake')}
+        ${hold('boost', 'Boost')}
+        <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
+        <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
+      </div>
+    </div>`)}`;
+  const seekDrag = `onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
+  const live = `<div class="flow-control-section flow-control-rowcue">
+      <div class="flow-control-title">Cue</div>
+      <div class="pt-ctrl-group pt-live-find">
+        <input type="text" class="admin-in pt-find-in" id="flow-find" placeholder="Find in script…" onkeydown="if(event.key==='Enter'){event.preventDefault();flowOpFindInScript()}"${dis}>
+        <button class="pt-btn" onclick="flowOpFindInScript()" data-tip="Cue Flowmingo to the next line containing this text (repeat to walk through matches)"${dis}><span>Find</span></button>
+      </div>
+    </div>
+    ${scriptOpMoreHTML(`<div class="flow-control-section flow-control-onair">
+      <div class="flow-control-title">On Air</div>
+      <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
+        <button class="pt-btn pt-tech-btn${flowOpTechSlate ? ' active' : ''}" id="flow-tech-btn" onclick="flowOpToggleTechDifficulty()" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${flowOpTechSlate ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${flowOpTechSlate ? 'Back on air' : 'Tech Difficulty'}</span></button>
+        <button class="pt-btn pt-bars-btn${flowOpColorBarsOn ? ' active' : ''}" id="flow-bars-btn" onclick="flowOpToggleColorBars()" data-tip="Show color bars on Flowmingo" aria-label="Toggle color bars" aria-pressed="${flowOpColorBarsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${flowOpColorBarsOn ? 'Back on air' : 'Color bars'}</span></button>
+      </div>
+    </div>
+    <div class="flow-control-section flow-control-cue">
+      <div class="flow-control-title">Scrub</div>
+      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
+        <span class="pt-ctrl-label">Cue</span>
+        <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(-3)" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
+        <input type="range" class="pt-range" id="flow-seek" min="0" max="100" value="0" aria-label="Cue prompter position" onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''" ${seekDrag}${dis}>
+        <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(3)" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
+        <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="flowOpPunchInSeek()" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
+      </div>
+    </div>`)}`;
+  const display = `<div class="flow-control-section flow-control-align">
+      <div class="flow-control-title">Align</div>
+      <div class="pt-ctrl-group flow-control-segment">
+        <span class="pt-ctrl-label">Align</span>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}>Left</button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}>Center</button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}>Right</button>
+      </div>
+    </div>
+    <div class="flow-control-section flow-theme-section">
+      <div class="flow-control-title">Theme</div>
+      <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+      </div>
+    </div>`;
+  const screen = `<div class="flow-control-section flow-control-screen">
+      <div class="flow-control-title">Screen</div>
+      <div class="flow-control-grid four">
+        <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
+        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide controls</button>
+        <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
+        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Fullscreen</button>
+      </div>
+      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
+    </div>`;
+  return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
+    ${opInspHeadHTML('flow')}
+    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
+    <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${live}</div></div>
+    <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('flow', disabled)}</div>
+    <div class="insp-pane" data-insp-pane="display">${display}</div>
+    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
+  </div>`;
+}
+
+function flowOpRenderControls(disabled=false) {
+  const el = flowOpEl('flowOpControls');
+  if (!el) return false;
+  const fingerprint = stableStringify({
+    disabled:Boolean(disabled),
+    question:flowOpQuestionOn,
+    clockMode:flowOpClockState?.mode || 'off',
+    clockSize:flowOpClockState?.size ?? 1,
+  });
+  if (fingerprint === flowOpControlsRenderFingerprint) {
+    flowOpSyncControls();
+    return false;
+  }
+  // A focused control owns its DOM until blur. This protects keyboard focus,
+  // typed clock values, and a range thumb that is currently being dragged.
+  if (el.contains(document.activeElement)) {
+    flowOpDeferredControlsDisabled = disabled;
+    el.onfocusout = () => queueMicrotask(() => {
+      if (!el.contains(document.activeElement) && flowOpDeferredControlsDisabled !== null) {
+        const pending = flowOpDeferredControlsDisabled;
+        flowOpDeferredControlsDisabled = null;
+        flowOpRenderControls(pending);
+      }
+    });
+    flowOpSyncControls();
+    return false;
+  }
+  // Keep open "More" groups open across a re-render.
+  const openMore = [...el.querySelectorAll('.insp-pane')].filter(p => p.querySelector('details.sop-more[open]')).map(p => p.getAttribute('data-insp-pane'));
+  el.innerHTML = flowOpControlsHTML(disabled);
+  openMore.forEach(key => el.querySelector(`.insp-pane[data-insp-pane="${key}"] details.sop-more`)?.setAttribute('open', ''));
+  flowOpControlsRenderFingerprint = fingerprint;
+  flowOpControlsRenderCount += 1;
+  el.dataset.renderCount = String(flowOpControlsRenderCount);
+  opInspRestoreTab('flow');   // keep the remembered inspector tab active across re-renders
+  flowOpSyncControls();
+  applyPrompterToggleStates();   // D12.5: pending/failed ack state survives re-renders
+  return true;
+}
+
+function flowOpSyncControls() {
+  const playBtn = flowOpEl('flowOpPlayBtn');
+  if (playBtn) {
+    playBtn.innerHTML = `${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY}<span>${flowOpPlaying ? 'Pause' : 'Play'}</span>`;
+    playBtn.classList.toggle('active', flowOpPlaying);
+    playBtn.setAttribute('aria-pressed', flowOpPlaying ? 'true' : 'false');
+    playBtn.setAttribute('onclick', `flowOpSendControl('${flowOpPlaying ? 'pause' : 'resume'}')`);
+  }
+  const speed = flowOpEl('flowOpSpeedRange');
+  if (speed && document.activeElement !== speed && !speed.dataset.controlDragging) speed.value = ptTargetSpeed;
+  const size = flowOpEl('flowOpSizeRange');
+  if (size && document.activeElement !== size && !size.dataset.controlDragging) size.value = ptFontSize;
+  document.querySelectorAll('[data-flowop-align]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
+  });
+  const rowInfo = flowOpEl('flowOpRowInfo');
+  if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
+  document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
+    btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
+  });
+  flowOpRenderClockPreview();
+}
+
+function flowOpRenderSession(data=null) {
+  const titleEl = flowOpEl('flowOpTitle');
+  const meta = flowOpEl('flowOpSessionMeta');
+  const preview = flowOpEl('flowOpScriptPreview');
+  const fingerprint = data ? stableStringify({
+    showName:data.show?.name || data.showName || data.name || '',
+    beats:Array.isArray(data.beats) ? data.beats : [],
+    prompterText:typeof data.prompter?.text === 'string' ? data.prompter.text : null,
+    activeIdx:data.prompter?.activeIdx,
+    currentRow:data.prompter?.currentRow || null,
+    nextRow:data.prompter?.nextRow || null,
+  }) : 'empty';
+  if (fingerprint === flowOpSessionRenderFingerprint) return false;
+  flowOpSessionRenderFingerprint = fingerprint;
+  if (!data) {
+    if (titleEl) titleEl.textContent = 'Flowmingo Op';
+    if (meta) meta.innerHTML = `<div class="flowop-session-title">No show loaded</div><div class="flowop-note">Enter the same show code the talent screen uses.</div>`;
+    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a show code to run the prompter from here.</div>`;
+    flowOpOfferAssignedSessions();
+    return true;
+  }
+  const showName = data.show?.name || data.showName || data.name || 'Untitled Show';
+  const beatsInSession = Array.isArray(data.beats) ? data.beats.map(migrateBeat) : [];
+  const activeIdx = Number.isFinite(data.prompter?.activeIdx) ? data.prompter.activeIdx : 0;
+  const cur = data.prompter?.currentRow || beatsInSession[activeIdx] || null;
+  const next = data.prompter?.nextRow || beatsInSession[activeIdx + 1] || null;
+  const text = ptAssembleCueolaScript(data);
+  if (titleEl) titleEl.textContent = showName;
+  if (preview) {
+    preview.innerHTML = text.trim()
+      ? ptSanitizeHTML(ptPlainTextToHTML(text))
+      : `<div class="flowop-empty">This show has no script yet.</div>`;
+  }
+  if (meta) {
+    meta.innerHTML = `
+      <div class="flowop-session-title">${esc(showName)}</div>
+      <div class="flowop-meta">
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Code</div><div class="flowop-meta-value">${esc(flowOpCode || '—')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Rows</div><div class="flowop-meta-value">${beatsInSession.length || '—'}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">On air</div><div class="flowop-meta-value">${esc(cur?.name || cur?.info || '—')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Standby</div><div class="flowop-meta-value">${esc(next?.name || next?.info || '—')}</div></div>
+      </div>`;
+  }
+  return true;
+}
+
+// Same as the join doors: a signed-in operator taps an assigned show in the
+// empty preview instead of typing the code. The code box stays as the typed
+// fallback. Renders only while no show is loaded.
+let flowOpChoiceGen = 0;
+async function flowOpOfferAssignedSessions() {
+  const idApi = window.CueolaIdentity;
+  if (!idApi || typeof idApi.sessionChoices !== 'function' || !idApi.identity?.()) return;
+  const gen = ++flowOpChoiceGen;
+  let choices = [];
+  try { choices = await idApi.sessionChoices(); } catch { choices = []; }
+  if (gen !== flowOpChoiceGen || !choices.length) return;
+  if (flowOpCode || flowOpData) return;                 // a show loaded while we were checking
+  const preview = flowOpEl('flowOpScriptPreview');
+  if (!preview || !preview.querySelector('.flowop-empty')) return;
+  preview.innerHTML = '<div class="flowop-empty flowop-choices">'
+    + '<div class="join-yours-label">Your sessions</div>'
+    + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
+    + '<div class="flowop-note" style="margin-top:12px">Or type a show code above.</div>'
+    + '</div>';
+}
+function flowOpPickAssignedSession(code) { flowOpLoadSession(String(code || '').toUpperCase()); }
+
+async function flowOpLoadSession(codeOverride='') {
+  const input = flowOpEl('flowOpCodeInput');
+  const code = (codeOverride || input?.value || '').trim().toUpperCase();
+  const btn = flowOpEl('flowOpLoadBtn');
+  if (!code) {
+    flowOpSetStatus('Enter a code', true);
+    input?.focus();
+    return;
+  }
+  // Gate at the code load, not at the screen: the remote can be opened and
+  // arranged on a second device, but connecting it to a real show starts
+  // writing prompter control commands, which needs a signed-in operator.
+  if (!requireProfileForCloud('drive a live prompter', 'flowOp')) {
+    flowOpSetStatus('Sign in to connect', true);
+    return;
+  }
+  if (input) input.value = code;
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  // The in-panel loader honors the class-key gate like the side doors.
+  if (!(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) {
+    flowOpSetStatus('Class key needed', true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+    return;
+  }
+  flowOpCode = '';
+  flowOpSessionRenderFingerprint = '';
+  flowOpControlsRenderFingerprint = '';
+  flowOpDeferredControlsDisabled = null;
+  flowOpRenderControls(true);
+  flowOpSetStatus('Loading...');
+  _prompterOperatorRuntimeActive = true;
+  _ensurePrompterOperatorBridge(true);
+  const load = () => {
+    try {
+      if (flowOpSub) { flowOpSub(); flowOpSub = null; }
+      flowOpSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
+        if (!snap.exists()) {
+          flowOpCode = '';
+          flowOpData = null;
+          flowOpRenderSession(null);
+          flowOpRenderControls(true);
+          flowOpSetStatus('Not found', true);
+          if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+          return;
+        }
+        flowOpCode = code;
+        ptLinkedCueolaCode = code;
+        flowOpData = snap.data() || {};
+        // Same forward-carry as the main listener: this surface's writes must
+        // not evict other operator windows' queued commands.
+        if (Array.isArray(flowOpData.prompter?.controlQueue)) _lastDocPrompterControlQueue = flowOpData.prompter.controlQueue;
+        ensurePrompterProtocolIdentity({ productionCode:code, sessionId:flowOpData.prompter?.sessionId || '' });
+        if (flowOpData.prompter?.state) {
+          prompterSessionController.update(flowOpData.prompter.state, { preserveVersion:true });
+        }
+        flowOpRenderSession(flowOpData);
+        flowOpRenderControls(false);
+        const heartbeat = flowOpData.prompter?.talentHeartbeat;
+        // Change-or-first-sight admission (arrival clock), never a compare of
+        // the talent Mac's clock to ours: the same rule as the main listener.
+        const hbTs = Number(heartbeat?.ts) || 0;
+        const hbFromTalent = !!hbTs && !isPrompterSelfSender(heartbeat.sender);
+        if (hbFromTalent && hbTs !== _flowOpTalentHeartbeatTs
+            && (_flowOpTalentHeartbeatTs !== 0 || Math.abs(Date.now() - hbTs) < 60000)) {
+          _flowOpTalentHeartbeatTs = hbTs;
+          _flowOpTalentSeenAt = Date.now();
+          _handlePrompterOperatorMessage({ type:'PROMPTER_HEARTBEAT', ...heartbeat });
+        }
+        const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && (Date.now() - _flowOpTalentSeenAt) < 20000;
+        if (talentOnline) {
+          const status = prompterSessionController.getState().status;
+          flowOpSetStatus(`${prompterStatusLabel(status).toUpperCase()} · ${code} · talent online`);
+        } else {
+          flowOpSetStatus(`OPENING · ${code} · waiting for talent`);
+        }
+        const control = flowOpData.prompter?.control;
+        if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
+          flowOpLastRemoteControlTs = control.ts;
+          flowOpApplyControlPreview(control.action, true, control.payload);
+        }
+        if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+      }, err => {
+        flowOpCode = '';
+        flowOpSetStatus(firebaseConnectionLabel(err, 'Error'), true);
+        flowOpRenderControls(true);
+        if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+      });
+    } catch {
+      flowOpCode = '';
+      flowOpSetStatus('Error', true);
+      flowOpRenderControls(true);
+      if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+    }
+  };
+  if (window._firebaseReady) load();
+  else window.addEventListener('firebaseReady', load, { once:true });
+}
+
+function flowOpStopListening() {
+  if (flowOpSub) {
+    try { flowOpSub(); } catch {}
+    flowOpSub = null;
+  }
+  if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
+}
+
+function flowOpSendControl(action, quiet=false, payload=null) {
+  if (!flowOpCode) {
+    flowOpSetStatus('Load a show first', true);
+    flowOpEl('flowOpCodeInput')?.focus();
+    return false;
+  }
+  _ensurePrompterOperatorBridge(true);
+  const control = buildPrompterControl(action, 'flowmingo-op', payload);
+  applyOperatorOverlayMirror(action, payload, 'flowop');
+  // Same rule as the desk: with a show code and Firebase up, every action
+  // goes to the doc now; the queue survives only while Firebase is not ready.
+  if (!prompterControlDocPathAvailable(control, flowOpCode) && !prompterSessionController.isReady(_activePrompterOutputInstanceId)) {
+    // Same bypass as the desk: discrete state toggles (incl. every
+    // off-command) go straight to the doc channel, never the readiness queue.
+    if (isCollaborativePrompterControl(action)) {
+      return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
+    }
+    prompterSessionController.queueCommand(control);
+    flowOpSetStatus(`${prompterControlLabel(action)} queued · waiting for talent`);
+    return false;
+  }
+  return dispatchPrompterCommand(control, 'flowop', quiet, flowOpCode);
+}
+
+function flowOpToggleTechDifficulty() {
+  flowOpSendControl((flowOpTechSlate || flowOpColorBarsOn) ? 'slate_tech_off' : 'slate_tech_on');
+}
+
+function flowOpToggleColorBars() {
+  flowOpSendControl(flowOpColorBarsOn ? 'slate_bars_off' : 'slate_bars_on');
+}
+
+// Relative, like every other nudge: moves from the talent's real position.
+function flowOpNudgeSeek(delta) {
+  flowOpSendControl('seek_line_' + Math.max(-200, Math.min(200, Math.round(delta))));
+}
+
+function flowOpPunchInSeek() {
+  const sl = flowOpEl('flow-seek');
+  const val = sl ? parseFloat(sl.value) || 0 : 0;
+  flowOpSendControl('seek_set_' + Math.max(0, Math.min(100, val)));
+  flowOpSendControl('resume');
+}
+
+function flowOpFindInScript() {
+  const input = flowOpEl('flow-find');
+  const q = String(input?.value || '').trim();
+  if (!q) { toast('Type a few words from the script first.'); return; }
+  if (q.length < 3) { toast('Use at least three characters so the match is meaningful.'); return; }
+  if (flowOpSendControl('seek_text', false, { q }) !== false) flowOpSetStatus(`Finding “${q.slice(0, 28)}${q.length > 28 ? '…' : ''}”`);
+}
+
+function flowOpReleaseHoldKeys() {
+  if (!flowOpCode) return;
+  if (ptBraking) flowOpSendControl('brake_stop', true);
+  if (ptBoosting) flowOpSendControl('boost_stop', true);
+  ptBraking = false;
+  ptBoosting = false;
+}
+
+function flowOpBindKeys() {
+  if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
+  if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
+  flowOpKeydownHandler = e => {
+    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
+    if (isInteractiveEventTarget(e)) return;
+    if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
+    if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
+    if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
+      if (['ArrowLeft','ArrowRight',' ','Space','f','F','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
+      return;
+    }
+    switch (e.key) {
+      case ' ':
+      case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
+      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('boost_start'); break;
+      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('brake_start'); break;
+      case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
+      case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
+      case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
+      case 'r': case 'R': consumeRemoteKey(e); flowOpSendControl('reset'); break;
+      case 'h': case 'H': consumeRemoteKey(e); flowOpSendControl('hide_interface'); break;
+      case 'm': case 'M': consumeRemoteKey(e); flowOpSendControl('mirror'); break;
+      case 'Escape': exitFlowmingoOperator(); break;
+    }
+  };
+  flowOpKeyupHandler = e => {
+    if (!flowOpEl('flowOp')?.classList.contains('on')) return;
+    if (e.key === 'ArrowUp') { consumeRemoteKey(e); flowOpSendControl('boost_stop', true); }
+    if (e.key === 'ArrowDown') { consumeRemoteKey(e); flowOpSendControl('brake_stop', true); }
+  };
+  document.addEventListener('keydown', flowOpKeydownHandler);
+  document.addEventListener('keyup', flowOpKeyupHandler);
+}
+
+function openFlowmingoOperator(codeOverride='') {
+  flowOpReturnScreen = document.getElementById('promptypus')?.classList.contains('on') ? 'promptypus'
+    : document.getElementById('rundown')?.classList.contains('on') ? 'rundown'
+      : document.getElementById('liveshow')?.classList.contains('on') ? 'live'
+        : 'entry';
+  ptStopPlay();
+  ptCloseEdit();
+  ['entry','rundown','liveshow','promptypus'].forEach(id => document.getElementById(id)?.classList.remove('on'));
+  flowOpEl('flowOp')?.classList.add('on');
+  sessionStorage.setItem('cueola_screen', 'flowop');
+  pushSessionHistoryState('flowop');
+  flowOpSetTheme(ptThemeName);
+  flowOpSetAlign(ptAlign);
+  flowOpSetSize(ptFontSize);
+  flowOpRenderSession(flowOpData);
+  flowOpRenderControls(!flowOpCode);
+  flowOpBindKeys();
+  const code = (codeOverride || flowOpCode || ptLinkedCueolaCode || '').trim().toUpperCase();
+  const input = flowOpEl('flowOpCodeInput');
+  if (input) input.value = code;
+  if (code) flowOpLoadSession(code);
+  else setTimeout(() => input?.focus(), 50);
+}
+
+function exitFlowmingoOperator() {
+  flowOpReleaseHoldKeys();
+  flowOpStopListening();
+  flowOpEl('flowOp')?.classList.remove('on');
+  if (flowOpReturnScreen === 'promptypus') {
+    enterPrompter();
+  } else if (flowOpReturnScreen === 'live') {
+    document.getElementById('liveshow')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'live');
+  } else if (flowOpReturnScreen === 'rundown') {
+    document.getElementById('rundown')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'build');
+  } else {
+    document.getElementById('entry')?.classList.add('on');
+    sessionStorage.setItem('cueola_screen', 'entry');
+  }
+}
+
+function openPrompterFromFlowOp() {
+  const code = (flowOpCode || flowOpEl('flowOpCodeInput')?.value || '').trim().toUpperCase();
+  flowOpReleaseHoldKeys();
+  flowOpStopListening();
+  flowOpEl('flowOp')?.classList.remove('on');
+  sessionStorage.setItem('cueola_screen', 'entry');
+  enterPrompter();
+  if (code) {
+    const input = ptEl('pt-cueola-code-input');
+    if (input) input.value = code;
+    ptLoadFromCueolaCode(code);
+  }
 }
 
 function ptOpenEdit() {
@@ -30053,7 +30776,8 @@ window.addEventListener('popstate', () => {
     document.getElementById('rundown')?.classList.contains('on') ||
     document.getElementById('liveshow')?.classList.contains('on') ||
     document.getElementById('promptypus')?.classList.contains('on') ||
-    document.getElementById('outrangutan')?.classList.contains('on');
+    document.getElementById('outrangutan')?.classList.contains('on') ||
+    document.getElementById('flowOp')?.classList.contains('on');
   if (!browserBackGuardReady || !inSession) return;
   // Browser Back on the Live screen is the same exit as the Exit button:
   // restore the history entry, then open the one exit sheet. A second Back
@@ -30064,11 +30788,12 @@ window.addEventListener('popstate', () => {
     if (liveSessionState().lifecycle === 'live') requestExitLive();
     return;
   }
-  // Output screens (talent display, playout Air) never offer to leave the
-  // session on Back: dropping the Air out of the session mid-show is not a
-  // gesture anyone means. Stay.
+  // Output screens (talent display, playout Air, Flowmingo Op) never offer to
+  // leave the session on Back: dropping the Air out of the session mid-show
+  // is not a gesture anyone means. Stay.
   if (document.getElementById('promptypus')?.classList.contains('on')
-    || document.getElementById('outrangutan')?.classList.contains('on')) {
+    || document.getElementById('outrangutan')?.classList.contains('on')
+    || document.getElementById('flowOp')?.classList.contains('on')) {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
     return;
   }
@@ -30158,7 +30883,7 @@ function cueolaAppPath() {
       const code = params.get('code') || '';
       // Phase 5: the operator side door honors the class-key gate.
       if (code && !(await cueolaEntryGateAllows(code, 'The Flowmingo operator'))) return;
-      openFlowmingoRemoteDoor(code);
+      openFlowmingoOperator(code);
     }, 0);
     return;
   }

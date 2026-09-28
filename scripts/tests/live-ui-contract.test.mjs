@@ -239,7 +239,9 @@ test('overlay discipline: bounded band, off-commands always pass, toggles are ac
   // second sender of its own.
   const popoutHost = app.slice(app.indexOf("if (!scriptOperatorControlAllowed(action)) throw new Error('Rejected Script Operator action: '"), app.indexOf("if (kind === 'draft') {"));
   assert.match(popoutHost, /const sent = questionText \? sendPrompterControl\(action, \{ text: questionText \}\)\n\s+: findQuery \? sendPrompterControl\(action, \{ q: findQuery \}\)\n\s+: sendPrompterControl\(action\);/);
-  assert.doesNotMatch(app, /function flowOpSendControl\(/);
+  // The standalone Flowmingo Op screen is the third sender: same bypass.
+  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
+  assert.match(flowSend, /isCollaborativePrompterControl\(action\)[\s\S]*?dispatchPrompterCommand\(control, 'flowop'/);
   // Toggle UI rides the ack path: pending on send, confirmed on control_ack,
   // failed after the no-ack timeout.
   assert.match(app, /markPrompterToggleState\(control\.action, 'pending'\)/);
@@ -1360,7 +1362,7 @@ test('talent overlay CSS: theme tokens, stage-relative banners, honest read line
   assert.match(rule('#pt-hold-chip'), /animation:ptHoldPulse 2\.4s ease-in-out 3/);
   assert.match(css, /\.pt-clock-overlay\.expired:not\(\.timeofday\) \.pt-clock-value\{animation:ptExpiredPulse 1s ease-in-out 4\}/);
   assert.match(rule('.pt-slate-mark'), /border:1px solid transparent/);
-  assert.match(css, /#pt-text strong\{[^}]*text-shadow:none/);
+  assert.match(css, /#pt-text strong,\.flowop-script strong\{[^}]*text-shadow:none/);
   assert.match(clock, /border-radius:var\(--ui-radius-panel\)/);
   assert.match(question, /border-radius:var\(--ui-radius-group\)/);
   assert.match(rule('.pt-question-tag'), /border-radius:999px/);
@@ -1450,9 +1452,10 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   assert.match(send, /if \(!prompterControlDocPathAvailable\(control\) && !prompterSessionController\.isReady\(_activePrompterOutputInstanceId\)\)/);
   assert.match(app, /function prompterControlDocPathAvailable\(control, codeOverride=''\)/);
   assert.match(app, /return Boolean\(window\._firebaseReady && code\);/);
-  // The pop-out rides the same sendPrompterControl path (no second sender), so
-  // the doc-path rule above covers both operator surfaces.
-  assert.doesNotMatch(app, /flowOpCode/);
+  // The pop-out rides the same sendPrompterControl path (no second sender);
+  // the standalone Flowmingo Op follows the same doc-path rule with its own code.
+  const flowSend = app.slice(app.indexOf('function flowOpSendControl('), app.indexOf('function flowOpToggleTechDifficulty'));
+  assert.match(flowSend, /if \(!prompterControlDocPathAvailable\(control, flowOpCode\) && !prompterSessionController\.isReady/);
   // Rebind on EVIDENCE (pinned talent silent, or the newcomer echoes our
   // snapshotId), never on a newer heartbeat ts; recovery rides sync scope.
   const handler = app.slice(app.indexOf('function _handlePrompterOperatorMessage('), app.indexOf('function _ensurePrompterOperatorBridge('));
@@ -2149,7 +2152,9 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   assert.doesNotMatch(queue, /Date\.now\(\)/);
   // C4: change-driven admission with a 60s skew-tolerant first sight; applied
   // receipts need a change (no clock); both dedup stamps reset with the
-  // runtime. (The standalone Flowmingo Op reader that mirrored this is gone.)
+  // runtime; the standalone Flowmingo Op reader follows suit.
+  assert.match(app, /hbTs !== _flowOpTalentHeartbeatTs\n            && \(_flowOpTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - hbTs\) < 60000\)\) \{/);
+  assert.match(app, /const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && \(Date\.now\(\) - _flowOpTalentSeenAt\) < 20000;/);
   assert.match(app, /_hb\.ts !== _lastSeenTalentHeartbeatTs\n          && \(_lastSeenTalentHeartbeatTs !== 0 \|\| Math\.abs\(Date\.now\(\) - _hb\.ts\) < 60000\)\) \{/);
   assert.match(app, /const firstSight = _lastSeenTalentAppliedTs === 0;\n        _lastSeenTalentAppliedTs = _ta\.ts;\n        if \(!firstSight\) _handlePrompterOperatorMessage\(\{ \.\.\._ta, type:'PROMPTER_STATE_APPLIED' \}\);/);
   assert.doesNotMatch(app, /\(Date\.now\(\) - _ta\.ts\) < 20000/);
@@ -2328,25 +2333,33 @@ test('9/4 fix round slice A2: C9/G5 row numbers, C14 Esc = Stay live, C15/C16/C1
 test('two prompter control sets, simple tier by default (owner 2026-09 debloat)', async () => {
   const scriptOp = await readFile(new URL('../../script-operator.js', import.meta.url), 'utf8');
   const scriptOpHtml = await readFile(new URL('../../script-operator.html', import.meta.url), 'utf8');
-  // The in-Live "Flowmingo Op" mode and the standalone #flowOp screen are gone:
-  // markup, state, functions, CSS, and their entry points.
-  for (const gone of [/promptOpMode/, /togglePromptOpMode/, /renderLivePromptOp/, /promptOpControlsHTML/, /opInspHeadHTML/, /OP_INSP_LABELS/, /flowOp[A-Z]/, /openFlowmingoOperator/, /exitFlowmingoOperator/, /origin === 'flowop'/, /, 'flowop'/, /'flowmingo-op'/, /flowmingoRemoteOverrideUntil/]) {
+  // The in-Live "Flowmingo Op" mode stays gone (the Script Op panel covers it).
+  for (const gone of [/promptOpMode/, /togglePromptOpMode/, /renderLivePromptOp/, /promptOpControlsHTML/, /openFlowmingoRemoteDoor/]) {
     assert.doesNotMatch(app, gone, `${gone} should be gone from cueola-app.js`);
   }
-  for (const gone of [/id="flowOp"/, /id="promptOpBtn"/, /flowop-/, /prompt-op-active/, /prompt-op-stage/, /openFlowmingoOperator/, />Remote Op</]) {
+  for (const gone of [/id="promptOpBtn"/, /prompt-op-active/, /prompt-op-stage/]) {
     assert.doesNotMatch(html, gone, `${gone} should be gone from index.html`);
   }
   // Kept: the Script Op panel in Live and the pop-out page.
   assert.match(html, /id="prompterPanelBtn" onclick="toggleLivePrompterPanel\(\)"/);
   assert.match(app, /function openScriptOpPopout\(\)/);
-  // The old #flowop / ?operator doors never dead-end: a Live host opens the
-  // pop-out, otherwise the talent screen's Link a show door opens with a toast.
-  const door = app.slice(app.indexOf('function openFlowmingoRemoteDoor('), app.indexOf('function openPrompterApp()'));
-  assert.match(door, /if \(liveHost\) return openScriptOpPopout\(\);/);
-  assert.match(door, /openPrompterApp\(\);\n  ptOpenEdit\(\);/);
-  assert.match(door, /toast\(/);
-  assert.match(app, /params\.has\('flowop'\) \|\| params\.has\('operator'\)\) \{[\s\S]*?openFlowmingoRemoteDoor\(code\);/);
-  assert.match(app, /else if \(action === 'remote'\) openFlowmingoRemoteDoor\(/);
+  // The standalone Flowmingo Op screen is back (owner 2026-09-28): the front
+  // page's Remote Op button, the talent screen's link, the #flowop / ?operator
+  // doors and the Guide's "remote" action all open it.
+  assert.match(html, /<div class="screen" id="flowOp">/);
+  assert.match(html, /onclick="event\.stopPropagation\(\);openFlowmingoOperator\(\)">Remote Op<\/button>/);
+  assert.match(html, /Open Remote Operator<\/button>/);
+  assert.match(app, /params\.has\('flowop'\) \|\| params\.has\('operator'\)\) \{[\s\S]*?openFlowmingoOperator\(code\);/);
+  assert.match(app, /else if \(action === 'remote'\) openFlowmingoOperator\(/);
+  // It follows the simple tier too: Play, Speed and Size up front; holds,
+  // slates and the scrubber behind More.
+  const flowPanel = app.slice(app.indexOf('function flowOpControlsHTML('), app.indexOf('function flowOpRenderControls('));
+  assert.match(flowPanel, /id="flowOpPlayBtn"[\s\S]*id="flowOpSpeedRange"[\s\S]*scriptOpMoreHTML\(`<div class="flow-control-section flow-control-transport-extras">/);
+  assert.match(flowPanel, /scriptOpMoreHTML\(`<div class="flow-control-section flow-control-onair">[\s\S]*id="flow-seek"/);
+  assert.match(flowPanel, /clockAndAlertControlsHTML\('flow', disabled\)/);
+  // Script Op yields transport to a Flowmingo Op that just acted (the Guide's
+  // Control ownership callout); clocks, cues and slates never wait.
+  assert.match(app, /control\.source === 'flowmingo-op'\) \{\n\s+flowmingoRemoteOverrideUntil = Date\.now\(\) \+ FLOWMINGO_REMOTE_OVERRIDE_MS;/);
   // Simple tier: each pane leads with the student controls and folds the rest
   // behind one collapsed More, on both surfaces.
   const transport = app.slice(app.indexOf('function scriptOpTransportPaneHTML()'), app.indexOf('function scriptOpDisplayPaneHTML()'));
