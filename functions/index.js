@@ -271,6 +271,20 @@ exports.createStudentProfile = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
     lastSeen: now,
   };
 
+  // Make the sign-in pass FIRST, before anything is saved. On 9/28 the cloud
+  // refused to make passes (a missing permission on the functions' account),
+  // and because the profile had already been saved, every retry told the
+  // student their own new username was "taken". Now a refusal saves nothing,
+  // so the student can simply try again once it is fixed. The pass is thrown
+  // away unused if the username turns out to be taken below.
+  let token;
+  try {
+    token = await getAuth().createCustomToken(profileId, { cueolaStudent: true });
+  } catch (err) {
+    console.error('createStudentProfile: could not make a sign-in pass, nothing saved:', err && err.message);
+    throw new HttpsError('unavailable', 'Sign-up is not working in the cloud right now. Nothing was saved. Tell your instructor.');
+  }
+
   // create(), not set(): fails if the username was taken between the client's
   // check and now, so two people racing the same username cannot clobber.
   try {
@@ -286,7 +300,6 @@ exports.createStudentProfile = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
   // a username that was never created.
   await pinSecretRef(db, profileId).set(secretFields);
 
-  const token = await getAuth().createCustomToken(profileId, { cueolaStudent: true });
   return { token, profile: doc };
 });
 

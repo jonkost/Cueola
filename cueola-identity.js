@@ -598,6 +598,19 @@
     if (p) p.lastSeen = Date.now();
   }
 
+  // A student re-trying sign-up with a username that already exists: if the
+  // same PIN opens it through the normal server PIN check, it is their own
+  // profile from an earlier try that broke partway. Returns the sign-in
+  // result, or null when the PIN does not open it (a real classmate's name).
+  async function signInToOwnNewProfile(username, fullName, pin) {
+    if (!/^[0-9]{4}$/.test(String(pin || ''))) return null;
+    var auth = await authenticateStudentPin(username, null, pin);
+    if (!auth.ok) return null;
+    var p = null;
+    try { p = await fetchProfile(username); } catch (e) { p = null; }
+    return finalizeSignIn(username, p || { username: username, fullName: fullName });
+  }
+
   async function createProfile(input) {
     var w = fb(); if (!w) return { ok: false, msg: 'Cloud connection is not ready. Try again in a moment.' };
     var code = normalizeCode(input.code);
@@ -634,12 +647,29 @@
       }
     } catch (err) {
       var c = err && err.code ? String(err.code) : '';
-      // Real, actionable rejections stop here. Anything else (not deployed,
-      // unavailable, network) falls through to the legacy client-side create.
-      if (c.indexOf('already-exists') >= 0) return { ok: false, msg: 'That username is taken. Pick another one.' };
-      if (c.indexOf('invalid-argument') >= 0 || c.indexOf('permission-denied') >= 0) {
-        return { ok: false, msg: (err && err.message) || 'Could not create the profile.' };
+      var serverMsg = String((err && err.message) || '');
+      // "Taken" may be this same student: on 9/28 the cloud saved profiles and
+      // then failed, so the retry hit their own username. If their PIN opens
+      // it, it is theirs: sign them in through the normal PIN check.
+      if (c.indexOf('already-exists') >= 0) {
+        var mine = await signInToOwnNewProfile(username, fullName, input.pin);
+        if (mine) return mine;
+        return { ok: false, msg: 'That username is taken. Pick another one.' };
       }
+      if (c.indexOf('invalid-argument') >= 0 || c.indexOf('permission-denied') >= 0) {
+        return { ok: false, msg: serverMsg || 'Could not create the profile.' };
+      }
+      // The cloud answered but broke partway. The profile may already be
+      // saved, so the old fallback below would report the student's own
+      // username as "taken". Try their PIN; otherwise say what happened.
+      if (c.indexOf('internal') >= 0 || /^Sign-up is not working/.test(serverMsg)) {
+        var saved = await signInToOwnNewProfile(username, fullName, input.pin);
+        if (saved) return saved;
+        return { ok: false, msg: /^Sign-up is not working/.test(serverMsg) ? serverMsg
+          : 'Sign-up is not working in the cloud right now. Tell your instructor. Keep this same username and PIN and try again later.' };
+      }
+      // Anything else (not deployed, unreachable) falls through to the
+      // legacy client-side create.
     }
 
     var codeDoc;
@@ -650,7 +680,11 @@
 
     var existing;
     try { existing = await fetchProfile(username); } catch (e) { existing = null; }
-    if (existing) return { ok: false, msg: '“' + esc(username) + '” is taken. Pick another username.' };
+    if (existing) {
+      var ownEarlier = await signInToOwnNewProfile(username, fullName, input.pin);
+      if (ownEarlier) return ownEarlier;
+      return { ok: false, msg: '“' + esc(username) + '” is already saved. If you started signing up earlier, go back and sign in with it and your PIN. If not, pick another username.' };
+    }
 
     var sessions = [];
     String(input.sessions || '').split(/[\s,]+/).forEach(function (raw) {
@@ -1202,7 +1236,7 @@
       // read, which Phase 2 removes, so a miss here is not fatal: the authority
       // is createStudentProfile's atomic create(), which rejects a duplicate.
       var taken = await fetchProfile(u).catch(function () { return null; });
-      if (taken) return wizardErr('“' + esc(u) + '” is taken. Pick another username.');
+      if (taken) return wizardErr('“' + esc(u) + '” is already saved. If you started signing up earlier, go back and sign in with it and your PIN. If not, pick another username.');
       w.username = u;
     } else if (key === 'pin') {
       var pin = String((document.getElementById('id-create-pin') || {}).value || '');
