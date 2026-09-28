@@ -667,6 +667,304 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
   .btn-icon{width:44px;height:44px}
   .overview-chip .chip-x{min-width:32px;min-height:32px;display:inline-flex;align-items:center;justify-content:center}
 }
+
+/* ══════════ 3.0 DASHBOARD FRESHEN-UP ══════════
+   Brings the dashboard in line with the front page: sentence-case labels,
+   one calm type scale, the modal anatomy from the design guide (Cancel
+   leading, one capsule primary trailing), sheets that scroll instead of
+   clipping, and a layout that fits a phone with no sideways scroll.
+   These rules sit last on purpose so they win over the older ones above. */
+
+/* The hidden attribute always hides. Without this, a class that sets its own
+   display (.field is flex) shows elements the script meant to hide: the
+   group names box on Session Setup and the empty text box on every confirm. */
+[hidden]{display:none!important}
+
+/* Page rhythm */
+.page{padding:var(--sp-5) var(--sp-4) 72px}
+.hero{padding:var(--sp-2) 0 var(--sp-4);margin-bottom:var(--sp-4);align-items:flex-end}
+.hero-greeting{color:var(--accent);letter-spacing:.06em;font-size:11px;margin-bottom:6px}
+.hero-name{font-size:26px;font-weight:700;line-height:1.15;margin-bottom:6px}
+.hero-sub{font-size:14px;line-height:1.5;max-width:620px}
+.hstat{padding:10px 14px;min-width:96px;border-radius:var(--ui-radius-group)}
+.hstat-val{font-size:24px;font-weight:700}
+.hstat-lbl{font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--text2);margin-top:5px}
+.sec-head{flex-wrap:wrap;margin-bottom:var(--sp-3)}
+.sec-title{font-size:20px}
+.sec-tools{flex-wrap:wrap}
+.deleted-head{margin-top:var(--sp-6)}
+
+/* Topbar buttons: one quiet fill, a clear hover */
+.btn-ghost{border:1px solid transparent}
+.btn-ghost:hover{border-color:transparent}
+
+/* Mine / All segment: a track with a lit segment, no seam */
+.scope-seg{padding:2px;gap:2px;border:0;background:color-mix(in srgb,var(--text) 9%,transparent)}
+.scope-btn{border-radius:10px;padding:6px 16px;color:var(--text2)}
+.scope-btn+.scope-btn{border-left:0;box-shadow:none}
+.scope-btn.on{background:color-mix(in srgb,var(--accent) 20%,var(--s1));color:var(--text)}
+
+/* Overview panel (Account Management) */
+.overview-panel{padding:var(--sp-4);margin-bottom:var(--sp-3)}
+.overview-title{font-size:16px;font-weight:700;margin-bottom:var(--sp-3)}
+.overview-sub{font-family:var(--sans);font-size:12px;color:var(--text2)}
+.system-setting-row{padding:12px 14px;border-radius:var(--ui-radius-control)}
+.system-setting-title{font-size:14px}
+.system-setting-sub{font-size:12px;color:var(--text2)}
+
+/* New show card: glass like the front page cards, no stripe */
+.new-session-card{border-left-width:1px;border-left-color:transparent;padding:14px 16px;gap:14px;margin-bottom:var(--sp-4)}
+.new-session-card:hover{border-color:transparent}
+.new-session-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ns-icon{width:44px;height:44px;font-size:24px;font-weight:500;line-height:1}
+.ns-title{font-size:17px}
+
+/* Term headers between session groups */
+.term-group-head{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--text3);padding:var(--sp-4) 4px 6px;border-bottom-color:color-mix(in srgb,var(--text) 9%,transparent);margin-bottom:2px}
+
+/* Session cards: facts on top, one row of actions below. Open is the
+   accent action and always sits last; everything else is a quiet capsule. */
+.sessions-grid,#sessionArea{display:flex;flex-direction:column;gap:10px}
+.session-card{grid-template-columns:minmax(0,1fr);gap:14px;padding:16px 18px 16px 20px}
+.session-card:hover{border-color:transparent;transform:none}
+.sc-top{gap:6px 12px;margin-bottom:8px;min-width:0}
+.sc-code{font-size:17px;letter-spacing:.06em}
+.sc-showname{font-size:17px;min-width:0;overflow-wrap:anywhere}
+.sc-pill{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px}
+.sc-meta{gap:6px 16px}
+.sc-m{font-family:var(--sans);font-size:12.5px;min-width:0}
+.sc-m .sf-symbol{color:var(--text3)}
+.sc-m .brand-ico,.sc-btn .brand-ico{width:1.15em;height:1.15em}
+.sc-right{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;align-items:center}
+.sc-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600}
+.sc-btn-copy,.sc-btn-muted{background:color-mix(in srgb,var(--text) 9%,transparent);color:var(--text2);border:1px solid transparent}
+.sc-btn-copy:hover,.sc-btn-muted:hover{background:color-mix(in srgb,var(--text) 16%,transparent);color:var(--text);border-color:transparent}
+.sc-btn-open{order:9;margin-left:auto;padding-inline:20px;background:color-mix(in srgb,var(--accent) 18%,transparent);font-weight:700}
+.sc-btn-open:hover{background:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+/* Empty state */
+.empty-state{padding:44px 24px}
+.empty-icon{font-size:30px;color:var(--text3);margin-bottom:10px}
+.empty-title{font-size:18px}
+.empty-sub{font-size:14px}
+
+/* Recently deleted */
+.deleted-row{padding:12px 14px;border-color:transparent}
+.deleted-row .dr-code{font-family:var(--mono-num)}
+.deleted-row .dr-meta{font-size:12px;color:var(--text2)}
+
+/* Accounts page */
+.accounts-head{align-items:center;margin:0 0 var(--sp-4)}
+.accounts-sub{font-size:14px}
+.admin-control-form{background:transparent;padding:0 0 var(--sp-3);margin-bottom:var(--sp-3);border-radius:0;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
+.admin-control-form-title{font-family:var(--sans);font-size:15px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--text);display:flex;align-items:center;gap:4px}
+.admin-mini-in{font-size:13px;padding:9px 11px;min-height:38px}
+.admin-mini-in:hover{background:color-mix(in srgb,var(--text) 4%,var(--s3))}
+.admin-mini-btn{min-height:38px;padding:8px 14px;font-size:12.5px;font-weight:600;font-family:var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.admin-mini-btn:hover{border-color:transparent;color:var(--text);background:color-mix(in srgb,var(--text) 14%,var(--s3))}
+.admin-mini-btn.danger:hover{border-color:transparent;color:var(--red)}
+.admin-field-pack span{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--text2)}
+.overview-row{padding:10px 12px}
+.roster-row{min-width:0}
+.roster-main{font-size:13.5px}
+.roster-sub{font-size:12px;color:var(--text2);overflow-wrap:anywhere}
+.roster-user{font-family:var(--sans);font-size:12px;overflow-wrap:anywhere}
+.roster-code{font-family:var(--mono-num);letter-spacing:.08em}
+.roster-pill{font-family:var(--sans);font-size:10.5px;font-weight:700;letter-spacing:.04em}
+.roster-actions{flex-wrap:wrap;justify-content:flex-end}
+.roster-empty{font-size:13px;color:var(--text2)}
+.overview-chip{font-family:var(--mono-num);font-size:11px}
+.accounts-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.accounts-form>.admin-control-form-title{flex:1 1 100%}
+.accounts-form>.admin-mini-in{flex:1 1 180px;width:auto;min-width:0}
+.accounts-form>.admin-mini-btn{flex:0 0 auto}
+.overview-row.admin-row{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:end;gap:12px}
+.admin-row-actions{grid-template-columns:minmax(130px,1fr) auto}
+.admin-row-actions .admin-actions-buttons{grid-column:auto;display:flex;gap:8px}
+.admin-row-actions .admin-actions-buttons .admin-mini-btn{min-width:84px}
+.system-setting-row{flex-wrap:wrap}
+
+/* ── Modals ── */
+/* The wrap scrolls and the sheet centers with margin:auto, so a sheet taller
+   than the window (New show with More options open) keeps its top edge and
+   its buttons reachable. Same fix the front page uses. */
+.modal-wrap{align-items:flex-start;overflow-y:auto;overscroll-behavior:contain;padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));background:rgba(0,0,0,.55);backdrop-filter:blur(var(--liquid-blur)) saturate(140%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(140%)}
+.modal{margin:auto;padding:28px 26px;gap:18px;max-width:440px;min-width:0}
+.modal-title{font-size:24px;line-height:1.15}
+.modal-title:has(.sf-symbol){display:flex;align-items:center;gap:10px}
+.modal-sub{font-size:14px;line-height:1.5}
+.dash-dialog-body{white-space:pre-line}
+.field{min-width:0}
+.field-lbl{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--text2);display:flex;align-items:center;gap:4px}
+.field-opt{color:var(--text3);font-weight:500}
+.field-in{font-size:15px;padding:12px 14px;line-height:1.4;border-width:1px;transition:border-color .15s var(--ease),box-shadow .2s var(--ease),background .15s var(--ease)}
+.field-in:hover{background:color-mix(in srgb,var(--text) 4%,var(--s2))}
+.field-in:focus{background:color-mix(in srgb,var(--s2) 92%,var(--bg))}
+.field-in::placeholder{font-weight:400}
+.field-hint{font-size:12px;color:var(--text3);margin-top:0}
+.modal-err{font-size:13px;background:color-mix(in srgb,var(--red) 12%,transparent);padding:10px 13px}
+/* Buttons: the confirm action is the capsule on the right, Cancel on the left */
+.btn-full{padding:12px 18px;min-height:46px;font-size:16px;line-height:1.2;text-align:center}
+.btn-secondary{font-weight:500;border:1px solid transparent}
+.btn-secondary:hover{border-color:transparent}
+.btn-primary:active{transform:translateY(0) scale(.99)}
+.btn-danger{font-weight:600}
+.modal-actions{display:flex;gap:10px;align-items:stretch;margin-top:2px}
+.modal-actions .btn-secondary{flex:0 1 auto;width:auto;padding-inline:20px}
+.modal-actions :is(.btn-primary,.btn-danger){flex:1 1 auto;width:auto}
+/* The info glyph: a bare accent "i", keyboard reachable, tip on hover or focus */
+.vocab-hint{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:6px;color:var(--accent);font-size:13px;cursor:help;vertical-align:middle}
+.vocab-hint:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.vocab-hint:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* New show: the sign-in rule is a settings row (words left, switch right) */
+.ns-check{padding:12px 14px;gap:6px;background:var(--s2);border-radius:var(--ui-radius-control);font-size:14px;line-height:1.35}
+.ns-check input[type="checkbox"]:not([data-native]){order:3;margin-left:auto}
+.ns-check-txt{min-width:0}
+.ns-check .vocab-hint{order:2}
+.ns-more{border:0;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--text) 5%,transparent);padding:0 14px;margin:0}
+.ns-more>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0;font-size:14px;font-weight:600;color:var(--text2);border-radius:var(--ui-radius-control)}
+.ns-more>summary::-webkit-details-marker{display:none}
+.ns-more>summary:hover{color:var(--text)}
+.ns-more>summary .sf-symbol{font-size:12px;color:var(--text3);transition:transform var(--dur-fast) var(--ease)}
+.ns-more[open]>summary .sf-symbol{transform:rotate(180deg)}
+.ns-more>.field{margin-bottom:16px}
+.ns-code-in{font-family:var(--mono-num);letter-spacing:.08em}
+.ns-code-in::placeholder{font-family:var(--sans);letter-spacing:0}
+.pw-preset-row{flex-wrap:wrap;margin-bottom:6px}
+.pw-type-row{gap:10px;padding:5px 0;font-size:14px;color:var(--text)}
+.pw-lock-row{margin-top:6px;font-size:13px;color:var(--text2)}
+
+/* Show created: the code always fits its box (see fitCreatedCode) */
+.code-box{background:var(--s2);padding:22px 16px 16px;min-width:0;overflow:hidden}
+.code-big{font-size:var(--code-fit,clamp(24px,10vw,44px));letter-spacing:.1em;padding-left:.1em;line-height:1.1;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-all}
+.code-big.is-fit{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.code-lbl{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--text2);margin-top:8px}
+.code-share{margin-top:14px;align-items:stretch}
+.code-url{min-width:0;display:flex;align-items:center;font-family:var(--mono-num);font-size:12px;background:color-mix(in srgb,var(--text) 7%,transparent)}
+.created-note{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;color:var(--text2);background:color-mix(in srgb,var(--accent) 8%,var(--s2));border-radius:var(--ui-radius-control);padding:12px 14px}
+.created-note .sf-symbol{color:var(--accent);flex:none;margin-top:3px}
+.setup-notice{border-left:1px solid transparent;background:color-mix(in srgb,var(--yellow) 10%,var(--s2));font-size:13px;line-height:1.55}
+
+/* Delete confirm */
+.confirm-name{font-family:var(--mono-num);overflow-wrap:anywhere}
+.delete-warn{font-size:13px;color:var(--red);text-align:center}
+
+/* Peek */
+.peek-code{font-family:var(--mono-num);letter-spacing:.06em;overflow-wrap:anywhere}
+.peek-row{padding:9px 12px}
+.peek-name{font-size:13.5px}
+.peek-pill{font-family:var(--sans);font-size:10px;letter-spacing:.04em}
+
+/* System settings */
+.theme-grid{gap:16px 10px}
+
+/* Toast: long messages wrap instead of running off a phone screen */
+.toast{font-family:var(--sans);font-size:14px;white-space:normal;text-align:center;max-width:calc(100vw - 32px);width:max-content;line-height:1.4}
+
+/* ── Session Setup (the big management sheet) ── */
+.detail-modal{max-width:min(1080px,100%);padding:0;gap:0}
+.detail-head{padding:20px 22px 16px;background:transparent;border-bottom-color:color-mix(in srgb,var(--text) 9%,transparent)}
+.detail-eyebrow{font-family:var(--sans);font-weight:700;letter-spacing:.06em;font-size:11px}
+.detail-code-pill{font-family:var(--mono-num);letter-spacing:.08em;font-size:13px;padding:4px 11px;max-width:100%;overflow-wrap:anywhere}
+.detail-body{padding:18px 22px 22px;gap:var(--sp-4)}
+.detail-grid{gap:var(--sp-4)}
+.detail-panel{padding:18px;border-radius:var(--ui-radius-group)}
+.detail-panel-title{font-size:16px;font-weight:700}
+.detail-panel-sub{font-size:13px;line-height:1.5}
+/* One level of chrome: tasks are sections on the panel, split by hairlines */
+.detail-task{background:transparent;padding:0 0 var(--sp-4);margin-bottom:var(--sp-4);border-radius:0;border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent)}
+.detail-task-title,.detail-section-title{font-family:var(--sans);font-size:14px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--text);margin-bottom:12px}
+.detail-section-title{margin:18px 0 8px}
+.sd-row{border-bottom-color:color-mix(in srgb,var(--text) 9%,transparent)}
+.sd-lbl{font-family:var(--sans);font-size:13px;color:var(--text2);letter-spacing:0}
+.sd-val{font-size:14px}
+.detail-empty{font-size:13px;color:var(--text3);padding:8px 0}
+/* People rows: a wrapping row, so a hidden custom-role box never leaves a hole
+   and the ADMIN / STU tag stays a tag instead of stretching into a bar */
+.participant{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px}
+.participant .p-name{flex:1 1 120px;min-width:0}
+.p-name-main{font-size:14px;font-weight:600}
+.p-profile-link{font-family:var(--sans);font-size:11px}
+.participant-role-select{flex:0 1 150px;min-width:120px;min-height:36px}
+.participant-role-custom{flex:0 1 140px;min-width:110px;max-width:none;min-height:36px}
+.p-role{flex:none;font-family:var(--sans);font-weight:700;font-size:10.5px;letter-spacing:.04em}
+.p-joined{font-family:var(--sans);font-size:11px}
+.p-rename,.p-remove{width:30px;height:30px}
+.participant-list{gap:6px}
+.add-student-form{background:transparent;padding:0;margin-top:10px}
+.merge-tool{background:color-mix(in srgb,var(--text) 5%,transparent);padding:12px;margin-top:10px}
+.merge-tool-title{font-size:13px;color:var(--text)}
+.merge-tool-hint{font-family:var(--sans);font-size:12px}
+.assignment-sync-state{border-bottom-color:color-mix(in srgb,var(--text) 9%,transparent);font-size:12px}
+.assignment-state-pill{font-family:var(--sans);font-size:10px;letter-spacing:.04em}
+.assignment-verified-row{border-bottom-color:color-mix(in srgb,var(--text) 9%,transparent)}
+.assignment-verified-meta{font-family:var(--sans);font-size:11px}
+.assignment-verified-position{font-family:var(--sans)}
+.assignment-empty{font-size:13px}
+.pb-sec-meta,.pb-kv dt,.pb-tbl th,.pba-by,.pba-when,.pb-comment-dash-meta{font-family:var(--sans)}
+.pb-sec-meta{font-size:11px}
+.pb-kv dt{font-size:11px;letter-spacing:.02em}
+.pb-log-toggle{font-size:12.5px}
+/* Next episode + danger zone: words on the left, one button on the right */
+.detail-split{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4)}
+.detail-split-copy{min-width:0;flex:1 1 auto}
+.detail-split-copy .detail-panel-sub,.detail-split-copy .detail-danger-copy{margin-top:4px;max-width:640px}
+.detail-split>.btn-full{flex:none;width:auto;min-width:0;padding:11px 20px;margin:0}
+.detail-danger{display:block;padding:18px;background:color-mix(in srgb,var(--red) 9%,var(--s1))}
+.detail-danger-copy{font-size:13px}
+.btn-accent.btn-full:hover{transform:translateY(-1px)}
+
+/* ── Phones ── */
+@media(max-width:600px){
+  .topbar{flex-wrap:wrap;padding:8px 16px;row-gap:6px}
+  .tb-right{flex:1 1 100%}
+  .tb-right>:first-child{margin-left:auto}
+  .page{padding:var(--sp-4) var(--sp-4) 60px}
+  .hero{align-items:stretch}
+  .hero-name{font-size:23px}
+  .hero-stats{justify-content:flex-start}
+  .hstat{flex:1 1 0}
+  .sc-right{display:grid;grid-template-columns:1fr 1fr}
+  .sc-btn-open{order:-1;grid-column:1/-1;margin-left:0}
+  .sc-btn{white-space:normal}
+  .deleted-window-note{flex-basis:100%}
+  .modal-wrap{padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
+  .modal{padding:24px 20px}
+  .modal-title{font-size:22px}
+  .detail-modal{padding:0;max-height:none}
+  .detail-head{padding:18px 16px 14px}
+  .detail-body{padding:14px 12px 16px}
+  .detail-panel,.detail-danger{padding:14px}
+  .participant .p-name{flex-basis:100%}
+  .participant-role-select,.participant-role-custom{flex:1 1 140px}
+  .merge-tool-row{grid-template-columns:1fr}
+  .merge-tool-row .merge-sep{text-align:center}
+  .detail-split{flex-direction:column;align-items:stretch}
+  .detail-split>.btn-full{width:100%}
+  .code-share{flex-wrap:wrap}
+  .code-url{flex-basis:100%}
+  .code-share .btn-sm{flex:1}
+  .roster-actions .admin-mini-btn{flex:1 1 auto}
+  .accounts-form>.admin-mini-in,.accounts-form>.admin-mini-btn{flex:1 1 100%}
+  .overview-row.admin-row,.admin-row-actions{grid-template-columns:1fr}
+  .admin-row-actions .admin-actions-buttons .admin-mini-btn{flex:1}
+  .system-setting-row .admin-mini-btn{flex:1 1 100%}
+  .accounts-head{flex-direction:row;align-items:flex-start}
+}
+/* Narrow sheets stack their actions, the confirm action on top */
+@media(max-width:440px){
+  .modal-actions{flex-direction:column-reverse}
+  .modal-actions>*{width:100%}
+}
+/* Touch: every control reaches 44px, fields stay at 16px so iOS never zooms */
+@media(pointer:coarse){
+  .sc-btn,.admin-mini-btn,.scope-btn,.add-student-btn,.merge-btn,.detail-save-btn,.assignment-state-action,.pb-log-toggle,.theme-swatch{min-height:44px}
+  .p-rename,.p-remove{width:44px;height:44px}
+  .field-in,.admin-mini-in,.merge-select,.add-student-input,.participant-role-select,.participant-role-custom,.assignment-position{font-size:16px;min-height:44px}
+  .vocab-hint{min-width:32px;height:32px}
+  .pb-sec-head{min-height:44px}
+}
 </style>
 </head>
 <body>
@@ -953,7 +1251,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 
   <!-- New session CTA -->
   <div class="new-session-card" id="newSessionCard" onclick="openNewSession()" style="display:none">
-    <div class="ns-icon">+</div>
+    <div class="ns-icon" aria-hidden="true">+</div>
     <div class="ns-body">
       <div class="ns-title">New show</div>
       <div class="ns-desc">Name it, press Create, share the code.</div>
@@ -996,7 +1294,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
     <!-- Phase 3: class login codes — students register profiles with these -->
     <div class="overview-panel">
       <div class="admin-control-form accounts-form">
-        <div class="admin-control-form-title">Class Keys <span class="vocab-hint" data-tip="A class key is the term-long key students use to create their profile and sign in. One per class or role.">ⓘ</span></div>
+        <div class="admin-control-form-title">Class Keys <span class="vocab-hint" tabindex="0" aria-label="A class key is the term-long key students use to create their profile and sign in. One per class or role." data-tip="A class key is the term-long key students use to create their profile and sign in. One per class or role."><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></span></div>
         <input class="admin-mini-in" id="newLoginCodeLabel" placeholder='Label, e.g. "Fall 2026 TV Production"'>
         <select class="admin-mini-in" id="newLoginCodeRole">
           <option value="student">Student key</option>
@@ -1025,12 +1323,14 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 <div class="modal-wrap" id="dashDialog">
   <div class="modal" style="max-width:430px">
     <div class="modal-title" id="dashDialogTitle">Confirm</div>
-    <div class="modal-sub" id="dashDialogBody" style="white-space:pre-line"></div>
+    <div class="modal-sub dash-dialog-body" id="dashDialogBody"></div>
     <div class="field" id="dashDialogField" hidden>
       <input class="field-in" id="dashDialogInput" maxlength="200" onkeydown="if(event.key==='Enter')dashDialogOk()">
     </div>
-    <button class="btn-full btn-primary" id="dashDialogOkBtn" onclick="dashDialogOk()">OK</button>
-    <button class="btn-full btn-secondary" id="dashDialogCancelBtn" onclick="dashDialogCancel()" style="margin-top:4px">Cancel</button>
+    <div class="modal-actions">
+      <button class="btn-full btn-secondary" id="dashDialogCancelBtn" onclick="dashDialogCancel()">Cancel</button>
+      <button class="btn-full btn-primary" id="dashDialogOkBtn" onclick="dashDialogOk()">OK</button>
+    </div>
   </div>
 </div>
 
@@ -1051,8 +1351,10 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
       <strong>No account yet?</strong> Instructor accounts are created by your super admin on the Accounts page.
     </div>
     <div class="modal-err" id="login-err">Wrong username or password.</div>
-    <button class="btn-full btn-primary" onclick="loginAdmin()" id="login-btn">Sign In →</button>
-    <a class="btn-full btn-secondary" href="index.html" style="margin-top:4px;text-align:center;text-decoration:none">← Back to Front Page</a>
+    <div class="modal-actions">
+      <a class="btn-full btn-secondary" href="index.html">← Back to Front Page</a>
+      <button class="btn-full btn-primary" onclick="loginAdmin()" id="login-btn">Sign In →</button>
+    </div>
   </div>
 </div>
 
@@ -1066,15 +1368,15 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
       <input class="field-in" id="new-showname" type="text" placeholder="e.g. Campus News" maxlength="60" onkeydown="if(event.key==='Enter')nsWizardNext()">
     </div>
     <div class="field">
-      <label class="field-lbl" for="new-start">Start time <span style="color:var(--text3)">(optional)</span></label>
+      <label class="field-lbl" for="new-start">Start time <span class="field-opt">(optional)</span></label>
       <input class="field-in" id="new-start" type="time">
     </div>
-    <label class="field ns-check"><input type="checkbox" id="new-entrycode" checked> Students must sign in with a class key <span class="vocab-hint" data-tip="A class key is the term-long key students use to create their profile and sign in. Off means anyone with the show code can join.">ⓘ</span></label>
+    <label class="field ns-check"><input type="checkbox" id="new-entrycode" checked> <span class="ns-check-txt">Students must sign in with a class key</span> <span class="vocab-hint" tabindex="0" aria-label="A class key is the term-long key students use to create their profile and sign in. Off means anyone with the show code can join." data-tip="A class key is the term-long key students use to create their profile and sign in. Off means anyone with the show code can join."><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></span></label>
     <details class="ns-more">
-      <summary>More options</summary>
+      <summary>More options <span class="sf-symbol" data-symbol="chevron.down" aria-hidden="true"></span></summary>
       <div class="field">
-        <label class="field-lbl" for="new-code">Show code <span style="color:var(--text3)">(optional)</span></label>
-        <input class="field-in" id="new-code" type="text" placeholder="Made for you if blank" maxlength="24" style="font-family:var(--mono-num);font-size:18px;letter-spacing:.12em;text-transform:uppercase;text-align:center" oninput="this.value=this.value.toUpperCase()">
+        <label class="field-lbl" for="new-code">Show code <span class="field-opt">(optional)</span></label>
+        <input class="field-in ns-code-in" id="new-code" type="text" placeholder="Made for you if blank" maxlength="24" oninput="this.value=this.value.toUpperCase()">
       </div>
       <div class="field">
         <div class="field-lbl">Paperwork for this class</div>
@@ -1083,18 +1385,20 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
       </div>
     </details>
     <div class="modal-err" id="new-err">Could not connect. Check your internet and try again.</div>
-    <button class="btn-full btn-primary" onclick="nsWizardNext()" id="new-btn">Create show →</button>
-    <button class="btn-full btn-secondary" onclick="nsWizardBack()" id="new-back-btn" style="margin-top:4px">Cancel</button>
+    <div class="modal-actions">
+      <button class="btn-full btn-secondary" onclick="nsWizardBack()" id="new-back-btn">Cancel</button>
+      <button class="btn-full btn-primary" onclick="nsWizardNext()" id="new-btn">Create show →</button>
+    </div>
   </div>
 </div>
 
 <!-- ── MODAL: READ-ONLY RUNDOWN PEEK (Phase 4 item 5) ── -->
 <div class="modal-wrap" id="modal-peek">
   <div class="modal peek-modal">
-    <div class="modal-title">Rundown: <span id="peekTitle" style="font-family:var(--mono);letter-spacing:.08em"></span></div>
+    <div class="modal-title">Rundown: <span class="peek-code" id="peekTitle"></span></div>
     <div class="modal-sub">Read-only live view. The highlighted row is where the show is right now.</div>
     <div class="peek-body" id="peekBody"></div>
-    <button class="btn-full btn-secondary" onclick="closeRundownPeek()" style="margin-top:10px">Close</button>
+    <button class="btn-full btn-secondary" onclick="closeRundownPeek()">Close</button>
   </div>
 </div>
 
@@ -1111,11 +1415,13 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
         <button class="btn-sm btn-ghost" onclick="copyCreatedCode()">Copy</button>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.7;background:var(--s2);border-radius:var(--ui-radius-control);padding:12px;border-left:3px solid var(--accent)">
-      <span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span> The show is saved for good. Anyone with the code can come back to it; when sign-in is required they sign in first.
+    <div class="created-note">
+      <span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>The show is saved for good. Anyone with the code can come back to it. When sign-in is required, they sign in first.</span>
     </div>
-    <button class="btn-full btn-primary" onclick="openCreatedSession()">Open Rundown →</button>
-    <button class="btn-full btn-secondary" onclick="hideModal('modal-created')" style="margin-top:4px">Back to Dashboard</button>
+    <div class="modal-actions">
+      <button class="btn-full btn-secondary" onclick="hideModal('modal-created')">Back to Dashboard</button>
+      <button class="btn-full btn-primary" onclick="openCreatedSession()">Open Rundown →</button>
+    </div>
   </div>
 </div>
 
@@ -1170,7 +1476,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
               <div class="detail-task-title">2 · Who can join, who owns it</div>
               <div class="detail-edit-grid">
                 <div class="field">
-                  <label class="field-lbl">Entry Requirement <span class="vocab-hint" data-tip="A class key is the term-long key students use to create their profile and sign in.">ⓘ</span></label>
+                  <label class="field-lbl">Entry Requirement <span class="vocab-hint" tabindex="0" aria-label="A class key is the term-long key students use to create their profile and sign in." data-tip="A class key is the term-long key students use to create their profile and sign in."><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></span></label>
                   <select class="field-in" id="detail-entrycode-input">
                     <option value="off">Show code only</option>
                     <option value="on">Also require a class key</option>
@@ -1182,16 +1488,16 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
                   <datalist id="ownerAdminOptions"></datalist>
                 </div>
                 <div class="field">
-                  <label class="field-lbl">Groups <span class="vocab-hint" data-tip="Split the class into per-group paperwork workspaces. The rundown and Live stay shared with everyone.">ⓘ</span></label>
+                  <label class="field-lbl">Groups <span class="vocab-hint" tabindex="0" aria-label="Split the class into per-group paperwork workspaces. The rundown and Live stay shared with everyone." data-tip="Split the class into per-group paperwork workspaces. The rundown and Live stay shared with everyone."><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></span></label>
                   <select class="field-in" id="detail-groups-toggle" onchange="document.getElementById('detail-groups-config').hidden = this.value !== 'on'">
                     <option value="off">Whole class: one paperwork workspace</option>
                     <option value="on">Break into groups</option>
                   </select>
                 </div>
                 <div class="field" id="detail-groups-config" hidden>
-                  <label class="field-lbl">Group Names <span style="color:var(--text3)">(one per line)</span></label>
+                  <label class="field-lbl">Group Names <span class="field-opt">(one per line)</span></label>
                   <textarea class="field-in" id="detail-groups-names" rows="4" placeholder="Group 1&#10;Group 2&#10;Group 3"></textarea>
-                  <label class="pw-type-row" style="margin-top:6px"><input type="checkbox" id="detail-groups-lock"> <span>Lock groups: students can no longer switch</span></label>
+                  <label class="pw-type-row pw-lock-row"><input type="checkbox" id="detail-groups-lock"> <span>Lock groups: students can no longer switch</span></label>
                 </div>
               </div>
             </div>
@@ -1215,13 +1521,13 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
               </div>
             </div>
             <div class="participant-list" id="detail-participants">
-              <div style="font-size:12px;color:var(--text3);padding:8px 0">No participants yet.</div>
+              <div class="detail-empty">No participants yet.</div>
             </div>
             <div id="detail-add-student"></div>
             <div id="detail-merge-tool"></div>
             <div class="detail-section-title">Production Roles</div>
             <div class="assignment-list" id="detail-assignments">
-              <div style="font-size:12px;color:var(--text3);padding:8px 0">No learners available yet.</div>
+              <div class="detail-empty">No learners available yet.</div>
             </div>
           </section>
         </div>
@@ -1233,20 +1539,26 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
             </div>
           </div>
           <div class="plandabear-activity" id="detail-plandabear-activity">
-            <div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear work recorded yet.</div>
+            <div class="detail-empty">No Planda Bear work recorded yet.</div>
+          </div>
+        </section>
+        <section class="detail-panel">
+          <div class="detail-split">
+            <div class="detail-split-copy">
+              <div class="detail-panel-title">Next Episode</div>
+              <div class="detail-panel-sub">Copy this show into a fresh episode: the rundown skeleton, cue columns, paperwork structure, crew grid, and settings carry over. Notes, roles, script, and dates start clean.</div>
+            </div>
+            <button class="btn-full btn-accent" onclick="startNextEpisode()" id="detail-next-episode-btn">Start Next Episode →</button>
           </div>
         </section>
         <div class="detail-danger">
-          <div>
-            <div class="detail-panel-title">Next Episode</div>
+          <div class="detail-split">
+            <div class="detail-split-copy">
+              <div class="detail-panel-title">Danger Zone</div>
+              <div class="detail-danger-copy">Delete removes this session for the class. Use only when the session is no longer needed.</div>
+            </div>
+            <button class="btn-full btn-danger" onclick="confirmDelete()" id="detail-delete-btn">Delete Session</button>
           </div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px">Fork this show into a fresh episode: the rundown skeleton, cue columns, paperwork structure, crew grid, and settings carry. Notes, roles, script, and dates start clean.</div>
-          <button class="btn-full btn-accent" onclick="startNextEpisode()" id="detail-next-episode-btn">Start Next Episode →</button>
-          <div class="detail-panel-head" style="margin-top:18px">
-            <div class="detail-panel-title">Danger Zone</div>
-            <div class="detail-danger-copy">Delete removes this session for the class. Use only when the session is no longer needed.</div>
-          </div>
-          <button class="btn-full btn-danger" onclick="confirmDelete()" id="detail-delete-btn">Delete Session</button>
         </div>
       </div>
     </div>
@@ -1259,9 +1571,11 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
     <div class="modal-title" id="delete-modal-title">Delete Session?</div>
     <div class="modal-sub" id="delete-modal-sub">The session moves to Recently Deleted and stops accepting joins. You can restore it for 30 days.</div>
     <div class="confirm-name" id="delete-code-display">—</div>
-    <div style="font-size:12px;color:var(--red);text-align:center" id="delete-modal-warning">New joins are blocked immediately.</div>
-    <button class="btn-full btn-danger" id="confirmDeleteBtn" onclick="deleteSession()">Yes, Delete Session</button>
-    <button class="btn-full btn-secondary" onclick="hideModal('modal-delete')" style="margin-top:4px">Cancel</button>
+    <div class="delete-warn" id="delete-modal-warning">New joins are blocked immediately.</div>
+    <div class="modal-actions">
+      <button class="btn-full btn-secondary" onclick="hideModal('modal-delete')">Cancel</button>
+      <button class="btn-full btn-danger" id="confirmDeleteBtn" onclick="deleteSession()">Yes, Delete Session</button>
+    </div>
   </div>
 </div>
 
@@ -2087,7 +2401,7 @@ function renderSessions() {
           <div class="sc-m" data-tip="Date created"><span class="sf-symbol" data-symbol="content.calendar" aria-hidden="true"></span> ${created}</div>
           ${s.createdBy ? `<div class="sc-m">Owner ${escapeHtml(s.createdBy)}</div>` : ''}
           ${s.clonedFrom ? `<div class="sc-m" data-tip="Started as the next episode of ${escapeHtml(s.clonedFrom)}">↳ From ${escapeHtml(s.clonedFrom)}</div>` : ''}
-          <div class="sc-m" data-tip="Learners in this session"><span class="sf-symbol" data-symbol="people.group" aria-hidden="true"></span> ${learnerCount} learner${learnerCount===1?'':'s'}</div>
+          <div class="sc-m" data-tip="Learners in this session"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span> ${learnerCount} learner${learnerCount===1?'':'s'}</div>
           <div class="sc-m" data-tip="Learners with an assigned role"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span> ${assignedCount} assigned</div>
           ${pbContributors ? `<div class="sc-m"><svg class="brand-ico"><use href="#ic-plandabear"/></svg> ${pbContributors} on Planda Bear</div>` : ''}
         </div>
@@ -3041,7 +3355,7 @@ function renderDashboardParticipants(sessionDoc, isSuper) {
   const parts = Array.isArray(sessionDoc?.participants) ? sessionDoc.participants : [];
   if (!parts.length) {
     detailAssignmentState.links = new Map();
-    pList.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No participants have joined yet.</div>';
+    pList.innerHTML = '<div class="detail-empty">No participants have joined yet.</div>';
     return;
   }
   const links = buildDashboardParticipantLinks(sessionDoc);
@@ -3234,7 +3548,7 @@ function renderPlandaBearPaperwork(s) {
   const pre = (s.prePro && typeof s.prePro === 'object') ? s.prePro : {};
   const hasAny = log.length || comments.length || Object.keys(pre).some(k => k !== 'updatedAt');
   if (!hasAny) {
-    wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">No Planda Bear paperwork has been started for this session yet.</div>';
+    wrap.innerHTML = '<div class="detail-empty">No Planda Bear paperwork has been started for this session yet.</div>';
     return;
   }
   // newest activity entry per section → "who did what"
@@ -4029,6 +4343,41 @@ function copyCreatedCode() {
 // ── MODAL / TOAST ─────────────────────────────────────────────
 function showModal(id) { document.getElementById(id).classList.add('on'); }
 function hideModal(id) { document.getElementById(id).classList.remove('on'); }
+
+// The big show code on "Show created" always fits its box. A made-for-you code
+// is 8 characters (2609KMRT), but a typed code can run to 24, which used to
+// spill out on the right. This shrinks the type until the code fits on one
+// line; if a code is still too long at the smallest size, it wraps inside the
+// box instead of spilling. It reruns when the code changes or the box resizes.
+function fitCreatedCode() {
+  const el = document.getElementById('created-code');
+  if (!el || !el.clientWidth) return;
+  el.style.removeProperty('--code-fit');
+  el.classList.add('is-fit');
+  const max = parseFloat(getComputedStyle(el).fontSize) || 44;
+  const MIN = 15;
+  let size = max;
+  for (let i = 0; i < 3 && el.scrollWidth > el.clientWidth + 1; i++) {
+    size = Math.max(MIN, Math.floor(size * (el.clientWidth / el.scrollWidth) * 0.98));
+    el.style.setProperty('--code-fit', size + 'px');
+    if (size === MIN) break;
+  }
+  if (el.scrollWidth > el.clientWidth + 1) el.classList.remove('is-fit');   // wrap as a last resort
+}
+(function watchCreatedCode() {
+  const el = document.getElementById('created-code');
+  if (!el) return;
+  new MutationObserver(fitCreatedCode).observe(el, { childList:true, characterData:true, subtree:true });
+  if (window.ResizeObserver) {
+    let lastW = -1;
+    new ResizeObserver(entries => {
+      const w = Math.round(entries[0].contentRect.width);
+      if (w === lastW) return;
+      lastW = w;
+      fitCreatedCode();
+    }).observe(el.parentElement);
+  }
+})();
 
 // ── v2.1 Phase 4: promise-based dialogs (no more prompt()/confirm()) ──
 let _dashDialogResolve = null;
