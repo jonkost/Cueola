@@ -21,6 +21,16 @@ struct Cue: Identifiable, Codable, Equatable {
     var name: String
     var path: String
     var kind: CueKind
+    /// The name the rundown and KeyWi Bird use for this cue. It never changes,
+    /// so a rundown row linked to it stays linked when the list is reordered.
+    /// New ids sort in the order cues were added, like the web app's.
+    var wireID: String?
+
+    static func newWireID(offsetMs: Int = 0) -> String {
+        let ms = Int(Date().timeIntervalSince1970 * 1000) + offsetMs
+        let tail = String((0..<3).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
+        return String(format: "og_%013d", ms) + tail
+    }
 
     var url: URL { URL(fileURLWithPath: path) }
     var fileIsThere: Bool { FileManager.default.fileExists(atPath: path) }
@@ -39,7 +49,7 @@ struct Cue: Identifiable, Codable, Equatable {
         } else {
             return nil
         }
-        return Cue(name: url.deletingPathExtension().lastPathComponent, path: url.path, kind: kind)
+        return Cue(name: url.deletingPathExtension().lastPathComponent, path: url.path, kind: kind, wireID: newWireID())
     }
 }
 
@@ -47,6 +57,7 @@ struct Cue: Identifiable, Codable, Equatable {
 struct ShowFile: Codable {
     var cues: [Cue] = []
     var outputScreen: String?
+    var masterGain: Double?
 }
 
 /// Saves the show to this Mac only, in
@@ -66,6 +77,8 @@ enum ShowStore {
     }
 
     static func save(_ show: ShowFile) {
+        // Test mode reads your show but never changes it.
+        if ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil { return }
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)

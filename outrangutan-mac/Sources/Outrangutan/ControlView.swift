@@ -1,3 +1,4 @@
+import OutrangutanCore
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -6,7 +7,9 @@ import UniformTypeIdentifiers
 /// media and output controls along the bottom.
 struct ControlView: View {
     @ObservedObject var engine: Engine
+    @ObservedObject var link: ShowLink
     @State private var dropTargeted = false
+    @State private var showConnect = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +20,8 @@ struct ControlView: View {
             footer
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $showConnect) { ConnectView(link: link) }
+        .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .dropDestination(for: URL.self) { urls, _ in
             engine.add(urls: urls)
             return true
@@ -34,37 +39,42 @@ struct ControlView: View {
     // MARK: Clock and transport
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(engine.status.rawValue)
-                    .font(.system(size: 13, weight: .bold))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(statusColor.opacity(0.25), in: Capsule())
-                    .foregroundStyle(statusColor)
-                Text(onAirText)
-                    .font(.system(size: 15, weight: .medium))
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
-                Text(standbyText)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                    .foregroundStyle(.tertiary)
+        VStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 20) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(engine.status.rawValue)
+                        .font(.system(size: 13, weight: .bold))
+                        .fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(statusColor.opacity(0.25), in: Capsule())
+                        .foregroundStyle(statusColor)
+                    Text(onAirText)
+                        .font(.system(size: 15, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                    Text(standbyText)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(clockText)
+                    .font(.system(size: 54, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(engine.remaining == nil ? Color.secondary : clockColor)
+                    .fixedSize()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(clockText)
-                .font(.system(size: 54, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(engine.remaining == nil ? Color.secondary : clockColor)
-                .fixedSize()
-
+            // The transport gets its own row, so every button stays a big
+            // target however narrow the window is.
             HStack(spacing: 10) {
-                transportButton("GO", key: "Space", color: .green, action: engine.go)
+                transportButton("GO", key: "Space", color: .green) { engine.go() }
                 transportButton(engine.status == .paused ? "Resume" : "Pause", key: "P", color: .yellow, action: engine.togglePause)
                 transportButton("Stop", key: "S", color: .orange, action: engine.stop)
+                transportButton("Fade", key: "F", color: .purple, action: engine.fadeStopAll)
                 transportButton("All Stop", key: "Esc", color: .red, action: engine.allStop)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(16)
     }
@@ -75,9 +85,10 @@ struct ControlView: View {
                 Text(title).font(.system(size: 15, weight: .bold))
                 Text(key).font(.system(size: 10, weight: .medium)).opacity(0.7)
             }
-            .frame(width: 74, height: 50)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .background(color.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
             .foregroundStyle(color)
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .focusable(false)
@@ -162,13 +173,15 @@ struct ControlView: View {
 
             Spacer()
 
+            LinkBadge(link: link) { showConnect = true }
+
             Picker("Output screen", selection: $engine.outputScreen) {
                 Text("Second screen (automatic)").tag(String?.none)
                 ForEach(NSScreen.screens.map(\.localizedName), id: \.self) { name in
                     Text(name).tag(String?.some(name))
                 }
             }
-            .frame(maxWidth: 320)
+            .frame(maxWidth: 260)
 
             Button {
                 engine.toggleOutput()

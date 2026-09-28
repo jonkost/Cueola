@@ -29,6 +29,7 @@ the build script points at it for you.
 | Space | GO: fire the standby cue, stand by the next one |
 | P | Pause, press again to carry on |
 | S | Stop what fired last (picture or sound) |
+| F | Fade: picture and sound fade out over one second, then stop |
 | Esc | All Stop: everything off, output to black |
 
 Sounds play on their own lane, so a sound effect never knocks the picture
@@ -37,6 +38,33 @@ end cuts to black.
 
 The show saves itself after every change, to
 `~/Library/Application Support/Outrangutan/show.json`.
+
+## Connect it to a show
+
+Click the light in the bottom bar, or press Command-K.
+
+1. Pick **Student** or **Instructor**.
+2. Type the username, and the PIN or password. These are the same ones you
+   use on the Cueola front door.
+3. Type the show code and click **Connect**.
+
+The light turns green: "Connected to" and the code. From then on:
+
+- The director's TAKE on the rundown fires cues here.
+- The KeyWi Bird playback keys (GO, Pause, Stop, Fade, PANIC, cue keys and
+  the volume dial) work this Mac. No change is needed in KeyWi Bird.
+- The rundown cell, the deck's playback strip and the Go Live checks show
+  what is on air here.
+
+The Mac checks the show about four times a second. Everything plays on this
+Mac first, so if the internet drops, the show keeps going and only the link
+waits. The sign-in lasts until the app quits; the PIN or password is never
+saved.
+
+Run only one Outrangutan on a show at a time: this app or the web one.
+
+Not in the Mac app yet: sound effect pads. A pad from the rundown or the deck
+is answered with "not in the Mac app yet".
 
 ## Check it
 
@@ -52,7 +80,15 @@ to `test-log.txt`:
 OUTRANGUTAN_SNAPSHOT=/path/to/folder build/Outrangutan.app/Contents/MacOS/Outrangutan
 ```
 
-It plays whatever is in the saved show, so load a few cues first.
+It plays whatever is in the saved show, so load a few cues first. It never
+saves changes to your show.
+
+Pick another test with `OUTRANGUTAN_SCENARIO`:
+
+- `transport` (the default): GO, Pause, All Stop pressed on this Mac.
+- `link`: a pretend show record plays the rundown's part and sends the same
+  commands the rundown and KeyWi Bird send. No internet is used.
+- `connect`: saves a picture of the Connect window.
 
 ## What is inside
 
@@ -63,5 +99,17 @@ It plays whatever is in the saved show, so load a few cues first.
 | `ControlView.swift` | The control window |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, and saving the show |
-| `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |
+| `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |
+| `CloudClient.swift` | Signing in and reading and writing the show record |
+| `ConnectView.swift` | The Connect window and the light in the bottom bar |
 | `TestSnapshot.swift` | Test mode |
+
+The rules for talking to the rundown sit in their own piece, `OutrangutanCore`,
+so `swift test` can check each one:
+
+| File | What it holds |
+|---|---|
+| `CommandInbox.swift` | Which commands run, which are old, retries, a stop beating older fires |
+| `LivePacket.swift` | What is on air, in the rundown's words |
+| `FirestoreValue.swift` | The cloud's written form of values |
+| `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |

@@ -1,5 +1,5 @@
 import XCTest
-@testable import Outrangutan
+import OutrangutanCore
 
 /// The Mac clock must read exactly like the web Outrangutan clock.
 /// The expected strings come from the web clock (fmtSmpte in outrangutan.js).

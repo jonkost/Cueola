@@ -49,7 +49,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | GO, Pause, Stop, All Stop | Built (step 1) | macOS is told a show is running, so it never slows the app down. |
 | Autosave | Built (step 1) | Saved on this Mac after every change. |
 | Output window | Built (step 1), one screen | Fills its own screen edge to edge, above the menu bar. |
-| Fade and Stop All, fades with curves, crossfades | Step 2 | Smooth to the frame, set in frames or seconds. |
+| Fade and Stop All | Built (step 5, for the deck's Fade key) | One second, picture and sound together. |
+| Fades with curves, crossfades | Step 2 | Smooth to the frame, set in frames or seconds. |
 | Pre-wait, continue modes, end actions, still timers | Step 2 | Same rules as the web version (see its notes on stills). |
 | Trim in and out, loop, volume, fit, scale, position | Step 2 | Exact to the frame. |
 | Solid color mattes, program preview | Step 2 | |
@@ -57,10 +58,10 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Sound chain: gain, 3-band EQ, compressor, meters, master volume | Step 3 | Real audio meters, and each output picks any channel pair on the audio interface. |
 | Record a sound effect | Step 3 | |
 | Multiple outputs, identify, pick a screen and audio device per output | Step 4 | Replaces the kiosk Chrome windows. No helper program to keep running. |
-| Join a show by code, sign in, publish cues and what is on air | Step 5 | The rule above: same fields, same shape. |
-| Command queue, "got it" replies, panic lane, master volume from the deck | Step 5 | |
-| Fix requests from the rundown, preflight report | Step 5 | |
-| KeyWi Bird playback keys and strip | Step 5 (through the cloud) and step 6 (direct, same Mac) | |
+| Join a show by code, sign in, publish cues and what is on air | Built (step 5) | The rule above: same fields, same shape. |
+| Command queue, "got it" replies, panic lane, master volume from the deck | Built (step 5) | Every rule has its own test. |
+| Fix requests from the rundown, preflight report | Built (step 5) | Needs no clicks on the Mac: sound and outputs are always ready. |
+| KeyWi Bird playback keys and strip | Built (step 5, through the cloud). Step 6: direct, same Mac | |
 | Show log, show file save and open, print cue sheet, crash recovery | Step 6 | |
 | Keyboard shortcuts you can change, lock, wall clock | Step 6 | |
 | MIDI | Step 6 | Uses the Mac's own MIDI system. |
@@ -81,9 +82,12 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 
 ## Still to decide
 
-- **Signing in (step 5):** writing to the shared record needs a Cueola
-  sign-in (a student PIN or an admin). The Mac app will use the same
-  sign-in the web app uses.
+- **Signing in (built in step 5):** the Mac app signs in the same two ways
+  as the web front door. It talks to the cloud with plain web requests, so
+  it needs no Firebase setup and no Apple developer signing. It checks the
+  show about four times a second instead of getting a push, which adds
+  about a tenth of a second to a fire from another Mac. Step 6's direct
+  lane covers a deck on the same Mac.
 - **Handing the app to other Macs:** the free Apple sign-in covers Jon's
   own machines. Giving it to anyone else without a warning needs the paid
   Apple Developer account.

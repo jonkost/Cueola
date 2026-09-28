@@ -50,6 +50,8 @@ final class OutputWindowController {
     func showVideo(_ player: AVPlayer) { pictureView.showVideo(player) }
     func showStill(_ image: NSImage) { pictureView.showStill(image) }
     func black() { pictureView.black() }
+    /// 1 is full picture, 0 is black. Used by Fade.
+    func setLevel(_ level: Float) { pictureView.setLevel(level) }
 }
 
 /// Black background with one layer for video and one for stills.
@@ -93,6 +95,14 @@ final class OutputView: NSView {
         stillLayer.contents = image
         stillLayer.isHidden = false
         videoLayer.isHidden = true
+    }
+
+    func setLevel(_ level: Float) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        videoLayer.opacity = level
+        stillLayer.opacity = level
+        CATransaction.commit()
     }
 
     func black() {

@@ -7,18 +7,25 @@ struct OutrangutanApp: App {
 
     var body: some Scene {
         WindowGroup("Outrangutan") {
-            ControlView(engine: appDelegate.engine)
+            ControlView(engine: appDelegate.engine, link: appDelegate.link)
                 .frame(minWidth: 720, minHeight: 480)
                 .preferredColorScheme(.dark)
         }
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Connect to a Show…") {
+                    NotificationCenter.default.post(name: .showConnect, object: nil)
+                }
+                .keyboardShortcut("k")
+            }
         }
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let engine = Engine()
+    lazy var link = ShowLink(engine: engine, store: TestSnapshot.store)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -26,7 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         // Test mode stays in the background so it never catches keys someone
         // is typing in another app.
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine) }
+        _ = link
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link) }
         NSApp.activate(ignoringOtherApps: true)
 
         // Tell macOS a show is running: never nap this app, never slow its
@@ -49,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "s": self.engine.stop(); return nil
             case "p": self.engine.togglePause(); return nil
+            case "f": self.engine.fadeStopAll(); return nil
             default: return event
             }
         }

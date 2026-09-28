@@ -7,10 +7,10 @@ import Foundation
 /// frame numbers 00 and 01 at the top of every minute, except every tenth
 /// minute, so the clock stays in step with the wall clock. The ';' is the
 /// drop-frame mark. This matches the web Outrangutan clock exactly.
-enum Timecode {
-    static let fps = 29.97
+public enum Timecode {
+    public static let fps = 29.97
 
-    static func dropFrame(_ seconds: Double) -> String {
+    public static func dropFrame(_ seconds: Double) -> String {
         var frames = Int((max(0, seconds) * fps + 1e-6).rounded(.down))
         let tenMinutes = frames / 17982
         var rest = frames % 17982
@@ -24,7 +24,7 @@ enum Timecode {
     }
 
     /// Short running time for the cue list, like 1:05 or 1:02:03.
-    static func short(_ seconds: Double) -> String {
+    public static func short(_ seconds: Double) -> String {
         let total = Int(max(0, seconds).rounded(.down))
         let h = total / 3600, m = (total % 3600) / 60, s = total % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)

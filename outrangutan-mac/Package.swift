@@ -6,13 +6,20 @@ let package = Package(
     name: "Outrangutan",
     platforms: [.macOS(.v13)],
     targets: [
+        // The rules for talking to the rundown and KeyWi Bird. No screen and no
+        // network in here, so the tests can check every rule on their own.
+        .target(
+            name: "OutrangutanCore",
+            path: "Sources/OutrangutanCore"
+        ),
         .executableTarget(
             name: "Outrangutan",
+            dependencies: ["OutrangutanCore"],
             path: "Sources/Outrangutan"
         ),
         .testTarget(
             name: "OutrangutanTests",
-            dependencies: ["Outrangutan"],
+            dependencies: ["OutrangutanCore"],
             path: "Tests/OutrangutanTests"
         )
     ]
