@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.0.1: Joining a show works again (built 2026-09-28)
+
+### Fixed
+
+- Joining a show while signed in failed with "Could not load session. Check
+  the connection and try again." The rundown and Planda Bear were both shut
+  out. The 3.0.0 rollback dropped the small helper that matches two people's
+  names, and the signed-in join is the first thing that calls it. It is back.
+- A join that fails inside the app now says so ("Could not open this session")
+  with the reason, instead of blaming the connection. The full error is in
+  the browser console.
+- A row whose cue map was saved as empty no longer stops the whole show from
+  opening.
+
+### Checks
+
+- New browser smoke `scripts/tests/join-smoke.browser.mjs`: signs in as a
+  profile, joins a show by code and opens Planda Bear, with the cloud stubbed.
+  The demo never took this path, which is how 3.0.0 shipped broken.
+
 ## v3.0.0: One TAKE, one live record, fixes and a lighter app (built 2026-09-25)
 
 Cueola 3.0 keeps the rundown you know (rows with the department cells

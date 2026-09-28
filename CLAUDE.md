@@ -33,6 +33,7 @@ node scripts/check-contracts.mjs        # every button and id resolves
 for f in scripts/tests/*.test.mjs; do node "$f"; done
 node scripts/tests/live-smoke.browser.mjs
 node scripts/tests/cue-editor-smoke.browser.mjs
+node scripts/tests/join-smoke.browser.mjs   # a signed-in join by code, the path the demo never takes
 node scripts/bump-cache.mjs              # after any change to a script file
 ```
 

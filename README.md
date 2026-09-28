@@ -22,6 +22,7 @@ node scripts/check-contracts.mjs
 for f in scripts/tests/*.test.mjs; do node "$f"; done
 node scripts/tests/live-smoke.browser.mjs
 node scripts/tests/cue-editor-smoke.browser.mjs
+node scripts/tests/join-smoke.browser.mjs
 ```
 
 ## Reading more

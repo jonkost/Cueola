@@ -1,7 +1,7 @@
 'use strict';
 
 // Production-readiness build (CUEOLA MASTER PLAN phases 0–8) — see CHANGELOG.md.
-const CUEOLA_VERSION = '3.0.0';
+const CUEOLA_VERSION = '3.0.1';
 window.CUEOLA_VERSION = CUEOLA_VERSION;
 // Build identity on the wire: the ?v= hash of this script tag ('' if absent).
 // Rides presence, the talent heartbeat and the Air's live packet so preflight
@@ -5184,7 +5184,7 @@ function migrateOldCue(type, d) {
 }
 
 function migrateBeat(b) {
-  if (b.cues === undefined) {
+  if (b.cues === undefined || b.cues === null) {
     // Very old format: { type, cueData }
     const cues = {};
     if (b.type && b.cueData && Object.keys(b.cueData).length) {
@@ -5494,11 +5494,21 @@ async function joinSession() {
       // the operator joined and Planda Bear never opened (launcher fix, 8/24).
       if (window._openPreProAfterJoin) { window._openPreProAfterJoin = false; setTimeout(openPaperworkHub, 700); }
   } catch (joinErr) {
-    errEl.textContent = `${firebaseConnectionLabel(joinErr, 'Could not load session')}. Check the connection and try again.`;
+    errEl.textContent = joinFailureMessage(joinErr);
     errEl.classList.add('on');
   } finally {
     if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
   }
+}
+
+// A join that fails inside the app (not at the cloud) used to hide behind the
+// "check the connection" line, so nobody could tell a code fault from Wi-Fi.
+// The console always gets the real error; the screen says which kind it was.
+function joinFailureMessage(err) {
+  console.error('Join failed', err);
+  if (err?.code) return `${firebaseConnectionLabel(err, 'Could not load session')}. Check the connection and try again.`;
+  const detail = String(err?.message || err || '').slice(0, 120);
+  return `Could not open this session${detail ? ` (${detail})` : ''}. Reload the page and try again.`;
 }
 
 async function joinPreProSession() {
@@ -5572,7 +5582,7 @@ async function joinPreProSession() {
       }
       openLocal(snap);
   } catch (joinErr) {
-    errEl.textContent = `${firebaseConnectionLabel(joinErr, 'Could not load session')}. Check the connection and try again.`;
+    errEl.textContent = joinFailureMessage(joinErr);
     errEl.classList.add('on');
   } finally {
     if (btn) { btn.disabled=false; btn.textContent=preProJoinTarget === 'notes' ? 'Open Production Notes' : 'Open Planda Bear'; }
@@ -13122,6 +13132,16 @@ function lsPrev() {
   // Backward: the bare verb, so the talent glides back to the row (on the
   // talent an advance never travels backward, so Back must not be one).
   return takeCue(ni, 'previous-cue', { fire:false, logVerb:'Back' });
+}
+
+// Two names are the same person when they match ignoring case and spacing.
+// Presence, the roster, Planda Bear notes and the signed-in join all use it.
+function participantNameKey(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function sameParticipantName(a, b) {
+  return participantNameKey(a) === participantNameKey(b);
 }
 
 // 3.0: everyone's ON AIR cue is the director's (the doc's live record). A
