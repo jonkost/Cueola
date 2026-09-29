@@ -5,6 +5,7 @@ import SwiftUI
 /// outputs, and where sound goes.
 struct SettingsView: View {
     @ObservedObject var engine: Engine
+    let midi: MidiInput
 
     var body: some View {
         TabView {
@@ -16,6 +17,8 @@ struct SettingsView: View {
                 .tabItem { Label("Sound", systemImage: "speaker.wave.2") }
             KeySettings(board: engine.pads)
                 .tabItem { Label("Keys", systemImage: "keyboard") }
+            MidiSettings(midi: midi, engine: engine)
+                .tabItem { Label("MIDI", systemImage: "pianokeys") }
         }
         .frame(width: 560, height: 470)
     }

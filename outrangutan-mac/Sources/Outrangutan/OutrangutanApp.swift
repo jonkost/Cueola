@@ -33,7 +33,7 @@ struct OutrangutanApp: App {
         .defaultSize(width: 720, height: 480)
 
         Settings {
-            SettingsView(engine: appDelegate.engine)
+            SettingsView(engine: appDelegate.engine, midi: appDelegate.midi)
         }
     }
 }
@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let engine = Engine()
     lazy var link = ShowLink(engine: engine, store: TestSnapshot.store)
     lazy var files = ShowFiles(engine: engine)
+    lazy var midi = MidiInput(engine: engine)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -153,7 +154,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         _ = link
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files) }
+        _ = midi
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi) }
         NSApp.activate(ignoringOtherApps: true)
 
         // Tell macOS a show is running: never nap this app, never slow its

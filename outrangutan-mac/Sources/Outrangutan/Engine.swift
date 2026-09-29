@@ -272,6 +272,15 @@ final class Engine: ObservableObject {
         return result
     }
 
+    /// Runs something on behalf of someone other than this Mac's keyboard
+    /// and mouse, so the show log says who.
+    func run(from who: String, _ body: () -> Void) {
+        let was = source
+        source = who
+        body()
+        source = was
+    }
+
     /// Runs a show key.
     func perform(_ action: KeyMap.Action) {
         switch action {

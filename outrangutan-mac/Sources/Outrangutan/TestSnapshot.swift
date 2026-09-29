@@ -1,3 +1,4 @@
+import CoreMIDI
 import OutrangutanCore
 import AppKit
 import AVFoundation
@@ -15,6 +16,7 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "midi": learning a button and a fader, then using them.
 /// - "keys": changed show keys, a held key, the lock, and the time of day.
 /// - "log": a short show from this Mac and from the rundown, then pictures
 ///   of the Show Log, and the cue sheet and log printed to PDF.
@@ -27,7 +29,7 @@ enum TestSnapshot {
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
-    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles) {
+    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles, midi: MidiInput) {
         guard let folder = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] else { return }
         let dir = URL(fileURLWithPath: folder, isDirectory: true)
         var log: [String] = []
@@ -58,6 +60,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "midi": steps = midiSteps(engine: engine, midi: midi, dir: dir, note: note, state: state)
         case "keys": steps = keySteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
         case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
         case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
@@ -155,6 +158,83 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
+        ]
+    }
+
+    private static var virtualBox = MIDIEndpointRef()
+
+    /// MIDI: learn a button and a fader, pick what they do, use them. The
+    /// messages are pretend ones; no box is needed.
+    @MainActor private static func midiSteps(engine: Engine, midi: MidiInput, dir: URL, note: @escaping (String) -> Void,
+                                             state: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func gos() -> Int { engine.log.entries.filter { $0.kind == .cue }.count }
+        return [
+            (1.0, {
+                let a = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                let b = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                engine.replaceShow(cues: [a, b], pads: [], banks: [], multiTrigger: nil)
+                note("a MIDI boxes the Mac sees: \(midi.sources.isEmpty ? "none" : midi.sources.joined(separator: ", "))")
+                midi.learning = true
+                midi.pretend(0x90, 60, 100)
+                note("b learned: \(midi.mappings.map { "\(MidiRouter.label($0.key)) -> \($0.binding.action.label)" })  GOs=\(gos())")
+                midi.pretend(0x80, 60, 0)
+                midi.pretend(0x90, 60, 100)
+                note("c pressed again: GOs=\(gos())")
+                state("c")
+                midi.learning = true
+                midi.pretend(0xB0, 7, 90)
+                midi.pretend(0xB0, 7, 0)
+                midi.pretend(0xB0, 7, 64)
+                note("d fader learned as \(midi.router.map["cc:0:7"]?.action.label ?? "-"); set to 64 of 127: gain \(String(format: "%.2f", engine.masterGain))")
+                midi.learning = true
+                midi.pretend(0x90, 62, 100)
+                midi.set("n:0:62", action: .cue)
+                midi.set("n:0:62", ref: engine.cues[0].wireID ?? "")
+                midi.pretend(0x90, 62, 100)
+                note("e D4 fires cue 1: GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-")")
+                engine.allStop()
+                engine.setGain(1)
+                // Now through the Mac's own MIDI system: a pretend box that
+                // shows up like a real one.
+                var client = MIDIClientRef(), source = MIDIEndpointRef()
+                MIDIClientCreateWithBlock("Outrangutan test" as CFString, &client, nil)
+                MIDISourceCreateWithProtocol(client, "Test Box" as CFString, ._1_0, &source)
+                virtualBox = source
+                midi.connectAll()
+            }),
+            (0.5, {
+                note("f MIDI boxes now: \(midi.sources.joined(separator: ", "))")
+                func send(_ status: UInt32, _ d1: UInt32, _ d2: UInt32) {
+                    var list = MIDIEventList()
+                    let packet = MIDIEventListInit(&list, ._1_0)
+                    var word: UInt32 = 0x2 << 28 | status << 16 | d1 << 8 | d2
+                    MIDIEventListAdd(&list, MemoryLayout<MIDIEventList>.size, packet, 0, 1, &word)
+                    MIDIReceivedEventList(virtualBox, &list)
+                }
+                send(0x90, 60, 100)   // C4 press, mapped to GO
+            }),
+            (0.5, {
+                note("g C4 from the box fired GO: GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-")")
+                engine.log.entries.filter { $0.from.hasPrefix("MIDI") }.forEach { note("   log: \($0.line)") }
+                engine.allStop()
+                let root = MidiSettings(midi: midi, engine: engine)
+                    .frame(width: 560, height: 470)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 470), styleMask: [.titled], backing: .buffered, defer: false)
+                win.appearance = NSAppearance(named: .darkAqua)
+                win.contentView = NSHostingView(rootView: root)
+                win.orderBack(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("midi-settings.png"))
+                    }
+                    win.orderOut(nil)
+                }
+            }),
+            (1.0, {}),
         ]
     }
 

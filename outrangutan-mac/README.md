@@ -56,6 +56,11 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 - **Lock Editing** (the lock in the toolbar, or Shift-Command-L) keeps a
   stray click from changing the show: nothing can be added, removed, moved
   or edited. GO, the show keys, pads, the rundown and the deck still work.
+- **MIDI:** plug in any MIDI box (pad controller, fader box, keyboard). In
+  **Settings, MIDI**, click **Learn a Control**, touch a button or fader,
+  then pick what it does: GO, Pause, Stop, Fade, All Stop, a cue, a pad, or
+  (for a fader) the master level. The touch that teaches a control never
+  fires anything.
 - The time of day sits under the big clock. Click it for a 12-hour or
   24-hour clock.
 
@@ -175,6 +180,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
+- `midi`: learning a button and a fader and using them, then a message from
+  a pretend MIDI box through the Mac's own MIDI system.
 - `keys`: moved show keys, a held key, two keys swapping, the lock, and the
   time of day. Its key presses are pretend ones, sent to the app only.
 - `log`: a short show from this Mac and from the rundown, then a picture of
@@ -200,6 +207,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `Midi.swift` | MIDI boxes and Settings, MIDI |
 | `Keys.swift` | The show keys and Settings, Keys |
 | `ShowLog.swift` | The show log and its window |
 | `Printer.swift` | Printing the cue sheet and the log |
@@ -219,4 +227,5 @@ so `swift test` can check each one:
 | `FirestoreValue.swift` | The cloud's written form of values |
 | `FadeCurve.swift` | The three fade shapes, the same as the web app |
 | `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |
+| `MidiRouter.swift` | What a MIDI message does, the same rules as the web app |
 | `ShowArchive.swift` | The show file's zip: writing and reading it in slices, and its checksum |
