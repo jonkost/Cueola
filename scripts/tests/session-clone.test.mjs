@@ -26,7 +26,7 @@ const source = {
       weather: { line: 'Sunny' }, people: [{ name: 'Alex', position: 'Camera', call: '17:00' }] }],
     callSheetTombstones: { cs_dead: 123 },
     productionSchedule: { call: '17:00' }, safety: { hospital: 'Mercy' },
-    videoPatchRows: [{ label: 'CAM 1' }], 'audio-commsPatchRows': [{ position: 'SC' }],
+    videoPatchRows: [{ label: 'CAM 1' }], audioPatchRows: [{ label: 'MIC 1' }], commsPatchRows: [{ position: 'SC' }],
     stagePlots: [{ id: 'sp1', label: 'Studio A', floor: 'fs4e-123', stage: { w_ft: 40, h_ft: 30 },
       items: [{ id: 'i1', type: 'mic', x_ft: 4, y_ft: 4 }],
       flows: [{ id: 'f1', from: 'i1', to: 'i1x', layer: 'audio', conn: 'xlr' }] }],
@@ -70,6 +70,33 @@ test('call sheets scrub dates/weather/ids but keep times and crew', () => {
   assert.equal(seed.prePro._fieldUpdatedAt.callSheets, 999, 'fresh per-field stamps');
   assert.equal(seed.call, '17:00', 'legacy top-level re-spread');
   assert.equal(seed.date, '', 'legacy date blanked');
+});
+
+test('all three patch sheets carry (video, audio, comms)', () => {
+  const seed = Clone.buildEpisodeSeed(source, { code: '2608AB', now: 999 });
+  assert.deepEqual(seed.prePro.videoPatchRows, [{ label: 'CAM 1' }]);
+  assert.deepEqual(seed.prePro.audioPatchRows, [{ label: 'MIC 1' }], 'the audio patch sheet must carry');
+  assert.deepEqual(seed.prePro.commsPatchRows, [{ position: 'SC' }]);
+});
+
+test('map-shaped call sheets (3.x saves) scrub each sheet and stay a map', () => {
+  const mapSource = { showName: 'Ep 1', prePro: { callSheets: {
+    cs_b: { id: 'cs_b', ord: 2, label: 'Day 2', date: '2026-07-18', call: '18:00', weather: { line: 'Rain' }, people: {} },
+    cs_a: { id: 'cs_a', ord: 1, label: 'Day 1', date: '2026-07-17', call: '17:00', weather: { line: 'Sunny' },
+      people: { r1: { id: 'r1', ord: 1, name: 'Alex' } } },
+  } } };
+  const seed = Clone.buildEpisodeSeed(mapSource, { code: '2608AB', now: 999 });
+  const sheets = seed.prePro.callSheets;
+  assert.ok(sheets && !Array.isArray(sheets), 'stays a map');
+  assert.deepEqual(Object.keys(sheets).sort(), ['call_sheet_1', 'call_sheet_2']);
+  assert.equal(sheets.call_sheet_1.label, 'Day 1', 'sheet order follows ord');
+  assert.equal(sheets.call_sheet_1.id, 'call_sheet_1');
+  assert.equal(sheets.call_sheet_1.date, '');
+  assert.equal(sheets.call_sheet_1.weather, null);
+  assert.equal(sheets.call_sheet_2.weather, null);
+  assert.deepEqual(sheets.call_sheet_1.people, { r1: { id: 'r1', ord: 1, name: 'Alex' } });
+  assert.equal(seed.call, '17:00', 'legacy re-spread uses the first sheet by ord');
+  assert.equal(seed.date, '');
 });
 
 test('stage plots, their tombstones, and the bank curation carry verbatim', () => {

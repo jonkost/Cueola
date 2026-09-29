@@ -3921,7 +3921,7 @@ async function adminAssignProfileToSession(usernameRaw) {
     adminNoteMembershipChange({ ...data, username }, [...sessions, session.code]);
     toast(`${data.fullName || '@' + username} assigned to ${session.code}.`);
   } catch (err) {
-    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not assign. Check the connection and try again.');
+    toast(err?.code === 'permission-denied' ? 'Saving was refused. Sign in as an instructor and try again.' : 'Could not assign. Check the connection and try again.');
   }
 }
 
@@ -3943,7 +3943,7 @@ async function adminUnassignProfileFromSession(username) {
     adminNoteMembershipChange({ ...data, username:u }, sessions);
     toast(`${session.code} removed from @${u}.`);
   } catch (err) {
-    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not unassign. Check the connection and try again.');
+    toast(err?.code === 'permission-denied' ? 'Saving was refused. Sign in as an instructor and try again.' : 'Could not unassign. Check the connection and try again.');
   }
 }
 
@@ -4077,7 +4077,7 @@ function assignmentProfileOptions(selectedId='', legacyName='') {
     return `<option value="${esc(id)}" ${selected ? 'selected' : ''}>${esc(profile.fullName || profile.username || id)}${esc(suffix)}</option>`;
   }).join('');
   const unresolved = legacyName && !selectedId
-    ? `<option value="" selected>Unlinked legacy name: ${esc(legacyName)}</option>`
+    ? `<option value="" selected>Old name, pick a profile: ${esc(legacyName)}</option>`
     : '<option value="">Select saved profile</option>';
   return unresolved + options;
 }
@@ -4408,7 +4408,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
     });
     const profile = assignmentProfileById(row.profileId);
     const profileMeta = row.profileId
-      ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
+      ? (profile?.username ? '@' + profile.username : 'Profile chosen')
       : 'Choose a saved profile.';
     const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved yet';
     const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
@@ -4431,7 +4431,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
         <div class="aa-paperwork-list">
           ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
         </div>
-        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
+        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Show is on their profile' : 'Show is not on their profile yet'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
       </details>
     </div>`;
   };
@@ -4500,7 +4500,7 @@ function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
       assignmentId:rowEl.dataset.assignmentId || '', profileId,
       username:profile?.username || '',
       // No profile picked yet: keep the row's legacy name so migration rows
-      // survive a DOM round-trip with their 'Unlinked legacy name' label.
+      // survive a DOM round-trip with their 'Old name, pick a profile' label.
       person:profile?.fullName || (!profileId && rowEl.dataset.person) || '',
       positionId, position, paperworkIds, paperwork,
       status:rowEl.dataset.status || 'assigned',
@@ -4663,7 +4663,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
   if (assignmentHydratePromise && !force) return assignmentHydratePromise;
   _assignmentFailureOrigin = 'load';
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert || !assignmentModel()) {
-    setAssignmentSaveState('failed', 'Canonical assignments need a shared session, Firebase, and the assignment model.');
+    setAssignmentSaveState('failed', 'Positions need a show code and a working connection.');
     return null;
   }
   setAssignmentSaveState('loading', 'Loading saved profiles and assignments…');
@@ -4711,22 +4711,22 @@ async function hydrateRoleAssignments({ force=false }={}) {
         rows = records.map(record => normalizeRoleAssignment(record));
         confirmedRoleAssignmentRows = rows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
-          ? `${records.length} cached assignment record${records.length === 1 ? '' : 's'} shown. Reconnect before saving; cached data is not a Firestore confirmation.`
-          : `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+          ? `Showing the copy on this computer (${records.length} position${records.length === 1 ? '' : 's'}). Reconnect before you save.`
+          : `${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
       } else if (legacyRows.length) {
         rows = legacyRows.map(row => normalizeRoleAssignment(row));
         confirmedRoleAssignmentRows = [];
         const unresolved = rows.filter(row => !row.profileId || !row.positionId).length;
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
-          ? 'Cached legacy assignments are shown, but cloud availability was not confirmed. Reconnect before migration.'
+          ? 'Showing older positions saved on this computer. Reconnect before you save.'
           : unresolved
-            ? `${unresolved} legacy row${unresolved === 1 ? '' : 's'} cannot be linked uniquely to a saved profile and position.`
-            : `${rows.length} legacy assignment${rows.length === 1 ? '' : 's'} linked. Review and save once to update them.`);
+            ? `${unresolved} older row${unresolved === 1 ? ' needs' : 's need'} a profile and a position picked again.`
+            : `${rows.length} older assignment${rows.length === 1 ? '' : 's'} found. Check them, then press Save assignments.`);
       } else {
         rows = defaultRoleAssignments();
         confirmedRoleAssignmentRows = [];
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
-          ? 'The cached assignment set is empty, but Firestore could not confirm that it is current.'
+          ? 'No positions on this computer yet. Reconnect to check the saved list.'
           : 'No assignments saved yet.');
       }
       if (!draftMaterialized) {
@@ -4788,7 +4788,7 @@ function projectAssignmentFieldsToBaseMirror(sessionData={}) {
 
 function markRoleAssignmentsUnsaved() {
   if (assignmentSaveState === 'saving') return;
-  setAssignmentSaveState('unsaved', 'Draft changed. Save Assignments to confirm it in Firestore.');
+  setAssignmentSaveState('unsaved', 'Press Save assignments when you are done.');
 }
 
 function localizeConfirmedAssignmentProjection(rows, updatedAt) {
@@ -4805,11 +4805,11 @@ async function saveRoleAssignmentsFromAdmin() {
   _assignmentFailureOrigin = 'save';   // any 'failed' below holds the draft
   const model = assignmentModel();
   if (!model || !window._runTransaction || !window._getDocs || !session.code || session.isDemo || session.isExpert) {
-    setAssignmentSaveState('failed', 'Canonical cloud saving is unavailable in this workspace.');
+    setAssignmentSaveState('failed', 'Positions cannot save right now. Reload the page and try again.');
     return false;
   }
   if (assignmentFromCache) {
-    setAssignmentSaveState('failed', 'Assignments were loaded from offline cache. Reconnect and reload the server copy before saving; the draft remains unchanged.');
+    setAssignmentSaveState('failed', 'These positions came from this computer, not the cloud. Reconnect and press Retry connection before you save. Your changes are kept.');
     return false;
   }
   const draft = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
@@ -4833,7 +4833,7 @@ async function saveRoleAssignmentsFromAdmin() {
     pairs.add(key);
   }
 
-  setAssignmentSaveState('saving', 'Saving the canonical records and compatibility projection atomically…');
+  setAssignmentSaveState('saving', 'Sending your changes…');
   const actor = assignmentActor();
   const now = Date.now();
   try {
@@ -4885,7 +4885,7 @@ async function saveRoleAssignmentsFromAdmin() {
       if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
       const actualRevision = Math.max(0, Number(sessionSnap.data().assignmentRevision) || 0);
       if (model.hasRevisionConflict(expectedRevision, actualRevision)) {
-        const conflict = new Error(`Assignments changed on another device (server revision ${actualRevision}, editor revision ${expectedRevision}).`);
+        const conflict = new Error('Someone saved positions on another computer.');
         conflict.code = 'assignment-conflict';
         throw conflict;
       }
@@ -4914,7 +4914,7 @@ async function saveRoleAssignmentsFromAdmin() {
     localizeConfirmedAssignmentProjection(compatibility, now);
     rerenderRoleAssignments(confirmedRoleAssignmentRows);
     renderPlandaBearAssignmentsCard();
-    setAssignmentSaveState('saved', `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+    setAssignmentSaveState('saved', `${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
     toast('Assignments saved.');
     return true;
   } catch (error) {
@@ -4922,11 +4922,11 @@ async function saveRoleAssignmentsFromAdmin() {
     // card), stash the draft we just tried so "the draft remains" stays true.
     if (!document.getElementById('adminRoleAssignments')) assignmentDraftStash = draft;
     if (error?.code === 'assignment-conflict') {
-      setAssignmentSaveState('conflict', `${error.message} Your draft is still here; load the server copy before deciding what to reapply.`);
+      setAssignmentSaveState('conflict', `${error.message} Your changes are still here. Tap Load the saved version, then redo them.`);
     } else if (error?.code === 'permission-denied') {
-      setAssignmentSaveState('failed', 'Firestore denied the assignment write. Nothing was labeled Saved; the draft remains for retry or revert.');
+      setAssignmentSaveState('failed', 'Saving was refused. Your changes are still here. Check that you are signed in as an instructor, then try again.');
     } else {
-      setAssignmentSaveState('failed', `${firebaseConnectionLabel(error, 'Assignment save failed')}. Nothing was labeled Saved; the draft remains for retry or revert.`);
+      setAssignmentSaveState('failed', `${firebaseConnectionLabel(error, 'Could not save')}. Nothing was saved. Your changes are still here, so you can try again.`);
     }
     console.warn('Assignment save failed.', error);
     return false;
@@ -4938,10 +4938,10 @@ function revertRoleAssignments() {
   _assignmentFailureOrigin = 'load';   // the only 'failed' below is the cache copy
   rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
   setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
-    ? 'Reverted to the cached assignment copy. Reconnect before treating it as confirmed.'
+    ? 'Back to the copy on this computer. Reconnect before you save.'
     : confirmedRoleAssignmentRows.length
-      ? `Reverted to ${confirmedRoleAssignmentRows.length} server-confirmed assignment record${confirmedRoleAssignmentRows.length === 1 ? '' : 's'}.`
-      : 'Reverted to the confirmed empty assignment set.');
+      ? `Back to the ${confirmedRoleAssignmentRows.length} saved position${confirmedRoleAssignmentRows.length === 1 ? '' : 's'}.`
+      : 'Back to the saved version: no positions yet.');
 }
 
 async function retryRoleAssignmentLoad() {
@@ -4957,7 +4957,7 @@ function onAssignmentRevisionSnapshot(data={}) {
   const incoming = Math.max(0, Number(data.assignmentRevision) || 0);
   if (incoming === assignmentRevision || assignmentSaveState === 'loading' || assignmentSaveState === 'saving') return;
   if (['unsaved','failed','conflict'].includes(assignmentSaveState)) {
-    setAssignmentSaveState('conflict', `Another device saved assignment revision ${incoming} while this draft was open. Load the server copy before saving.`);
+    setAssignmentSaveState('conflict', 'Someone saved positions on another computer while you were editing. Your changes are still here. Tap Load the saved version before you save.');
     return;
   }
   hydrateRoleAssignments({ force:true });
@@ -20239,7 +20239,7 @@ const PAPERWORK_ITEMS = [
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
-  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A birdseye plot of your space: audio, video, and lighting layers with signal flow between the gear.' },
+  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A bird’s-eye plan of your space: audio, video, and lighting layers with signal flow between the gear.' },
   { order:8, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
 ];
 // ── v2.1 D6: per-session paperwork config (sparse override map on the parent
@@ -20418,14 +20418,19 @@ function preProKey() {
 // listener's prePro branch, but from the active group subdoc.
 let _pbGroupUnsub = null;
 let _pbGroupSubKey = '';
+// The group's own "Who worked on what" log, so a group's activity write trims
+// against the group's log and never copies the whole-class log into it.
+let _pbGroupActivityLog = null;
 function pbEnsureGroupSubscription() {
   const wantKey = groupActive() ? `${session.code}/${activeGroupId}` : '';
   if (wantKey === _pbGroupSubKey) return;
   if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
   _pbGroupSubKey = wantKey;
+  _pbGroupActivityLog = null;
   if (!wantKey || !window._onSnapshot || !window._firebaseReady) return;
   _pbGroupUnsub = window._onSnapshot(preProDocRef(), snap => {
     const d = snap.exists() ? (snap.data() || {}) : {};
+    _pbGroupActivityLog = Array.isArray(d.preProActivity) ? d.preProActivity : [];
     if (d.prePro && typeof d.prePro === 'object') {
       try { mergePreProFromCloud(d.prePro); } catch {}
     }
@@ -20449,6 +20454,7 @@ function selectGroup(gid, opts = {}) {
   hydratePreProFromFirestore().then(() => {
     try { renderPlandaBearAssignmentsCard(); } catch {}
     try { renderPackageSheetPicker(); } catch {}
+    try { renderPlandaBearHubActivity(); } catch {}
   });
   if (!opts.silent) toast(gid ? `Working in ${activeGroupName()}.` : 'Working on the whole-class paperwork.');
   return true;
@@ -20474,7 +20480,7 @@ function renderPbGroupBar() {
   } else {
     bar.innerHTML = `
       <span class="pb-group-bar-label">Your group</span>
-      <b>${esc(activeGroupName() || '—')}</b>
+      <b>${esc(activeGroupName() || 'None')}</b>
       ${groupsLocked() ? '<span class="pb-group-bar-note">Groups are locked</span>'
         : '<button type="button" class="btn-sm btn-ghost" onclick="openGroupPicker()">Switch group</button>'}`;
   }
@@ -20782,6 +20788,19 @@ function persistPreProDataLegacy(previous, patch, section, now) {
 }
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
+// "Who worked on what" credits real edits only. Typing, clicks and plot drags
+// set this; leaving the page (Back, Next, close, Preview) logs once only if
+// it is set. Opening a page clears it, so just looking logs nothing.
+let _pbEditedThisVisit = false;
+function pbSaveOnLeave(save) {
+  const edited = _pbEditedThisVisit;
+  const wasSuppressed = _pbSuppressActivity;
+  _pbSuppressActivity = wasSuppressed || !edited;
+  let result;
+  try { result = save(); } finally { _pbSuppressActivity = wasSuppressed; }
+  if (edited) _pbEditedThisVisit = false;
+  return result;
+}
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps=null) {
   // 'LOCAL' is the no-session sentinel (openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
@@ -20825,7 +20844,8 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) })
+    // A group trims against its own log, never the whole-class one.
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
       .catch(err => (grouped && err?.code === 'not-found')
         ? window._setDoc(ref, { preProActivity: [entry] }, { merge: true })
         : Promise.reject(err))
@@ -20886,7 +20906,14 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+    const grouped = groupActive();
+    // A group trims against its own log, and a group's first save may come
+    // before its doc exists (same fallback as the older writer).
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
+      .catch(err => (grouped && err?.code === 'not-found')
+        ? window._setDoc(ref, { preProActivity: [entry] }, { merge: true })
+        : Promise.reject(err))
+      .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -20946,6 +20973,56 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
     }
   }
   return toStore;
+}
+
+// From Sept 25 to this fix, Planda Bear saved one field at a time and
+// stamped each field under _stamps, never touching the per-section save time
+// the whole-list merge compares. Count those stamps, so a device that missed
+// a later edit takes the newer cloud copy instead of pushing its older one
+// back. A list the cloud holds as a map keeps its old time: that map may be
+// a list 3.x cut down, and the instructor decides which copy is right.
+function pbSaveTimesWithFieldStamps(server) {
+  const times = { ...(server._fieldUpdatedAt || {}) };
+  const stamps = server._stamps && typeof server._stamps === 'object' ? server._stamps : {};
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const newest = node => (typeof node === 'number' ? node : isMap(node) ? Math.max(0, ...Object.values(node).map(newest)) : 0);
+  for (const [key, node] of Object.entries(stamps)) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist
+      : ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows'].includes(key) ? server[key] : undefined;
+    if (isMap(list)) continue;
+    const at = newest(node);
+    if (at > (Number(times[key]) || 0)) times[key] = at;
+  }
+  return times;
+}
+
+// A window still on the 3.x build (opened before this fix and never
+// reloaded) saves one field at a time. Saved into a list the cloud holds
+// whole, that one field REPLACES the whole list. The sign: this device saw
+// the list whole, and now it comes back as a map with the same whole-list
+// save time, so nothing but a one-field save has touched it since. Keep this
+// device's copy and save it whole again. Lists this device never saw whole
+// (damaged before the fix) are left for the instructor to check.
+function pbListsCutByOldWindows(server, digest) {
+  const local = loadPreProData();
+  const localTimes = local._fieldUpdatedAt || {};
+  const serverTimes = server._fieldUpdatedAt || {};
+  const seenKey = `${preProKey()}__wholeLists`;
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}') || {}; } catch {}
+  const seenBefore = JSON.stringify(seen);
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const putBack = {};
+  for (const key of ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows', 'productionSchedule']) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist : server[key];
+    const savedAt = Number(serverTimes[key]) || 0;
+    if (Array.isArray(list)) { seen[key] = savedAt; continue; }
+    if (!isMap(list) || !savedAt || seen[key] !== savedAt || Number(localTimes[key]) !== savedAt || local[key] === undefined) continue;
+    digest[key] = local[key];
+    putBack[key] = local[key];
+  }
+  if (JSON.stringify(seen) !== seenBefore) { try { localStorage.setItem(seenKey, JSON.stringify(seen)); } catch {} }
+  return putBack;
 }
 
 function mergePreProFromCloudLegacy(server, recoverNewerLocal=false, sessionCreatedAt=0) {
@@ -21246,56 +21323,6 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-call', timeTo24(sheet.call));
   pbSetFieldIfIdle('pp-location', sheet.location || '');
   pbSetFieldIfIdle('pp-address', sheet.address || '');
-// From Sept 25 to this fix, Planda Bear saved one field at a time and
-// stamped each field under _stamps, never touching the per-section save time
-// the whole-list merge compares. Count those stamps, so a device that missed
-// a later edit takes the newer cloud copy instead of pushing its older one
-// back. A list the cloud holds as a map keeps its old time: that map may be
-// a list 3.x cut down, and the instructor decides which copy is right.
-function pbSaveTimesWithFieldStamps(server) {
-  const times = { ...(server._fieldUpdatedAt || {}) };
-  const stamps = server._stamps && typeof server._stamps === 'object' ? server._stamps : {};
-  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-  const newest = node => (typeof node === 'number' ? node : isMap(node) ? Math.max(0, ...Object.values(node).map(newest)) : 0);
-  for (const [key, node] of Object.entries(stamps)) {
-    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist
-      : ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows'].includes(key) ? server[key] : undefined;
-    if (isMap(list)) continue;
-    const at = newest(node);
-    if (at > (Number(times[key]) || 0)) times[key] = at;
-  }
-  return times;
-}
-
-// A window still on the 3.x build (opened before this fix and never
-// reloaded) saves one field at a time. Saved into a list the cloud holds
-// whole, that one field REPLACES the whole list. The sign: this device saw
-// the list whole, and now it comes back as a map with the same whole-list
-// save time, so nothing but a one-field save has touched it since. Keep this
-// device's copy and save it whole again. Lists this device never saw whole
-// (damaged before the fix) are left for the instructor to check.
-function pbListsCutByOldWindows(server, digest) {
-  const local = loadPreProData();
-  const localTimes = local._fieldUpdatedAt || {};
-  const serverTimes = server._fieldUpdatedAt || {};
-  const seenKey = `${preProKey()}__wholeLists`;
-  let seen = {};
-  try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}') || {}; } catch {}
-  const seenBefore = JSON.stringify(seen);
-  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-  const putBack = {};
-  for (const key of ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows', 'productionSchedule']) {
-    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist : server[key];
-    const savedAt = Number(serverTimes[key]) || 0;
-    if (Array.isArray(list)) { seen[key] = savedAt; continue; }
-    if (!isMap(list) || !savedAt || seen[key] !== savedAt || Number(localTimes[key]) !== savedAt || local[key] === undefined) continue;
-    digest[key] = local[key];
-    putBack[key] = local[key];
-  }
-  if (JSON.stringify(seen) !== seenBefore) { try { localStorage.setItem(seenKey, JSON.stringify(seen)); } catch {} }
-  return putBack;
-}
-
   const remoteLate = splitLateContact(sheet.late, sheet.lateName, sheet.latePhone);
   pbSetFieldIfIdle('pp-late-name', remoteLate.name);
   pbSetFieldIfIdle('pp-late-phone', remoteLate.phone);
@@ -21507,7 +21534,11 @@ function pbInitCollabListeners() {
       if (!pbIsAutosaveField(e.target)) return;
       const guardKey = pbAutosaveGuardKey(e.target);
       if (guardKey) pbNoteLocalEdit(guardKey);
+      const wasEdited = _pbEditedThisVisit;
       pbQueuePaperworkAutosave();
+      // Picking which sheet or plot to show, or turning grid snap on or off,
+      // is not an edit for the log.
+      if (['pp-call-sheet-select', 'pp-plot-select', 'plot-snap-toggle'].includes(e.target.id)) _pbEditedThisVisit = wasEdited;
     };
     modal.addEventListener('input', queuePaperworkAutosave);
     // Safari commits time pickers and <select>s with only a 'change' event.
@@ -21521,6 +21552,7 @@ function pbInitCollabListeners() {
 // hold, instead of depending on a later keystroke or hub navigation.
 function pbQueuePaperworkAutosave() {
   paperworkDirty = true;
+  _pbEditedThisVisit = true;
   clearTimeout(_pbFieldSaveTimer);
   _pbFieldSaveTimer = setTimeout(() => {
     _pbFieldSaveTimer = null;
@@ -21627,7 +21659,7 @@ function renderPaperworkNav(id, slotId='') {
 
 function openPaperworkRelative(delta) {
   const current = currentPaperworkItemId();
-  savePaperworkItem(current, false);
+  pbSaveOnLeave(() => savePaperworkItem(current, false));
   // D6: skip disabled editors. Production Notes is its own piece (the wide
   // bar on the hub), never a stop in the Previous/Next flow.
   const items = enabledPaperworkItems().filter(item => item.id !== 'production-notes');
@@ -21865,7 +21897,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
     (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
   });
   wrap.innerHTML = `<div class="pb-assign-card">
-    <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
     ${[...byPerson.values()].map(g => `<div class="pb-assign-row pb-assign-stack">
       <div class="pb-assign-head"><span class="pb-assign-name">${esc(g.person)}</span>
       ${g.positions.length ? `<span class="pb-assign-pos">${esc(g.positions.join(' / '))}</span>` : ''}</div>
@@ -21883,7 +21915,7 @@ function closePlandaBear() {
       && document.querySelector('#pbAssignmentsCard [data-role-assignment-row]')) {
     assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
   }
-  saveOpenPaperworkSection(false);
+  pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   hidePaperworkEditors();
   hideModal('paperworkHubModal');
   pbSetPresencePage(null);
@@ -22065,7 +22097,7 @@ async function deletePlandaBearComment(id) {
   await loadPlandaBearComments();
   const comment = plandaBearComments.find(c => c.id === id);
   await writePlandaBearComments(plandaBearComments.filter(c => c.id !== id), comment ? `Removed Comment: ${comment.section}` : 'Removed Comment');
-  toast('Instructor comment removed.');
+  toast('Instructor comment deleted.');
   rerenderVisiblePlandaBearComments();
   renderPlandaBearHubActivity();
 }
@@ -22084,7 +22116,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
       ? `<select class="field-in" id="${slotId}-section" aria-label="Comment section">${plandaBearCommentSectionOptions('Overall')}</select>`
       : `<input type="hidden" id="${slotId}-section" value="${esc(addSection)}">`;
     const studentCopy = comments.length
-      ? 'Mark each note reviewed once you’ve made the change or talked it through.'
+      ? 'Mark each comment reviewed once you’ve made the change or talked it through.'
       : 'Feedback from your instructor lands here.';
     const instructorCopy = 'Leave feedback without touching the paperwork itself.';
     if (!canComment && !comments.length) { slot.innerHTML = ''; return; }
@@ -22094,7 +22126,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
           <div class="pb-comments-title">Instructor Comments</div>
           <div class="pb-comments-sub">${canComment ? instructorCopy : studentCopy}</div>
         </div>
-        <div class="pb-comments-count">${comments.length} note${comments.length===1?'':'s'}</div>
+        <div class="pb-comments-count">${comments.length} comment${comments.length===1?'':'s'}</div>
       </div>
       <div class="pb-comment-list">
         ${comments.length ? comments.map(comment => {
@@ -22112,14 +22144,14 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
               ${!canComment ? (reviewed
                 ? '<span class="pb-comment-reviewed">Reviewed by you</span>'
                 : `<button type="button" class="pb-comment-review" onclick="markPlandaBearCommentReviewed('${esc(comment.id)}')">Mark reviewed</button>`) : ''}
-              ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Remove</button>` : ''}
+              ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Delete</button>` : ''}
             </div>
           </div>`;
-        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet. Notes you leave show up here for the whole group.</div>' : '')}
+        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet. Comments you leave show up here for the whole group.</div>' : '')}
       </div>
       ${canComment ? `<div class="pb-comment-form">
         ${sectionSelect}
-        <textarea class="field-in" id="${slotId}-input" rows="2" placeholder="Add a comment for students to review..."></textarea>
+        <textarea class="field-in" id="${slotId}-input" rows="2" placeholder="Add a comment for the crew to review…"></textarea>
         <button type="button" class="pb-comment-add" onclick="addPlandaBearComment('${esc(addSection)}','${esc(slotId)}')">Add Comment</button>
       </div>` : ''}
     </div>`;
@@ -22145,7 +22177,7 @@ function annotatePlandaBearCommentCards() {
     }
     const count = plandaBearComments.filter(comment => comment.section === section).length;
     badge.classList.toggle('on', count > 0);
-    badge.textContent = count ? `${count} instructor note${count===1?'':'s'}` : '';
+    badge.textContent = count ? `${count} instructor comment${count===1?'':'s'}` : '';
   });
 }
 
@@ -22633,7 +22665,7 @@ function pbNoteActorRole() {
 }
 
 function pbCanManageNote(note) {
-  return pbIsInstructor() || (note?.clientId && note.clientId === CLIENT_ID);
+  return pbIsInstructor() || pbIsMine(note);
 }
 
 /* ── Time + identity helpers for the board ── */
@@ -22864,8 +22896,9 @@ function pbSaveUserPortal() {
   // Reflect the new avatar immediately on the board + the header chip.
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes();
   pbRenderPortalChip();
-  // Refresh the presence entry so everyone's bubbles show the new look now.
-  try { joinPresence(); } catch {}
+  // Refresh the presence entry so everyone's bubbles show the new look now,
+  // but only while still in the show: after leaving, this re-added a ghost.
+  if (presenceInterval) { try { joinPresence(); } catch {} }
   // A signed-in profile carries its look to every device.
   window.CueolaIdentity?.onDeviceAvatarSaved?.(_pbPortalDraft || { type: 'initials' });
 }
@@ -23007,13 +23040,13 @@ async function pbExportDraftPDF() {
     toast('Building note PDF...');
     const stamp = new Date(snapshot.exportedAt).toISOString().slice(0, 10);
     const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-draft-${stamp}.pdf`, options);
-    toast(`Unpublished note PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Note draft PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical unpublished-note print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render the unpublished note: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -23034,7 +23067,9 @@ function pbNoteInputKeydown(e) {
 // Notes copy, and a successful join lands directly on the board, never the hub.
 function openProductionNotesShortcut(e) {
   e?.stopPropagation?.();
-  if (session.code || session.isDemo || session.isExpert) { openProductionNotes(); return; }
+  // After leaving a show, session.code still names it. Only a show whose
+  // live feed is still attached opens straight to its board.
+  if (session.isDemo || session.isExpert || (session.code && firestoreUnsub)) { openProductionNotes(); return; }
   openPreProJoinModal('notes');
 }
 
@@ -23164,7 +23199,7 @@ async function pbCompressNoteImage(file) {
 async function pbPrepareNoteAttachment(file) {
   const isImage = /^image\//i.test(file.type || '');
   if (!isImage && file.size > PB_FILE_MAX_BYTES) {
-    toast(`"${file.name}" is over the 4 MB document limit.`);
+    toast(`"${file.name}" is over the 4 MB file limit.`);
     return null;
   }
   const fileId = `pbf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
@@ -23796,7 +23831,17 @@ function pbReplyKeydown(e, rootId) {
   else if (e.key === 'Escape') { e.preventDefault(); pbCancelReply(); }
 }
 
+let _pbReplyPosting = false;   // a reply is on its way; a second Enter or tap waits
 async function pbPostReply(rootId) {
+  if (_pbReplyPosting) { toast('Still sending your last reply. Check the connection, then try again.'); return; }
+  _pbReplyPosting = true;
+  try { await pbPostReplyNow(rootId); }
+  catch (err) {
+    console.warn('[plandabear] reply failed', err);
+    toast('Could not post the reply. Check your connection and try again.');
+  } finally { _pbReplyPosting = false; }
+}
+async function pbPostReplyNow(rootId) {
   const input = document.getElementById('pbReplyInput');
   const text = input?.value.trim() || '';
   const atts = pbReplyPendingAttachments.slice();
@@ -23856,7 +23901,7 @@ async function pbTogglePin(id) {
 function pbStartEditNote(id) {
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
-  if (!(note.clientId && note.clientId === CLIENT_ID)) { toast('You can only edit your own notes.'); return; }
+  if (!pbIsMine(note)) { toast('You can only edit your own notes.'); return; }
   pbEditingNoteId = id;
   renderPlandaBearNotes();
   const ta = document.getElementById('pbEditInput');
@@ -23898,6 +23943,7 @@ async function publishPlandaBearNote() {
   const hasChecklist = pbComposerChecklist.some(it => (it.text || '').trim());
   if (!text && !atts.length && !hasChecklist) { input?.focus(); toast('Type a note, add a checklist, or attach a file first.'); return; }
   const sendBtn = document.getElementById('pbNoteSendBtn');
+  if (sendBtn?.disabled) return;   // already posting (Cmd/Ctrl+Enter skips the disabled button)
   if (sendBtn) sendBtn.disabled = true;
   try {
     if (atts.length) toast(`Uploading ${atts.length === 1 ? 'attachment' : 'attachments'}…`);
@@ -23913,7 +23959,8 @@ async function publishPlandaBearNote() {
       clientId: CLIENT_ID,
       avatar: pbMyAvatar(),
       mentions: pbExtractMentions(text),
-      checklist: pbComposerChecklist.slice(),
+      // A To-Do's Assign pick fills any checklist item left on Anyone.
+      checklist: pbComposerChecklist.map(it => ({ ...it, assignee: it.assignee || (pbComposerTag === 'todo' ? pbComposerAssignee : '') })),
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
     });
     await pbApplyNoteMutation([...plandaBearNotes, note], { set: note }, pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
@@ -23957,20 +24004,20 @@ async function deletePlandaBearNote(id) {
   await loadPlandaBearNotes();
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
-  if (!pbCanManageNote(note)) { toast('You can only remove your own notes.'); return; }
+  if (!pbCanManageNote(note)) { toast('You can only delete your own notes.'); return; }
   // Deleting a root note takes its replies with it; deleting a reply is just the reply.
   const thread = pbBuildThreads().find(t => t.root.id === id);
   const ids = new Set([id, ...(thread ? thread.replies.map(r => r.id) : [])]);
   const extra = ids.size - 1;
   const msg = extra
-    ? `Delete this note and its ${extra} repl${extra === 1 ? 'y' : 'ies'} for everyone on the session?`
-    : 'Delete this note for everyone on the session?';
-  if (!dangerConfirm(msg, 'Any attached note files tied to the deleted note are removed too. This syncs to collaborators.', { requireText:'DELETE' })) return;
+    ? `Delete this note and its ${extra} repl${extra === 1 ? 'y' : 'ies'} for everyone in the show?`
+    : 'Delete this note for everyone in the show?';
+  if (!dangerConfirm(msg, 'Files attached to it are deleted too, for everyone.', { requireText:'DELETE' })) return;
   plandaBearNotes.filter(n => ids.has(n.id)).forEach(pbDeleteNoteFiles);
   if (pbReplyTargetId && ids.has(pbReplyTargetId)) pbReplyTargetId = null;
   if (pbEditingNoteId && ids.has(pbEditingNoteId)) pbEditingNoteId = null;
   await pbApplyNoteMutation(plandaBearNotes.filter(n => !ids.has(n.id)), { remove: [...ids] }, 'Production Note Removed');
-  toast('Note removed.');
+  toast('Note deleted.');
   renderPlandaBearNotes();
 }
 
@@ -23984,7 +24031,7 @@ function pbAttachmentHTML(att) {
     return `<div class="pb-msg-audio" data-pb-audio="${att.fileId}">
       <div class="pb-audio-head"><span class="pb-file-ico">${sfIcon('department.audio')}</span><span class="pb-file-name">${esc(att.name)}</span>
         <button type="button" class="pb-audio-og" onclick="pbSendAudioToOutrangutan('${att.fileId}',${argName})" data-tip="Download & send to the Outrangutan SFX board">${sfIcon('action.forward')} SFX</button>
-        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download">${sfIcon('action.download')}</button></div>
+        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download" aria-label="Download">${sfIcon('action.download')}</button></div>
       <div class="pb-audio-slot"><div class="pb-audio-loading">Loading audio…</div></div>
     </div>`;
   }
@@ -24270,7 +24317,7 @@ function pbPushNoteToSchedule(noteId) {
 }
 
 function pbOpenOwes() {
-  if (!pbIsInstructor()) { toast('Only instructors can open the assignments view.'); return; }
+  if (!pbIsInstructor()) { toast('Only instructors can see Open items.'); return; }
   showModal('pbOwesModal');
   pbRenderOwes();                                   // instant, from local state
   loadPlandaBearNotes().then(pbRenderOwes);         // then refreshed from the cloud
@@ -24334,7 +24381,7 @@ function pbUnseenByHTML(note) {
 }
 
 function pbNoteFootHTML(note, replyCount) {
-  const mine = note.clientId && note.clientId === CLIENT_ID;
+  const mine = pbIsMine(note);
   return `${pbUnseenByHTML(note)}<footer class="pb-note-foot">
     ${pbLikeButtonHTML(note)}
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
@@ -24348,7 +24395,7 @@ function pbNoteFootHTML(note, replyCount) {
 }
 
 function pbReplyHTML(reply) {
-  const mine = reply.clientId && reply.clientId === CLIENT_ID;
+  const mine = pbIsMine(reply);
   const avatar = `<span class="pb-reply-avatar" style="background:${pbAvatarBg(reply)}">${pbAvatarInner(reply)}</span>`;
   if (reply.id === pbEditingNoteId) {
     return `<div class="pb-reply" data-note-id="${reply.id}">${avatar}${pbEditBoxHTML(reply)}</div>`;
@@ -24461,7 +24508,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   pbRenderNoteFilters(threads);
 
   if (!total) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board: post a note, a photo, or a file. Everyone in this session sees it live.</span></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board: post a note, a photo, or a file. Everyone in this show sees it live.</span></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -24557,7 +24604,8 @@ function pbLastReadKey() { return `cueola_pb_lastread_${session.code || session.
 function pbGetLastRead() { try { return Number(localStorage.getItem(pbLastReadKey())) || 0; } catch { return 0; } }
 function pbSetLastRead(ts) { try { localStorage.setItem(pbLastReadKey(), String(ts)); } catch {} }
 
-function pbIsMine(n) { return Boolean(n && n.clientId && n.clientId === CLIENT_ID); }
+// Same browser AND same name: on a shared lab computer, another student's notes are not mine.
+function pbIsMine(n) { return Boolean(n && n.clientId && n.clientId === CLIENT_ID && sameParticipantName(n.by, preProActor())); }
 function pbNotesBoardOpen() { return Boolean(document.getElementById('productionNotesModal')?.classList.contains('on')); }
 
 function pbUnreadNoteCount() {
@@ -24967,15 +25015,15 @@ async function exportProductionNoteById(id) {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-${stamp}.pdf`, options);
-      toast(`Production note PDF downloaded · ${result.pageCount} pages.`);
+      toast(`Production note PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
     } catch (error) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical production-note print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     }
   } catch (error) {
-    toast(`Note export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export the note: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -25014,12 +25062,12 @@ async function exportProductionNotesPDF() {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
-      toast(`Notes PDF downloaded · ${result.pageCount} pages.`);
+      toast(`Notes PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
     } catch (error) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     }
   } catch (error) {
     toast(`Could not export the notes: ${paperworkExportFailureMessage(error)}`);
@@ -25153,7 +25201,8 @@ function pnAddToRowNotes(noteId) {
   const beat = beats.find(b => b.id === pnTargetBeatId);
   if (!note || !beat) { toast('Pick a target row first.'); return; }
   if (!note.text)     { toast('Note has no text to add.'); return; }
-  beat.notes = note.text.slice(0, 120);
+  if (beat.notes && !confirm(`Row ${beats.indexOf(beat) + 1} already has notes. Replace them with this note?`)) return;
+  beat.notes = pbStripMarkdown(note.text).slice(0, 120);
   renderRundown();
   syncToFirestore();
   toast(`Note added to row ${beats.indexOf(beat) + 1}.`);
@@ -25212,11 +25261,23 @@ async function renderPlandaBearHubActivity() {
   try {
     const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
     if (snap.exists()) log = Array.isArray(snap.data().preProActivity) ? snap.data().preProActivity : [];
+    // A group's paperwork is logged on the group's own doc. Older group logs
+    // may hold copies of class entries, so skip any already listed.
+    if (groupActive()) {
+      const groupSnap = await window._getDoc(preProDocRef());
+      const groupLog = groupSnap.exists() && Array.isArray(groupSnap.data().preProActivity) ? groupSnap.data().preProActivity : [];
+      const entryKey = e => `${e?.at}|${e?.section}|${e?.by}|${e?.clientId}`;
+      const seen = new Set(log.map(entryKey));
+      log = log.concat(groupLog.filter(e => !seen.has(entryKey(e))));
+    }
   } catch {}
   const lastBySection = {};
+  // Notes log one name per action; the Production Notes card counts all of them.
+  const noteSections = new Set(['Production Note','Production Note Reply','Production Note Edited','Production Note Removed','To-Do Posted','To-Do Updated','Checklist Updated','Note Pinned','Note Unpinned']);
   log.forEach(e => {
     if (!e || !e.section) return;
-    if (!lastBySection[e.section] || (e.at||0) > (lastBySection[e.section].at||0)) lastBySection[e.section] = e;
+    const key = noteSections.has(e.section) ? 'Production Notes' : e.section;
+    if (!lastBySection[key] || (e.at||0) > (lastBySection[key].at||0)) lastBySection[key] = e;
   });
   // Annotate each paperwork card with who last touched it
   cards.forEach(c => {
@@ -25265,6 +25326,7 @@ function openPaperworkItem(id) {
     return;
   }
   activePaperworkItemId = id;
+  _pbEditedThisVisit = false;   // a fresh visit: nothing edited yet
   pbSetPresencePage(id);   // tell the room which page I'm on
   if (id === 'call-sheet') return openPrePro();
   if (id === 'production-scheduler') return openProductionSchedule();
@@ -25277,7 +25339,7 @@ function openPaperworkItem(id) {
 }
 
 function returnToPaperworkHub() {
-  saveOpenPaperworkSection(false);
+  pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   // The save above already flushed everything; a still-armed debounce timer
   // would fire after the modal closes and find nothing to save.
   if (_pbFieldSaveTimer) { clearTimeout(_pbFieldSaveTimer); _pbFieldSaveTimer = null; }
@@ -25388,8 +25450,8 @@ function paperworkExportReadiness(options={}) {
 }
 
 function paperworkExportReadinessMessage(readiness) {
-  const messages = (readiness?.issues || []).map(issue => issue.message).filter(Boolean);
-  return messages.join(' ') || 'Saved production data is not ready to export.';
+  const messages = [...new Set((readiness?.issues || []).map(issue => issue.message).filter(Boolean))];
+  return messages.join(' ') || 'The paperwork is not ready to export yet.';
 }
 
 async function waitForPaperworkSaves(options={}) {
@@ -25419,7 +25481,7 @@ async function waitForPaperworkSaves(options={}) {
     // Network-bound like the server reads — the local 8s budget was too tight
     // for a slow connection flushing this client's own queued writes.
     await paperworkExportTimeout(window._waitForPendingWrites(), PAPER_EXPORT_READ_MS,
-      'Cloud saves are still pending. Reconnect and wait for Cloud saved before exporting.');
+      'Your last changes are still saving. Check the connection, wait for Saved, then try again.');
     readiness = paperworkExportReadiness(options);
     if (!readiness.canExport) {
       const error = new Error(paperworkExportReadinessMessage(readiness));
@@ -25490,6 +25552,9 @@ async function readServerPaperworkSnapshot(options={}) {
       const groupData = groupSnap.exists() ? (groupSnap.data() || {}) : {};
       paperworkPrePro = groupData.prePro && typeof groupData.prePro === 'object' ? groupData.prePro : {};
     }
+    // 3.x saves store lists as maps in the cloud; every printer below reads
+    // lists, so convert once here (lists pass through unchanged).
+    paperworkPrePro = pbCollectionsToArrays(paperworkPrePro);
     let assignments = [];
     let assignmentsMode = options.includeAssignments === false ? 'excluded' : 'canonical';
     if (options.includeAssignments !== false) {
@@ -25815,11 +25880,11 @@ async function showRundownPaperPreview() {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
     // Owner 2026-08-30: the page header already prints the production name
     // with "Rundown" under it. No in-body title or show-name line on page 1.
-    showPaperPreview('Rundown Planda Bear Preview', rundownPreviewTableHTML(snapshot),
-      'Download Rundown PDF', 'exportPDF()', 'rundown', options);
+    showPaperPreview('Rundown Preview', rundownPreviewTableHTML(snapshot),
+      'Export Rundown PDF', 'exportPDF()', 'rundown', options);
   } catch (error) {
     lastRundownExportSnapshot = null;
-    toast(`Rundown preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the rundown: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -25873,7 +25938,7 @@ function rundownPreviewTableHTML(snapshot=null) {
       <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
-      <td>${fmtDur(b)}</td>
+      <td>${(b.min || b.sec) ? fmtDur(b) : '-'}</td>
       <td class="cue-total">${total}</td>`;
     if (!allColumns) {
       return `<tr${rowTintPrintStyle(b)}>${lead}
@@ -26595,6 +26660,7 @@ function saveStagePlot(showToastOnSave=true) {
 // target the active plot, so this is the one place dirty ids are marked.
 function queueStagePlotAutosave() {
   paperworkDirty = true;
+  _pbEditedThisVisit = true;
   _plotPendingSave = true;
   if (activeStagePlotId) _plotDirtyIds.add(activeStagePlotId);
   pbNoteLocalEdit('pp-plot-canvas');
@@ -26743,7 +26809,7 @@ function deleteStagePlot() {
   }
   const idx = resolveActiveStagePlotIndex();
   const plot = stagePlotsWorking[idx];
-  if (!dangerConfirm(`Delete "${stagePlotDisplayName(plot, idx)}"?`, 'The plot and everything placed on it are removed for the whole session.')) return;
+  if (!dangerConfirm(`Delete "${stagePlotDisplayName(plot, idx)}"?`, 'The plot and everything on it are deleted for the whole show.')) return;
   stagePlotsWorking.splice(idx, 1);
   _plotDirtyIds.delete(plot.id);
   const tombstones = pruneStagePlotTombstones({ ...stagePlotTombstones(), [plot.id]: Date.now() });
@@ -27132,7 +27198,7 @@ function renderPlotLayerBar() {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h5c5 0 5-10 10-10"/><path d="M15.5 3.5 19 7l-3.5 3.5"/></svg><span>${plotFlowMode ? 'Drawing Flow' : 'Draw Flow'}</span>
     </button>
     <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF: each layer on its own page, then all layers together">
-      ${sfIcon('action.download')}<span>Layer Set PDF</span>
+      ${sfIcon('action.download')}<span>Export by layer</span>
     </button>`;
 }
 
@@ -27357,9 +27423,9 @@ function plotBankKey(data=null) {
   return [...plotBankDisabled(data)].sort().join(',');
 }
 function togglePlotBankManage() {
-  if (!requirePlotManager('Only instructors and admins can manage the bank.')) return;
+  if (!requirePlotManager('Only instructors and admins can manage the gear list.')) return;
   if (groupActive()) {
-    toast('Manage the bank from the main workspace, outside a group. It applies to the whole session.');
+    toast('The gear list is shared by the whole show, so it can’t be changed while the show uses groups.');
     return;
   }
   plotBankManage = !plotBankManage;
@@ -27397,7 +27463,7 @@ function renderPlotPalette(data=null) {
     </div>`;
   }).join('');
   const manageBar = canManage ? `<div class="plot-bank-manage-row">
-    <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage Bank'}</button>
+    <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage gear'}</button>
     ${plotBankManage ? '<div class="plot-insp-hint">Tap an item to hide it from students. Placed items stay on the plot.</div>' : ''}
   </div>` : '';
   host.innerHTML = manageBar + groups;
@@ -27481,7 +27547,7 @@ function renderPlotInspector() {
     </div>` : `
     <div class="plot-insp-empty">${plotFlowMode
       ? 'Drawing flow: click the source gear, then the destination. Esc backs out.'
-      : 'Select gear or a cable on the stage, or click an item in the bank to add one.'}</div>`);
+      : 'Select gear or a cable on the stage, or click an item in the gear list to add one.'}</div>`);
   // Floor plan and space size are the instructor's call (same gate as plot
   // add/delete): students work inside the assigned space.
   const canShapeSpace = canManageCallSheetStructure();
@@ -27515,7 +27581,7 @@ function renderPlotInspector() {
         <button type="button" class="insp-tab ${tab === 'element' ? 'on' : ''}" onclick="setPlotInspectorTab('element')" data-tip="Selected item" aria-label="Selected item">${sfIcon('action.edit')}</button>
         <button type="button" class="insp-tab ${tab === 'stage' ? 'on' : ''}" onclick="setPlotInspectorTab('stage')" data-tip="Space and grid" aria-label="Space and grid">${sfIcon('action.grid')}</button>
       </div>
-      <div class="insp-caption">${tab === 'stage' ? 'Space' : (flow ? 'Cable' : 'Element')}</div>
+      <div class="insp-caption">${tab === 'stage' ? 'Space' : (flow ? 'Cable' : 'Item')}</div>
     </div>
     <div class="insp-pane ${tab === 'element' ? 'on' : ''}">${elementPane}</div>
     <div class="insp-pane ${tab === 'stage' ? 'on' : ''}">${stagePane}</div>`;
@@ -27653,6 +27719,14 @@ function pbInitStagePlotListeners() {
     };
     palette.addEventListener('pointerup', endPalDrag);
     palette.addEventListener('pointercancel', () => { _plotPalDrag?.ghost?.remove(); _plotPalDrag = null; });
+    // Enter/Space fire click with detail 0 and no pointer events.
+    palette.addEventListener('click', e => {
+      if (e.detail !== 0) return;
+      const btn = e.target?.closest?.('.plot-pal-item');
+      if (!btn) return;
+      if (plotBankManage) togglePlotBankType(btn.getAttribute('data-plot-type'));
+      else addPlotItem(btn.getAttribute('data-plot-type'));
+    });
   }
   // Capture phase so Esc means "deselect" before the dialog stack sees it,
   // and Delete clears the selected item without touching form typing.
@@ -27837,7 +27911,7 @@ async function exportStagePlotPaper(html, fileName, options, okToast, failLabel)
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render ${failLabel}: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -27849,7 +27923,7 @@ function resolveExportPlotIndex(plots) {
 }
 async function showStagePlotPreview() {
   try {
-    saveStagePlot(false);
+    pbSaveOnLeave(() => saveStagePlot(false));
     const layers = currentPlotExportLayers();
     const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers, plotId: activeStagePlotId });
     const plots = getStagePlots(snapshot.prePro);
@@ -27898,7 +27972,7 @@ const PLOT_LAYER_SET_PAGES = PLOT_LAYERS.filter(l => l.key !== 'room')
 async function exportStagePlotLayerSetPDF() {
   let snapshot;
   try {
-    saveStagePlot(false);
+    pbSaveOnLeave(() => saveStagePlot(false));
     snapshot = await preparePaperworkExportSnapshot({
       includeAssignments:false, includeNotes:false, documentType:'stage-plot',
       plotLayerSets: PLOT_LAYER_SET_PAGES, plotId: activeStagePlotId,
@@ -27918,8 +27992,8 @@ async function exportStagePlotLayerSetPDF() {
   const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - Layer Set`, 'cueola-stage-plot')}.pdf`;
   const pageList = PLOT_LAYER_SET_PAGES.map(keys => plotLayerSetLabel(keys)).join(', ');
   await exportStagePlotPaper(html, fileName, options,
-    pages => `Layer set PDF downloaded · ${pages} page${pages === 1 ? '' : 's'}: ${pageList}.`,
-    'the layer set');
+    pages => `Stage plot by layer downloaded · ${pages} page${pages === 1 ? '' : 's'}: ${pageList}.`,
+    'the stage plot by layer');
 }
 
 function renderCallSheetSelector(sheets=getCallSheets()) {
@@ -28043,7 +28117,7 @@ function composeWeatherLine(w) {
   if (!w) return '';
   const parts = [];
   if (w.conditions) parts.push(w.conditions);
-  if (w.high || w.low) parts.push(`${w.high || '—'} / ${w.low || '—'}`);
+  if (w.high || w.low) parts.push(`${w.high || '-'} / ${w.low || '-'}`);
   if (w.precip) parts.push(`precip ${w.precip}`);
   if (w.wind) parts.push(`wind ${w.wind}`);
   if (w.sunrise) parts.push(`sunrise ${w.sunrise}`);
@@ -28148,10 +28222,10 @@ function weatherSummaryLine(w) {
   if (w.summary) parts.push(w.summary);   // the student's edited line prints as written
   else {
     if (w.conditions) parts.push(w.conditions);
-    if (w.high || w.low) parts.push(`High ${w.high || '—'} / Low ${w.low || '—'}`);
+    if (w.high || w.low) parts.push(`High ${w.high || '-'} / Low ${w.low || '-'}`);
     if (w.precip) parts.push(`Precip ${w.precip}`);
     if (w.wind) parts.push(`Wind ${w.wind}`);
-    if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+    if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '-'} / Sunset ${w.sunset || '-'}`);
   }
   // Say which DAY this forecast is for — a sheet dated Friday prints Friday's
   // storm, and without the label that reads as "wrong weather" on show day.
@@ -28388,7 +28462,7 @@ function renderCallSheetWeatherCard() {
   const setTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
   const setV = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
   setTxt('pp-weather-day', callSheetDayLabel(date) || 'Add a shoot date');
-  setTxt('pp-weather-call', document.getElementById('pp-call')?.value || '—');
+  setTxt('pp-weather-call', timeInputValue('pp-call') ? paperTime(timeInputValue('pp-call')) : 'Add a call time');
   setTxt('pp-weather-loc', document.getElementById('pp-location')?.value?.trim() || 'Add a location');
   const w = callSheetWeather || {};
   setV('pp-wx-summary', weatherEditableLine(w));
@@ -28521,7 +28595,10 @@ async function fetchCallSheetWeather() {
     callSheetWeather.summary = composeWeatherLine(callSheetWeather);
     renderCallSheetWeatherCard();
     paperworkDirty = true;
-    saveCallSheetStateLocally(false);
+    // A forecast fetch (often the automatic refresh on open) is not someone's
+    // work, so it never goes in "Who worked on what".
+    _pbSuppressActivity = true;
+    try { saveCallSheetStateLocally(false); } finally { _pbSuppressActivity = false; }
   } catch (e) {
     setWeatherStatus('Could not reach the weather service. Check your connection or enter weather manually below.', true);
   } finally {
@@ -28558,7 +28635,7 @@ function saveCallSheetStateLocally(showToastOnSave=false) {
 function switchCallSheet(index) {
   const nextIndex = Number(index);
   if (!Number.isFinite(nextIndex)) return;
-  const data = saveCallSheetStateLocally(false);
+  const data = pbSaveOnLeave(() => saveCallSheetStateLocally(false));
   const sheets = getCallSheets(data);
   storeActiveCallSheetIndex(Math.max(0, Math.min(nextIndex, sheets.length - 1)), sheets);
   renderCallSheetSelector(sheets);
@@ -28597,7 +28674,7 @@ function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
   const detail = affectedNames.length
     ? `Assigned to: ${affectedNames.join(', ')}. Their call-sheet assignment will be removed.`
     : 'No students are assigned to this sheet.';
-  if (!dangerConfirm(`Delete "${callSheetDisplayName(sheet, idx)}"?`, `${detail} Session History remains the undo of last resort.`, { requireText:'DELETE' })) return;
+  if (!dangerConfirm(`Delete "${callSheetDisplayName(sheet, idx)}"?`, `${detail} To undo, an instructor can roll the whole show back from History in Settings.`, { requireText:'DELETE' })) return;
   const remaining = sheets.filter((_, i) => i !== idx);
   const tombstones = pruneCallSheetTombstones({ ...callSheetTombstones(data), [sheet.id]: Date.now() });
   const strippedRows = savedRows.map(row => {
@@ -28694,10 +28771,19 @@ function addAnotherCallSheet() {
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   })();
+  // After a delete, "Call Sheet N" (and the id made from that name) can
+  // already exist. Take the first number whose name and id are both free.
+  const takenIds = new Set(sheets.map(s => s.id));
+  const takenNames = new Set(sheets.map((s, i) => callSheetDisplayName(s, i).toLowerCase()));
+  // data holds only the form's sheets, not the delete markers: read the saved ones.
+  const deletedIds = callSheetTombstones(loadPreProData());
+  const idForNumber = n => normalizeCallSheet({ label:`Call Sheet ${n}` }, n - 1).id;
+  let nextSheetNumber = sheets.length + 1;
+  while (takenNames.has(`call sheet ${nextSheetNumber}`) || takenIds.has(idForNumber(nextSheetNumber)) || deletedIds[idForNumber(nextSheetNumber)]) nextSheetNumber++;
   const nextSheet = normalizeCallSheet({
     ...source,
     id: '',   // never inherit the source's paperwork id — a duplicate id makes the two sheets inseparable in role assignments
-    label: `Call Sheet ${sheets.length + 1}`,
+    label: `Call Sheet ${nextSheetNumber}`,
     date: nextDate, call: '', showStart: '', wrap: '', doors: '',
     weather: null, // new day → fetch fresh forecast; venue carries over from source
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
@@ -28707,7 +28793,7 @@ function addAnotherCallSheet() {
   storeActiveCallSheetIndex(sheets.length - 1, sheets);
   // Re-creating a sheet whose generated id collides with a tombstoned one
   // clears that tombstone — otherwise the new sheet would vanish on next read.
-  const tombstones = { ...callSheetTombstones(data) };
+  const tombstones = { ...deletedIds };
   delete tombstones[nextSheet.id];
   const next = { ...data, ...nextSheet, callSheets:sheets, callSheetTombstones:pruneCallSheetTombstones(tombstones), updatedAt:Date.now() };
   persistPreProData(next, 'Call Sheet');
@@ -28924,8 +29010,7 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency</th><td>${esc(safety.emergency || '')}</td></tr>
-      <tr><th>Other Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
-      ${safetySecurityValue(safety.security) ? `<tr><th>Security</th><td>${esc(safetySecurityValue(safety.security))}</td></tr>` : ''}
+      <tr><th>Other Numbers</th><td>${esc(safetyOtherNumbersValue(safety))}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(safety.late || data.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
@@ -28938,12 +29023,12 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
 // version rendered the live DOM state, so the preview and the package PDF
 // could disagree whenever the save hadn't landed.
 async function showSafetyPlanPreview() {
-  saveSafetyPlan(false);
+  pbSaveOnLeave(() => saveSafetyPlan(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'safety-plan' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the safety plan: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
-  showPaperPreview('Safety Plan Preview', safetyPlanHTML(prePro.safety || getSafetyPlanData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
+  showPaperPreview('Safety Plan Preview', safetyPlanHTML(prePro.safety || getSafetyPlanData(), prePro), 'Keep editing', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
 }
 
 function defaultProductionSchedule() {
@@ -29130,7 +29215,7 @@ function renderScheduleLinkedFields(schedule, callSheet=loadPreProData()) {
     const el = document.getElementById(id);
     if (!el) return;
     const v = String(text || '').trim();
-    el.textContent = v || '—';
+    el.textContent = v || 'Not set yet';
     el.classList.toggle('is-empty', !v);
     // An old override that no longer matches the call sheet says so, so the
     // "from the call sheet" hint never lies about where a value came from.
@@ -29145,7 +29230,7 @@ function renderScheduleLinkedFields(schedule, callSheet=loadPreProData()) {
 // "Edit on the call sheet": save what is open here, then open the call sheet
 // editor. The schedule refills from it when it comes back.
 function openCallSheetFromSchedule() {
-  savePaperworkItem('production-scheduler', false);
+  pbSaveOnLeave(() => savePaperworkItem('production-scheduler', false));
   hidePaperworkEditors();
   openPaperworkItem('call-sheet');
 }
@@ -29200,7 +29285,7 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
     <h2>Show Day</h2>
     <table><tbody>
       <tr><th>Show Day</th><td>${esc(paperDate(s.showDate || s.date))}</td></tr>
-      <tr><th>Crew Call</th><td>${esc(paperTime(s.call))}</td></tr>
+      <tr><th>Call Time</th><td>${esc(paperTime(s.call))}</td></tr>
       <tr><th>Doors Open</th><td>${esc(paperTime(s.doors))}</td></tr>
       <tr><th>Show Start</th><td>${esc(paperTime(s.show))}</td></tr>
       <tr><th>Location</th><td>${esc(s.location || '')}</td></tr>
@@ -29213,12 +29298,12 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
 
 // Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
 async function showProductionSchedulePreview() {
-  saveProductionSchedule(false);
+  pbSaveOnLeave(() => saveProductionSchedule(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'production-scheduler' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the schedule: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
-  showPaperPreview('Production Schedule Preview', productionScheduleHTML(prePro.productionSchedule || getProductionScheduleData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
+  showPaperPreview('Production Schedule Preview', productionScheduleHTML(prePro.productionSchedule || getProductionScheduleData(), prePro), 'Keep editing', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
 }
 
 function defaultPatchRows(kind) {
@@ -29236,7 +29321,7 @@ function getPatchRows(kind) {
 const PATCH_FIELD_PLACEHOLDERS = {
   video: { label:'e.g. CAM 2', destination:'e.g. TX1 · SDI in 2', source:'e.g. Sony FX6 on tripod', cabling:'e.g. 50ft SDI via floor run', notes:'e.g. Shading from CCU 2' },
   audio: { label:'e.g. Host mic', destination:'e.g. Board ch 1', source:'e.g. SM7B on boom', cabling:'e.g. XLR snake ch 1', notes:'e.g. Backup lav on ch 5' },
-  comms: { position:'e.g. Show Caller', out:'e.g. Channel A', gear:'e.g. Wired beltpack 3', notes:'e.g. Talks to camera + playback' },
+  comms: { position:'e.g. Director', out:'e.g. Channel A', gear:'e.g. Wired beltpack 3', notes:'e.g. Talks to camera + playback' },
 };
 function patchInput(value, kind, row, field) {
   const id = `pb-patch-${kind}-${row}-${field}`;
@@ -29468,10 +29553,10 @@ function patchTableHTML(kind, title, data=null) {
 
 // Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
 async function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
-  savePatchSheet(false);
+  pbSaveOnLeave(() => savePatchSheet(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:kind === 'video' ? 'video-patch' : 'audio-comms-patch' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the patch sheet: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
   // Section numbers come from the shared builder (D6) so a single-sheet
   // preview and the full package can never disagree.
@@ -29479,14 +29564,14 @@ async function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
     showPaperPreview('Video Patch Sheet Preview', `
       <h1 class="psec-h psec-video">${paperSectionTitle(paperworkSectionNumber('video-patch'), 'Video Patch Sheet')}</h1>
       ${patchTableHTML('video', 'Video Patch Sheet', prePro)}
-    `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
+    `, 'Keep editing', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
     return;
   }
   showPaperPreview('Audio and Comms Patch Sheet Preview', `
     <h1 class="psec-h psec-audio">${paperSectionTitle(paperworkSectionNumber('audio-comms-patch'), 'Audio and Comms Patch Sheets')}</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet', prePro)}
     ${patchTableHTML('comms', 'Comms Patch Sheet', prePro)}
-  `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
+  `, 'Keep editing', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
 }
 
 // Production Notes are a working discussion board, not deliverable paperwork —
@@ -29522,8 +29607,8 @@ function renderPackageSheetPicker() {
     : '';
   const noteCount = Array.isArray(plandaBearNotes) ? plandaBearNotes.length : 0;
   // Owner 2026-08-30: the include-notes choice lives HERE with the export
-  // buttons, not hidden inside the package preview (it stays there too, and
-  // both write the same flag). Which sections print at all is the Paperwork
+  // buttons, not hidden inside the package preview (the preview copy was cut
+  // in 3.0). Which sections print at all is the Paperwork
   // for this show list above.
   const sheetRows = sheets.length > 1 ? `
       <div class="pb-pkg-sheet-picker-sub">Call sheets in the package · ${includedCount} of ${sheets.length}</div>
@@ -29537,7 +29622,7 @@ function renderPackageSheetPicker() {
   host.hidden = false;
   host.innerHTML = `
     <div class="pb-pkg-sheet-picker">
-      <div class="pb-pkg-sheet-picker-title">Package export options<button type="button" class="info-btn" aria-label="What’s in the export package" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+      <div class="pb-pkg-sheet-picker-title">Package export options<button type="button" class="info-btn" aria-label="What’s in the export" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       <label class="pb-pkg-optin">
         <input type="checkbox" ${pbPackageIncludeNotes ? 'checked' : ''} onchange="pbSetPackageNotesFromHub(this.checked)">
         <span>Include Production Notes in the package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
@@ -29576,7 +29661,7 @@ function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('
   const groups = Array.isArray(snapshot?.assignmentGroups) ? snapshot.assignmentGroups : [];
   const rows = groups.flatMap(group => group.roles.map((role, index) => `
     <tr>
-      <td><strong>${esc(group.displayName || 'Unnamed student')}</strong><br><span class="cue-muted">${esc(group.profileId)}</span></td>
+      <td><strong>${esc(group.displayName || 'Unnamed student')}</strong></td>
       <td>${esc(role.positionLabel || role.positionId)}</td>
       <td>${role.status === 'completed' ? 'Completed' : 'Assigned'}</td>
       <td>${role.paperwork.length ? role.paperwork.map(item => esc(item.paperworkLabel)).join('<br>') : 'None required'}</td>
@@ -29587,7 +29672,7 @@ function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('
     <h1 class="psec-h psec-register">${paperSectionTitle(sectionNumber, 'Student Positions and Required Paperwork')}</h1>
     <p>Who holds each position, and the paperwork that position owns.</p>
     <table class="paper-assignment-register">
-      <thead><tr><th>Student profile</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
+      <thead><tr><th>Student</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
       <tbody>${rows.join('') || '<tr><td colspan="6">No positions were saved for this production.</td></tr>'}</tbody>
     </table>`;
 }
@@ -29604,13 +29689,8 @@ function preProPackageHTML(forExport=false, snapshot=null) {
   const pickedIds = Array.isArray(snapshot?.options?.callSheetIds) ? snapshot.options.callSheetIds : null;
   const pickedSheets = pickedIds ? allSheets.filter(sheet => pickedIds.includes(sheet.id)) : allSheets;
   const callSheets = pickedSheets.length ? pickedSheets : allSheets.slice(0, 1);
+  // The Include Production Notes box lives in the hub only (the preview copy was a duplicate).
   const includePackageNotes = snapshot ? snapshot.options?.includeNotes === true : pbPackageIncludeNotes;
-  const noteCount = Array.isArray(snapshot?.notes) ? snapshot.notes.length : plandaBearNotes.length;
-  const notesToggle = forExport ? '' : `
-    <label class="pb-pkg-optin no-print">
-      <input type="checkbox" ${includePackageNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
-      <span>Include Production Notes in this package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
-    </label>`;
   const sections = [];
   // Every package section carries its numbered title into the per-page header
   // via this data attribute (pagination inherits it like orientation). The
@@ -29665,7 +29745,6 @@ function preProPackageHTML(forExport=false, snapshot=null) {
     sections.push(`<section${sectionAttr('production-notes', 'Production Notes')}>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, numbers.get('production-notes'))}</section>`);
   }
   return `
-    ${notesToggle}
     ${sections.join('\n    <div class="paper-page-break"></div>\n    ')}
   `;
 }
@@ -30408,6 +30487,9 @@ function saveCallSheet(showToastOnSave=true) {
 // Planda Bear's Call Sheet "Show Start" is the source of truth for the rundown
 // start time — keep the build/settings start in sync whenever it's set there.
 function applyPlandaShowStartToRundown() {
+  // A group's call sheet belongs to that group; the rundown is the whole
+  // class's, so a group's show start must not move everyone's start time.
+  if (groupActive()) return;
   const raw = (typeof getShowStartValue === 'function') ? getShowStartValue() : '';
   if (!raw || raw === 'N/A') return;
   const norm = normalizeTimeValue(raw);
@@ -30572,7 +30654,7 @@ function addCallSheetPerson() {
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
-  if (!roster.length) { toast('No positions assigned yet. Assign positions on the Planda Bear hub first.'); return; }
+  if (!roster.length) { toast(adminSession ? 'No positions assigned yet. Assign them in Position Assignments on the main Planda Bear page.' : 'No positions assigned yet. Your instructor assigns them.'); return; }
   // Group person -> joined positions, in roster order.
   const byPerson = new Map();
   roster.forEach(row => {
@@ -30625,6 +30707,10 @@ function estimateWrapFromRundown() {
   const wrap = `${String(Math.floor(endMins / 60)).padStart(2,'0')}:${String(endMins % 60).padStart(2,'0')}`;
   setWrapNotApplicable(false);
   setTimeInputValue('pp-wrap', wrap);
+  // A button fires no input event: hold the refresh off the field and save,
+  // or the next refresh puts the old (blank) wrap back.
+  pbNoteLocalEdit('pp-wrap');
+  pbQueuePaperworkAutosave();
   toast(`Estimated wrap ${paperTime(wrap)} (start + ${rundownFmtTotal(totalSecs)} runtime).`);
 }
 
@@ -30673,13 +30759,13 @@ async function downloadCallSheetPDF() {
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
   try {
     const result = await exportPaperHTMLAsPDF(html, savedCallSheetFileName, options);
-    toast(`Call sheet PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Call sheet PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not build the call sheet PDF: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -30731,13 +30817,13 @@ async function exportPreProPackagePDF() {
   const cleanFileName = (snapshot.production.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
   try {
     const result = await exportPaperHTMLAsPDF(html, `${cleanFileName}-plandabear-package.pdf`, options);
-    toast(`Paperwork package PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Paperwork package PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not build the package PDF: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -30768,13 +30854,13 @@ async function exportPDF() {
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
   try {
     const result = await exportPaperHTMLAsPDF(html, cleanFileName, options);
-    toast(`Rundown PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Rundown PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved rundown: ${paperworkExportFailureMessage(printError)}`);
     }
