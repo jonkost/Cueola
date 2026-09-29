@@ -16,6 +16,8 @@ final class Deck {
     var views: [OutputView] = []    // the outputs this deck's picture is on
     /// The key on this deck's video, if the cue has one.
     var keyer: Keyer?
+    /// How loud this deck's sound is, for the cue meter.
+    var peaks: PeakBox?
     /// Hands over frames for the scopes; only there while the scopes are on.
     var frames: AVPlayerItemVideoOutput?
     var lastFrame: CIImage?
@@ -58,6 +60,9 @@ final class Deck {
         lastFrame = nil
         keyer = nil
         if cue.kind == .video && cue.key.mode != .off { key(item, cue.key) }
+        let box = PeakBox()
+        peaks = box
+        Task { await SoundTap.attach(to: item, box: box) }
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
@@ -185,6 +190,9 @@ final class Engine: ObservableObject {
         didSet { if wantsFrames { videoDecks.forEach(attachFrames) } }
     }
     private var stillFrame: (id: UUID, image: CIImage)?
+
+    /// How loud the cues are (videos and sound cues), for the meter.
+    let cueMeter = LevelMeter()
 
     /// The sound effect board.
     let pads: PadBoard
@@ -1021,7 +1029,18 @@ final class Engine: ObservableObject {
         else { left = nil }
         if left != remaining { remaining = left }
         if left != nil || pending != nil { onTick?() }
+        readCueMeter()
         noteRecoveryPoint()
+    }
+
+    /// The loudest playing cue, scaled by its volume, like what goes out.
+    private func readCueMeter() {
+        var l: Float = 0, r: Float = 0
+        for d in videoDecks + soundDecks where d.cue != nil && d.player.rate > 0 {
+            guard let (pl, pr) = d.peaks?.take() else { continue }
+            l = max(l, pl * d.player.volume); r = max(r, pr * d.player.volume)
+        }
+        if l > 0.0005 || r > 0.0005 || cueMeter.left > 0.0005 || cueMeter.right > 0.0005 { cueMeter.take(l, r) }
     }
 
     /// Once a second, notes what is on air, so a crash can pick up there.

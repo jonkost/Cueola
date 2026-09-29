@@ -75,6 +75,32 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "meter": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let applause = Cue(name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID())
+                var quiet = Cue(name: "Applause at 25%", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID(offsetMs: 1))
+                quiet.volume = 0.25
+                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
+                engine.replaceShow(cues: [applause, quiet, bars], pads: [], banks: [], multiTrigger: nil)
+                engine.go()
+            }),
+            (0.8, {
+                note("a applause at full volume: meter \(String(format: "%.2f / %.2f", engine.cueMeter.left, engine.cueMeter.right))")
+                engine.go()
+            }),
+            (0.8, {
+                note("b applause at 25%: meter \(String(format: "%.2f / %.2f", engine.cueMeter.left, engine.cueMeter.right))")
+                engine.go()
+            }),
+            (0.8, {
+                note("c bars video: meter \(String(format: "%.2f / %.2f", engine.cueMeter.left, engine.cueMeter.right))")
+                // Quick swaps: every player's listener must let go cleanly.
+                for _ in 0..<6 { engine.standbyID = engine.cues[0].id; engine.go(); engine.standbyID = engine.cues[2].id; engine.go() }
+            }),
+            (0.8, { engine.allStop() }),
+            (1.2, { note("d after All Stop the meter falls: \(String(format: "%.3f", max(engine.cueMeter.left, engine.cueMeter.right)))") }),
+        ]
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

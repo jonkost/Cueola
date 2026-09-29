@@ -62,7 +62,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Sound chain: gain, 3-band EQ, compressor, master volume | Built for pads (step 3) | The same EQ points and compressor as the web app. |
 | Pad meter, pads on any channel pair of an audio interface | Built (step 4) | |
 | Cue sound device, a sound device per output | Built (step 4) | Cue sound plays on a device's first two channels. |
-| Cue sound meter, cue sound on any channel pair | Later | Needs cue sound to move onto the same audio engine as the pads. |
+| Cue sound meter | Built | A listener on each player; the sound itself is untouched. |
+| Cue sound on any channel pair | Later | Needs cue sound to move onto the same audio engine as the pads. |
 | Record a sound effect | Step 3 | |
 | Multiple outputs, identify, pick a screen and audio device per output | Built (step 4) | Up to four outputs. A cue picks its output, or every output. Replaces the kiosk Chrome windows. |
 | Apple design pass | Built (step 4) | Toolbar, native Inspector with icon tabs (the house inspector standard), Settings window, Playback menu, SF Pro and SF Mono, standard empty screens, app icon from the brand art, the Mac's light or dark look. Needs macOS 14. |

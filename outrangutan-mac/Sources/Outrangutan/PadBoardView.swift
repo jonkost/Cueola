@@ -379,10 +379,11 @@ struct PadInspectorView: View {
 /// The pads' level meter: two thin bars, green to yellow to red.
 struct LevelMeterView: View {
     @ObservedObject var meter: LevelMeter
+    var label = "PADS"
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("PADS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             VStack(spacing: 2) {
                 bar(meter.left)
                 bar(meter.right)
@@ -392,10 +393,10 @@ struct LevelMeterView: View {
                 .fill(meter.clipped ? Color.red : Color.secondary.opacity(0.25))
                 .frame(width: 7, height: 7)
                 .onTapGesture { meter.resetClip() }
-                .help(meter.clipped ? "The pads hit full level. Click to clear." : "Lights red if the pads hit full level.")
+                .help(meter.clipped ? "It hit full level. Click to clear." : "Lights red if the sound hits full level.")
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Pad level")
+        .accessibilityLabel(label == "PADS" ? "Pad level" : "Cue sound level")
         .accessibilityValue("\(Int(max(meter.left, meter.right) * 100)) percent")
     }
 

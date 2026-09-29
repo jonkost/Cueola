@@ -186,7 +186,8 @@ of the picture is, 0 to 100) and the **vectorscope** (its colors: a boxed
 target for each color bar). Hide the strip with View, Program Preview
 (Option-Command-P), or just the scopes with the button under the preview
 (Option-Command-S). The scopes read the picture 15 times a second only
-while they show.
+while they show. The **SOUND** meter under the preview shows how loud the cues are
+(videos and sound cues, at their volume); pads keep their own meter.
 
 ## The direct link (same Mac)
 
@@ -231,6 +232,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `meter`: the cue sound meter at full and quarter volume, a dozen fast cue
+  swaps, and the meter falling after All Stop.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.
@@ -272,6 +275,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
 | `WatchFolder.swift` | Watching a folder (Dropbox, Google Drive) for new media |
 | `Obs.swift` | OBS Studio control and Settings, OBS |
+| `SoundTap.swift` | Listens to cue sound for the meter, without changing it |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |

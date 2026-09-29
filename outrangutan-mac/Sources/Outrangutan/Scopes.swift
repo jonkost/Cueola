@@ -119,6 +119,8 @@ struct MonitorStrip: View {
                         .help("Which output the preview shows. It picks up from the next cue.")
                     }
                     Spacer()
+                    LevelMeterView(meter: engine.cueMeter, label: "SOUND")
+                        .help("How loud the cues are: videos and sound cues, at their volume. Pads have their own meter.")
                     Toggle(isOn: $showScopes) { Image(systemName: "waveform.path.ecg") }
                         .toggleStyle(.button)
                         .controlSize(.mini)
