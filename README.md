@@ -4,7 +4,7 @@ A classroom tool for running a TV show. Students build a rundown, run it live, r
 
 ## What is in it
 
-- **Rundown**: the show, row by row. Each row has a name, a length, and one cue per department: camera, audio, playback, graphic, lighting, script.
+- **Rundown**: the show, row by row. Each row has a name, a length, and one cell per department (Video, Audio, Playback, GFX, Lighting, Script), each with its two lines (READY and TAKE, or the department's own words).
 - **Live**: the show on air. One button, TAKE, moves everyone to the next cue. Everyone sees the same ON AIR and STANDBY.
 - **Flowmingo**: the prompter the talent reads, and the panel the operator controls it from.
 - **Outrangutan**: video clips and sound effects, played to a 1920×1080 output window.

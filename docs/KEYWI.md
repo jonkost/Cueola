@@ -19,13 +19,14 @@ under **KeyWi Bird** and requires a normal user sign in.
 2. If the Elgato Stream Deck app is installed, **quit it**. It holds the USB
    device and blocks the browser.
 3. Click the **KeyWi Bird** card. The first open runs a five step setup
-   wizard: a welcome, **Connect your deck**, **Micochondria** (optional),
-   **OBS Studio** (optional), and **Make it yours** (pick a theme). The
-   optional steps skip cleanly; only the deck step matters.
+   wizard: a welcome, **Connect your deck**, **Micochondria** (optional; while
+   it is parked this step explains **Pages** instead), **OBS Studio**
+   (optional), and **Make it yours** (pick a theme). The optional steps skip
+   cleanly; only the deck step matters.
 4. On the deck step click **Connect deck**, pick your deck from the browser's
    device list, and allow it once. The deck plays a quick rainbow light show
    as a pixel test, then settles into a layout built for its size.
-5. No deck yet? Click **See it on screen** (in the wizard, **No deck? Preview
+5. No deck yet? Click **Preview on screen** (in the wizard, **No deck? Preview
    on screen**). Preview mode gives you the full virtual deck with nothing
    plugged in, so you can learn it, lay it out, and pick a theme any time.
 6. Press keys and turn dials. Every key does what its label says, and the on
@@ -69,10 +70,10 @@ curated default layout, **organized by app like channel strips on a console**:
 each app owns a contiguous band of columns. On the + XL: columns 1-3 are
 Outrangutan (GO, PAUSE, STOP, FADE, PANIC, PAD 1-4, CUE 1-3), columns 4-5 are
 Cueola (NEXT, PREV, GO LIVE, the CLOCK widget, HYPE), columns 6-7 are Flowmingo
-(SCROLL, CUE ROW, TOP, MIRROR, BRAKE, BOOST, EDIT, SCRUB), column 8 is
-Micochondria (TKB, VofU, ALL TALK OFF), column 9 is OBS (STREAM, REC, SCN 1)
-plus PAGE. The action catalog in the key editor groups the same way, so
-finding an action means thinking of the app, not a category.
+(SCROLL, CUE ROW, TOP, MIRROR, BRAKE, BOOST, EDIT, SCRUB), column 8 is pages
+(PAGE ← and HOME), and column 9 is OBS (STREAM, REC, SCN 1) plus PAGE →. The
+action catalog in the key editor groups the same way, so finding an action
+means thinking of the app, not a category.
 
 Redundancy rule: a deck with dials gets **no keys for what its dials already
 do**: text size, prompter speed, and the separate clock verbs are dial work on
@@ -80,19 +81,21 @@ the + XL, so those keys are gone from its default (the dial-less XL keeps its
 SPD keys). The freed keys went to the app bands; a few deliberate blanks keep
 the bands readable. Everything trimmed is still in the catalog to bind by hand.
 
-Default dials, each card stating what turning and pressing does: PLBK vol
-(press: mute), Prompter speed (press: play/pause), Text size (press: reset),
-Prompter scrub (press: cue to live row), Rundown row (press: take that row),
-Show clock (a live clock face; press: start/pause). Five more live in the
-catalog to assign by hand: the **OBS program** dial (a live program monitor on
-the strip; turn rides the OBS stream audio volume, pick which input in the OBS
-row, press starts or stops the stream), the **Prompter view** dial (the script
-itself on the strip: the line the talent is on plus the next line, updating as
-they scroll; turn is speed, press is play/pause), the **Playback view** dial
-(a live Outrangutan program monitor: real video frames for clips, a
-name-and-countdown card for audio; turn is the playback master volume, press
-pauses or resumes), the **Micochondria** split strip (see below), and **Deck
-light** (turn: the physical backlight, press: back to 80%).
+Default dials, each card stating what turning and pressing does, in order:
+the **Playback view** dial (a live Outrangutan program monitor on the strip:
+real video frames for clips, a name-and-countdown card for audio; turn is the
+playback master volume, press pauses or resumes), the **Prompter view** dial
+(the script itself on the strip: the line the talent is on plus the next
+line, updating as they scroll; turn is speed, press is play/pause), Text size
+(press: back to the default size), Prompter scrub (press: cue to live row),
+Rundown row (press: take that row), Show clock (a live clock face; press:
+start/pause). The Stream Deck + has four dials, so it gets the first four.
+More live in the catalog to assign by hand: plain **PLBK vol** (press: mute)
+and **Prompter speed** (press: play/pause) dials, the **OBS program** dial (a
+live program monitor on the strip; turn rides the OBS stream audio volume,
+pick which input under **Stream audio** in Deck settings ▸ OBS Studio, press
+starts or stops the stream), the **Micochondria** split strip (see below),
+and **Deck light** (turn: the physical backlight, press: back to 80%).
 
 The touch strip is a glanceable dashboard: one zone per dial with an accent bar,
 the live value in tabular digits, a progress bar, and a running dot. Tap a zone
@@ -125,14 +128,14 @@ category colors), Neon (glowing edges on black), Synthwave (sunset grids),
 Terminal (green-on-black with scanlines), Aurora, **RGB Flow** (an animated
 hue wave rolling diagonally across every key, the mood-lighting option), and
 **Liquid Glass** (smoked glass keycaps that match the app chrome). Themes are
-one-click chips in the toolbar and in the wizard's last step, and apply to the
-physical keys and the on-screen preview alike.
+one-click chips in **Deck settings** (the gear) and in the wizard's last step,
+and apply to the physical keys and the on-screen preview alike.
 
 The **on-screen grid is exactly what the hardware shows**: the same canvas art
 drives both, so you can lay out and theme the deck and see the real result. The
 on-screen deck sits in a hardware-style dark shell, and on strip decks the
 **touch strip renders live on screen too**, showing the same pixels the panel shows.
-**Preview mode** (See it on screen) gives you a full virtual + XL with no
+**Preview mode** (Preview on screen) gives you a full virtual + XL with no
 hardware plugged in, so you can build layouts and try themes any time, then hit
 **Connect real deck** to drive the real one.
 
@@ -182,11 +185,13 @@ overrides, stored with the layout:
   uncheck it for pure art. The label sits on a soft bottom scrim over an
   image so it stays readable.
 - **GIPHY search**: search GIPHY without leaving the key editor and tap a
-  result to put it on the key. Needs your own free API key (developers.giphy.com,
-  Create an App, choose API), pasted once into the editor's GIPHY row; it is
-  stored on that device only, like the OBS password. Results are capped at
-  PG-13, and a pick is downloaded and stored like an upload (300 KB cap), so
-  the layout stays portable and works offline afterward. Remove key forgets it.
+  result to put it on the key. It uses the GIPHY key an instructor shares with
+  the whole class (they paste it once with **Use for the whole class** ticked),
+  or your own free API key (developers.giphy.com, Create an App, choose API),
+  which stays on that device only, like the OBS password. Results are capped
+  at PG-13. A pick is saved as a short GIPHY link, not the file, so a saved
+  layout stays small and the GIF loads again on any machine (it needs the
+  internet). **Remove key** forgets your own key.
 - **Art packs**: a bucket of one-click key art in packs. **Podcast** ships
   in-repo (original badges tuned for an 18-35 crew: CLIP THAT, HOT TAKE,
   MIC DROP, NO CAP, REAL, BANGER, COOKED, LOCKED IN, AURA, RENT FREE, W, L,
@@ -204,11 +209,13 @@ overrides, stored with the layout:
   key to the theme's default look.
 
 **Drag one key onto another to swap them**, straight on the on-screen grid.
-Edits save to this device instantly, as always. The toolbar's **Save layout**
-button lights up while changes have not been made durable yet; it opens the
-save sheet: **Keep on this device**, **Download .keywi** (a standalone file,
-see below), or **Save to my profile** (signed-in users; the layout follows
-the login to any machine). Leaving KeyWi Bird with unsaved changes asks the
+Edits save to this device instantly, as always. The **Layouts** button in the
+status bar reads **Layouts · unsaved** while changes have not been made durable
+yet. It opens the Layouts sheet: your saved layouts (open, rename or delete),
+**Import file**, **Export file** and **Save current**. **Save current** asks
+where: **Keep on this device**, **Download .keywi** (a standalone file, see
+below), or **Save to my profile** (signed-in users; the layout follows the
+login to any machine). Leaving KeyWi Bird with unsaved changes asks the
 same question once on the way out; nothing nags per edit.
 
 Old saved profiles need no migration: absent overrides mean the defaults every
@@ -257,9 +264,12 @@ localhost origins, so a random webpage cannot key the mic; details in
 
 Everything is customizable, live:
 
-- **Saved profiles.** Keep several named layouts (Rehearsal, Live, OBS heavy).
-  New / Duplicate / Rename / Delete / Set default, and switch instantly. Mappings
-  are stored per device in the browser.
+- **Pages.** Keep several named pages (Rehearsal, Live, OBS heavy) as tabs in
+  the **Pages** row and switch instantly: **+** adds a page, **Duplicate**
+  copies this one, double-click a tab (or its pencil) to rename it, **x**
+  deletes it, and **Set home** picks the page the deck starts on. Pages are
+  stored per device in the browser; **Layouts ▸ Save current** can keep one
+  on your profile.
 - **Per-key look and feel.** The full appearance kit above, per key: label,
   color, art, progress style, flash, reactive. Every binding shows a
   plain-language description of what it does, and TOGGLE/HOLD chips where they
@@ -269,12 +279,13 @@ Everything is customizable, live:
   a specific cue or switch to a specific scene by name.
 - **Live learn.** Click **Live learn**, then press a key or turn a dial on the
   deck and its editor opens. Tactile mapping, no hunting on screen.
-- **Import / export.** Export a layout as a **`.keywi` file** (JSON inside,
-  versioned, custom key images included) to back it up or hand it to another
-  operator machine, and import it back. Old `.json` exports import forever.
+- **Import / export.** **Layouts ▸ Export file** saves a layout as a **`.keywi`
+  file** (JSON inside, versioned, custom key images included) to back it up or
+  hand it to another operator machine; **Layouts ▸ Import file** brings it
+  back. Old `.json` exports import forever.
 - **Layouts as pages.** PAGE ← and PAGE → cycle the saved layouts (the keys
-  read out where you are, like 2/3), HOME jumps to the deck's default layout,
-  and the key editor's **This deck's pages** section binds a key straight to
+  read out where you are, like 2/3), HOME jumps to the home page (**Set home**
+  picks it), and the key editor's **This deck's pages** section binds a key straight to
   any one page: the key wears that page's name and lights while you are on
   it. The default layouts ship with page keys on every deck size, so
   multi-page setups work out of the box.
@@ -287,15 +298,18 @@ Everything is customizable, live:
 - **Setup wizard.** The five step first-run tour lives behind **Setup wizard**
   in the toolbar, with live status dots for the deck, Micochondria, and OBS.
   The screen follows the active Cueola theme.
+- **Deck settings (the gear).** Theme, **Key rims** On or Off, **Dials** Normal
+  or Reversed (for a deck whose dials run backwards), **OBS Studio**,
+  Outrangutan for Mac, **Enable clipboard** for the PASTE key, and
+  **Diagnostics** (what the hardware reports).
 
 ## OBS control
 
 OBS Studio 28+ ships obs-websocket. In OBS: Tools, WebSocket Server Settings,
 enable the server (default port `4455`), and copy the password if one is set.
-In KeyWi Bird, enter `ws://localhost:4455` and the password in the OBS Studio
-row below the deck (or
-the wizard's OBS step) and click **Connect OBS**. KeyWi Bird reconnects
-automatically next time.
+In KeyWi Bird, open **Deck settings** (the gear) ▸ **OBS Studio** (or the
+wizard's OBS step), enter `ws://localhost:4455` and the password, and click
+**Connect OBS**. KeyWi Bird reconnects automatically next time.
 
 Available OBS actions (all remappable): STREAM (start/stop), REC (start/stop),
 REC pause, V-CAM (virtual camera), CLIP (save replay buffer), OBS TAKE (studio

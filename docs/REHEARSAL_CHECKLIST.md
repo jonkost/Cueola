@@ -1,6 +1,6 @@
-# Cueola — Dress Rehearsal Checklist
+# Cueola Dress Rehearsal Checklist
 
-A scripted end-to-end rehearsal that reproduces the **AVT Lab** show conditions —
+A scripted end-to-end rehearsal that reproduces the **AVT Lab** show conditions:
 the exact situations that failed in the live run this build was hardened against.
 Run it start to finish before any real show. Every step lists its **expected**
 result; anything else goes on the punch list (P0 blocks release · P1 fix now ·
@@ -21,16 +21,16 @@ One extra device (phone/laptop) for the Flowmingo follower.
       `bars-4x3.mp4`, `bars-9x16.mp4`, `still-16x9.png`. **Expected:** all import with
       correct durations/dimensions in the Inspector.
 - [ ] Import `corrupt-truncated.mp4` and `unplayable-prores.mov`. **Expected:** both
-      **rejected at import** with a clear toast — they must never become cues.
+      **rejected at import** with a clear toast. They must never become cues.
 - [ ] Drop `sfx-ding.wav` on an SFX pad; name it. Link rundown cells: segment-3 playback
-      cell → the 16:9 cue (AUTO on advance); one audio cell → the SFX pad.
+      cell → the 16:9 cue (tick **Roll this clip on TAKE**); one audio cell → the SFX pad.
 - [ ] Open the **output window**, drag to the second display, fullscreen.
 - [ ] On the second device, open Flowmingo with the show code. **Expected:** script
       loads; talent heartbeat shows **Connected** in Cueola.
 
 ## 1 · Preflight (2 min)
 
-- [ ] Settings ▸ Production ▸ **Preflight**. **Expected:** every row green —
+- [ ] Settings ▸ Production ▸ **Preflight**. **Expected:** every row green:
       script, talent prompter, cloud sync, playout links, playout media
       (decodable + dimensions known), SFX banks, cloud round-trip (< ~1 s), theme assets.
 - [ ] **Failure drill part 1:** in Outrangutan, delete the 4:3 cue’s media from the
@@ -40,13 +40,14 @@ One extra device (phone/laptop) for the Flowmingo follower.
 
 ## 2 · Full run (15 min)
 
-- [ ] **Go Live** (via the preflight panel — button should read “Go Live”, all green).
-- [ ] Advance start → finish with **arrow keys only** (Script Op panel open the whole
-      time — the AVT “second computer” fix). **Expected:** follower mirrors every
-      advance within ~1 s; no blanking, flashing, or scroll jumps anywhere; each media
+- [ ] **Go Live** (via the preflight panel: the button should read “Go Live”, all green).
+- [ ] TAKE start → finish with the **arrow keys only** (Script Op panel open the whole
+      time, the AVT “second computer” fix). **Expected:** follower mirrors every
+      TAKE within ~1 s; no blanking, flashing, or scroll jumps anywhere; each media
       cue letterboxes/pillarboxes correctly (16:9, 4:3, 9:16, still).
 - [ ] Entering the segment-3 “Questions” row: **Expected:** the linked 16:9 cue
-      **auto-fires** (AUTO badge), ON AIR shows in the cell, count-out clock runs.
+      **rolls on TAKE** (the cell's TAKE chip; a pre-roll count shows first if set),
+      ON AIR shows in the cell, count-out clock runs.
 - [ ] Fire the **SFX** button on the live row. **Expected:** effectively instant sound
       (same tab); follower shows the transient green “SFX · name” chip.
 - [ ] **Pause/resume mid-video:** `P` mid-clip, wait 5 s, `G`. **Expected:** playback
@@ -62,14 +63,14 @@ One extra device (phone/laptop) for the Flowmingo follower.
       one non-blocking toast, cue marked ⚠, the **next GO fires normally**, and the
       failure appears in the show log with a timestamp.
 - [ ] Mid-run, force-quit the browser (⌘Q / kill). Reopen Cueola. **Expected:** the
-      entry page offers **Resume** — one click returns to the live screen at the same
+      entry page offers **Resume**: one click returns to the live screen at the same
       row with Script Op reopened; Outrangutan re-enters with its recovery bar
       (“Standby at m:ss”) and GO resumes from the persisted offset.
 
 ## 3 · Post-show (3 min)
 
 - [ ] Settings ▸ Production ▸ **Show Log**. **Expected:** a coherent timestamped
-      story of the run — advances, GOs, the pause/resume with offsets, SFX fires,
+      story of the run: TAKEs, GOs, the pause/resume with offsets, SFX fires,
       the failure drill error, the resume event. **Export .txt** produces a
       readable file.
 - [ ] Save the rundown (**Cmd+S**) → `ShowName.cueola`; edit a row; **Cmd+S** again.
@@ -79,37 +80,43 @@ One extra device (phone/laptop) for the Flowmingo follower.
 - [ ] Leave the session deliberately (Exit → front page). Reopen the app.
       **Expected:** **no** resume banner (intentional leave never offers recovery).
 
-## 4 · v2.1 drills (10 min) — *(added Phase 11, 2026-07)*
+## 4 · Show drills (10 min, updated for 3.0)
 
-- [ ] **Link strip death + recovery.** Close the talent window mid-run.
-      **Expected:** TALENT goes dark within seconds; System status shows the
-      failure truthfully; **Recover Flowmingo** opens a fresh talent window and
-      the strip returns within seconds of it connecting.
-- [ ] **Automatic call.** ADVANCE onto a row with linked media (arrow keys or
-      the on-screen GO button — NOT the G key, which fires instantly).
-      **Expected:** the call banner runs **READY → TRACK → ROLL → TAKE** and
-      the clip fires; run it again and press **S** mid-call — nothing fires,
-      banner clears.
-- [ ] **Manual TAKE.** Toggle **Manual TAKE (armed call)**. **Expected:**
-      advancing onto the row arms the clip (banner holds), **TAKE · G**
-      fires it.
-- [ ] **Playout ARMED proof.** Fresh session, media linked, before any GO.
-      **Expected:** PLAYOUT reads **· NOT ARMED** and preflight's "Playout
-      first GO" row explains why; after arming, first GO fires media (sound
-      included) with no second press.
+- [ ] **Status rail death + recovery.** Close the talent window mid-run.
+      **Expected:** within seconds the **System status** rail opens and its
+      Flowmingo row turns red and says why; **Recover Flowmingo** opens a
+      fresh talent window and the rail closes once it connects.
+- [ ] **Roll on TAKE.** Link a clip with **Roll this clip on TAKE** ticked and
+      a 3 second **Pre-roll**, then TAKE onto that cue (TAKE button or right
+      arrow). **Expected:** the banner counts **ROLLING IN 3, 2, 1** and the
+      clip rolls. Run it again and press **S** during the count: nothing rolls
+      and the banner says **CANCELLED**. Once more and press **G**: it rolls
+      at once.
+- [ ] **Manual clip.** Untick **Roll this clip on TAKE** on a linked cue.
+      **Expected:** the cell shows **MANUAL**, a TAKE onto it rolls nothing,
+      and the **GO** button on its card in **Focus** view fires it.
+- [ ] **First clip ready.** Fresh session, media linked, before any TAKE.
+      **Expected:** preflight's **Playout first GO** row says whether the
+      first clip is ready (press **Arm again** if it offers it); the first TAKE
+      then rolls the clip with sound, no second press.
+- [ ] **Director hand-off.** On the rundown bar, tap the **DIRECTOR** chip and
+      pick a signed-in student. **Expected:** the student sees "You are the
+      director." and a **Go Live** button. While the student is connected,
+      your TAKE is off; **Take back** returns it to you.
 - [ ] **Question lane.** Paste a line from a real chat, **Enter**.
       **Expected:** talent shows the QUESTION card inside the bounded band
       (script still readable); **Esc** clears it everywhere.
-- [ ] **Overlay toggles, both directions.** Question / **NTSC Bars** → "Back on
-      air" / clock chips from BOTH operator surfaces. **Expected:** every
-      on/off lands on talent, script readable throughout.
+- [ ] **Overlay toggles, both directions.** **Tech Difficulty** / **Color bars**
+      → "Back on air", a pushed Question card, and the clock chips, from Script
+      Op, the pop-out and Flowmingo Op. **Expected:** every on/off lands on
+      talent, script readable throughout.
 - [ ] **Rival operator.** Open a second operator window and take the prompter.
-      **Expected:** first window toasts the takeover, badge flips to
-      FOLLOWING — no silent split-brain.
+      **Expected:** the first window toasts "Another operator window took the
+      prompter" and follows it. No silent split-brain.
 - [ ] **Cloud restore vs a stale client.** Leave one browser on an old rundown
       state (offline), restore a cloud snapshot from Session History on the
       other. **Expected:** restore wins everywhere when the stale client
-      reconnects — re-stamped, never reverted; a recovery copy of the
+      reconnects: re-stamped, never reverted; a recovery copy of the
       pre-restore state appears in History.
 - [ ] **Instructor Sign In.** Admin tools locked until sign-in; wrong password
       refused; signed-in dashboard lists sessions and codes.
