@@ -69,6 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // The Dock tile always shows the app's own icon, even if the Dock
+        // remembered an older one.
+        if let icon = Bundle.main.image(forResource: "Outrangutan") { NSApp.applicationIconImage = icon }
         (Appearance(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system).apply()
         // Test mode stays in the background so it never catches keys someone
         // is typing in another app.

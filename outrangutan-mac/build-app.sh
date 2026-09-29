@@ -19,4 +19,9 @@ cp Resources/Outrangutan.icns "$APP/Contents/Resources/Outrangutan.icns"
 # Sign it for this Mac. Good enough to run on your own machines.
 codesign --force --sign - "$APP"
 
+# Tell the Mac the app changed, so Finder and the Dock show the current icon
+# instead of one they remembered from an older build.
+touch "$APP"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
+
 echo "Built $APP"
