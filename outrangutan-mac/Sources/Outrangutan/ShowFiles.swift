@@ -66,6 +66,9 @@ final class ShowFiles: ObservableObject {
         let nCues = (show["cues"] as? [Any])?.count ?? 0, nPads = (show["pads"] as? [Any])?.count ?? 0
         askToReplace(message: "Open \u{201C}\(url.deletingPathExtension().lastPathComponent)\u{201D}?",
                      info: "It has \(Self.count(nCues, "cue")) and \(Self.count(nPads, "pad")). It replaces the show on this Mac. Its media is copied to the Outrangutan folder in Movies.") { [self] in
+            // Stop now, not whenever the copying finishes (which could be
+            // minutes later, in the middle of whatever is on air then).
+            engine.allStop()
             Task { await self.load(url, payload: payload) }
         }
     }
@@ -231,7 +234,9 @@ final class ShowFiles: ObservableObject {
             "kind": "outrangutan-show", "app": "outrangutan", "schema": 3, "container": "zip",
             "exportedAt": Int(Date().timeIntervalSince1970 * 1000), "savedBy": "Outrangutan for Mac",
             "show": ["cues": cues, "pads": pads, "banks": banks, "currentBankId": engine.pads.currentBankID,
-                     "outputs": outputs, "selectedId": engine.standbyCue?.wireID ?? NSNull()] as [String: Any],
+                     "outputs": outputs, "selectedId": engine.standbyCue?.wireID ?? NSNull(),
+                     // The web app fills in its other settings with its defaults.
+                     "settings": ["standbyText": engine.standbyText, "multiTrigger": engine.pads.multiTrigger]] as [String: Any],
             "mediaIndex": mediaIndex,
         ]
         let manifest = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -328,7 +333,7 @@ final class ShowFiles: ObservableObject {
             return p
         }
         engine.replaceShow(cues: cues, pads: placed, banks: banks, multiTrigger: settings["multiTrigger"] as? Bool)
-        if let words = settings["standbyText"] as? String { engine.standbyText = words }
+        engine.standbyText = settings["standbyText"] as? String ?? ""
         if let selected = Wire.string(show["selectedId"]), let c = engine.cue(wireID: selected) { engine.standbyID = c.id }
         currentFile = url.pathExtension.lowercased() == ShowArchive.fileExtension ? url : nil
         engine.log.add(.file, "Opened \u{201C}\(url.lastPathComponent)\u{201D}: \(Self.count(cues.count, "cue")), \(Self.count(placed.count, "pad"))")

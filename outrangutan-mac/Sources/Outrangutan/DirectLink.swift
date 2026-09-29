@@ -69,7 +69,6 @@ final class DirectLink {
         let params = NWParameters.tcp
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         params.requiredInterfaceType = .loopback
-        params.allowLocalEndpointReuse = true
         guard let port = NWEndpoint.Port(rawValue: Self.port), let listener = try? NWListener(using: params, on: port) else {
             problem = "The direct link could not start."
             return
@@ -122,12 +121,14 @@ final class DirectLink {
         conn.receiveMessage { [weak self] data, context, _, error in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if let data, !data.isEmpty,
-                   let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata,
-                   meta.opcode == .text {
+                let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+                if let data, !data.isEmpty, meta?.opcode == .text {
                     self.handle(data, from: conn)
                 }
-                if error == nil { self.receive(conn) } else { conn.cancel() }
+                // The page closed (a close frame, or the end of the stream):
+                // stop listening, or the next read would return at once, forever.
+                let ended = meta?.opcode == .close || (data == nil && context?.isFinal == true)
+                if error == nil && !ended { self.receive(conn) } else { conn.cancel() }
             }
         }
     }

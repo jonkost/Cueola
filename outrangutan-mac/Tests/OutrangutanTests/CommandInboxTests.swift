@@ -188,6 +188,17 @@ final class DirectLinkRuleTests: XCTestCase {
         XCTAssertFalse(ack.result.ok)
     }
 
+    func testAnOldCloudVolumeNeverUndoesADirectOne() {
+        let inbox = CommandInbox(sender: "mac")
+        var levels: [Double] = []
+        let old: [String: Any] = ["gain": ["id": "g_old", "v": 0.9, "sender": "flowmingo_x"]]
+        _ = inbox.handle(old, now: 1000, run: { _ in .done }, panic: {}, gain: { levels.append($0) })   // joined: baseline
+        inbox.directGain(id: "g_direct", value: 0.3) { levels.append($0) }
+        _ = inbox.handle(old, now: 1200, run: { _ in .done }, panic: {}, gain: { levels.append($0) })
+        _ = inbox.handle(old, now: 1400, run: { _ in .done }, panic: {}, gain: { levels.append($0) })
+        XCTAssertEqual(levels, [0.3], "the stale 0.9 in the record must not come back")
+    }
+
     func testADirectVolumeIsNotAppliedAgainFromTheCloud() {
         let inbox = CommandInbox(sender: "mac")
         var levels: [Double] = []

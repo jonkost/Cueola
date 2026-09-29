@@ -270,6 +270,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `fixes`: a still landing mid-dissolve, a pad added while a bed plays, an
+  output whose screen is missing, the crash note after opening a show, and
+  standby words in a show file.
 - `multi`: skip, color, duplicate and remove two cues at once, each undone
   in one step.
 - `help`: a picture of the Help window.

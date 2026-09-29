@@ -43,14 +43,15 @@ enum SoundTap {
                 guard MTAudioProcessingTapGetSourceAudio(tap, frames, buffers, flagsOut, nil, framesOut) == noErr else { return }
                 let box = Unmanaged<PeakBox>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
                 // The tap hands over 32-bit float sound, one buffer per side.
-                var peaks: [Float] = []
+                // Two numbers, no arrays: nothing is allocated on the sound thread.
+                var left: Float = -1, right: Float = -1
                 for buffer in UnsafeMutableAudioBufferListPointer(buffers) {
                     guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
                     var peak: Float = 0
                     vDSP_maxmgv(data, 1, &peak, vDSP_Length(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size))
-                    peaks.append(peak)
+                    if left < 0 { left = peak } else if right < 0 { right = peak }
                 }
-                if let l = peaks.first { box.store(l, peaks.count > 1 ? peaks[1] : l) }
+                if left >= 0 { box.store(left, right >= 0 ? right : left) }
             })
         var tap: MTAudioProcessingTap?
         guard MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap) == noErr,

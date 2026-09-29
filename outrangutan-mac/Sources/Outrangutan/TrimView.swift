@@ -57,16 +57,19 @@ final class MediaStrips: ObservableObject {
         var peaks = [Float](repeating: 0, count: buckets)
         var index = 0
         while let sample = out.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(sample) {
-            var size = 0
-            var pointer: UnsafeMutablePointer<Int8>?
-            guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &size, dataPointerOut: &pointer) == noErr,
-                  let raw = pointer else { continue }
-            raw.withMemoryRebound(to: Float.self, capacity: size / 4) { floats in
-                for i in 0..<(size / 4) {
-                    let b = min(buckets - 1, index * buckets / total)
-                    peaks[b] = max(peaks[b], abs(floats[i]))
-                    index += 1
-                }
+            // Copy the samples out: a block buffer can come in pieces.
+            let size = CMBlockBufferGetDataLength(block)
+            let count = size / MemoryLayout<Float>.size
+            guard count > 0 else { continue }
+            var floats = [Float](repeating: 0, count: count)
+            let status = floats.withUnsafeMutableBytes {
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count * MemoryLayout<Float>.size, destination: $0.baseAddress!)
+            }
+            guard status == noErr else { continue }
+            for v in floats {
+                let b = min(buckets - 1, index * buckets / total)
+                peaks[b] = max(peaks[b], abs(v))
+                index += 1
             }
         }
         let top = max(peaks.max() ?? 1, 0.0001)

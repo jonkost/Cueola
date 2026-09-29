@@ -28,7 +28,12 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
     /// already open.
     func open(on screenName: String?, title: String = "Outrangutan Output") {
         let control = NSApp.mainWindow?.screen ?? NSScreen.main
-        let target = NSScreen.screens.first { $0.localizedName == screenName } ?? NSScreen.screens.first { $0 != control }
+        // A picked screen that is missing never falls back to some other
+        // screen: that could be another output's screen. It opens as a
+        // window instead, until the screen is back.
+        let target = screenName != nil
+            ? NSScreen.screens.first { $0.localizedName == screenName }
+            : NSScreen.screens.first { $0 != control }
         window?.orderOut(nil)
 
         let win: NSWindow

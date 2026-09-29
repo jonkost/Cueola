@@ -127,7 +127,16 @@ final class PadBoard: ObservableObject {
     /// Editing is locked for the show: pads still play.
     @Published var locked = false
     /// Pads sounding now: when each started and how long it runs (nil loops).
-    @Published private(set) var sounding: [String: (start: Date, length: Double?)] = [:]
+    @Published private(set) var sounding: [String: (start: Date, length: Double?)] = [:] {
+        didSet {
+            // Pads waiting to load get their sound path as soon as it is quiet.
+            if sounding.isEmpty && pendingLoad { DispatchQueue.main.async { [weak self] in self?.loadPending() } }
+        }
+    }
+    /// A pad was added while others sounded. Wiring it in means restarting
+    /// the pads' audio engine, which would cut them, so it waits.
+    private var pendingLoad = false
+    private var reloads: [String: DispatchWorkItem] = [:]
 
     /// The pads' level, for the meter.
     let meter = LevelMeter()
@@ -197,7 +206,9 @@ final class PadBoard: ObservableObject {
         guard let pad = pad(id: id) else { return .refused("pad is not on this Mac") }
         guard pad.fileIsThere else { return .refused("\(pad.name) has no media on this Mac") }
         startAudio()
-        guard let ch = channel(for: pad), let buffer = ch.buffer else { return .refused("\(pad.name) would not load") }
+        guard let ch = channel(for: pad), let buffer = ch.buffer else {
+            return .refused(pendingLoad ? "\(pad.name) is still loading; it plays once the other pads stop" : "\(pad.name) would not load")
+        }
         if !multiTrigger { pads.filter { $0.id != id }.forEach { stop($0.id) } }
         if pad.retrigger == .toggle && ch.isSounding { stop(id); return .done }
         if pad.retrigger == .restart || !multiTrigger { ch.stopAll() }
@@ -411,7 +422,7 @@ final class PadBoard: ObservableObject {
             if pad.trimIn != before.trimIn || pad.trimOut != before.trimOut {
                 ch.stopAll()
                 sounding[id] = nil
-                ch.buffer = PadChannel.load(pad)
+                reloadSoon(pad)
             }
         }
     }
@@ -528,6 +539,12 @@ final class PadBoard: ObservableObject {
     @discardableResult
     private func channel(for pad: Pad, rewire: Bool = true) -> PadChannel? {
         if let ch = channels[pad.id] { return ch }
+        // Never restart the pads' engine under a sounding pad (a music bed,
+        // mid-show). The new pad loads once they are quiet.
+        if rewire && !sounding.isEmpty {
+            pendingLoad = true
+            return nil
+        }
         guard pad.fileIsThere, let buffer = PadChannel.load(pad) else { return nil }
         let ch = PadChannel(engine: audio, output: bus, format: buffer.format)
         ch.buffer = buffer
@@ -536,6 +553,35 @@ final class PadBoard: ObservableObject {
         channels[pad.id] = ch
         if rewire { self.rewire() }
         return ch
+    }
+
+    /// Loads every pad that waited for quiet, then wires them in.
+    private func loadPending() {
+        guard pendingLoad, sounding.isEmpty else { return }
+        pendingLoad = false
+        var added = false
+        for p in pads where channels[p.id] == nil && p.fileIsThere {
+            if channel(for: p, rewire: false) != nil { added = true }
+        }
+        if added { rewire() }
+    }
+
+    /// A trim drag sends many changes: the sound reloads once, a moment
+    /// after the last one, off the main thread.
+    private func reloadSoon(_ pad: Pad) {
+        reloads[pad.id]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let buffer = PadChannel.load(pad)
+                DispatchQueue.main.async {
+                    guard let self, let now = self.pad(id: pad.id), now.trimIn == pad.trimIn, now.trimOut == pad.trimOut,
+                          let ch = self.channels[pad.id] else { return }
+                    ch.buffer = buffer
+                }
+            }
+        }
+        reloads[pad.id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// New sound paths only go live when the audio engine starts, so after

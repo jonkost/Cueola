@@ -21,6 +21,7 @@ struct OutrangutanApp: App {
                 MonitorToggles()
             }
             PlaybackCommands(engine: appDelegate.engine)
+            CommandGroup(replacing: .undoRedo) { UndoButtons(engine: appDelegate.engine) }
             CommandGroup(after: .pasteboard) {
                 Divider()
                 DuplicateButton(engine: appDelegate.engine)
@@ -82,6 +83,40 @@ struct FileCommands: Commands {
                 Button("Show the Show File in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
             }
         }
+    }
+}
+
+/// Edit menu: Undo and Redo, sent up the usual path so text boxes keep
+/// their own undo. Undo waits while editing is locked.
+struct UndoButtons: View {
+    @ObservedObject var engine: Engine
+    /// Refreshed only when an edit, an undo or a redo happens. (Never on
+    /// the undo manager's checkpoint: it fires every turn of the run loop,
+    /// and redrawing the menu on it would spin forever.)
+    @State private var title = (undo: "Undo", redo: "Redo")
+
+    var body: some View {
+        Group {
+            Button(title.undo) {
+                if !NSApp.sendAction(Selector(("undo:")), to: nil, from: nil) { engine.undoManager?.undo() }
+            }
+            .keyboardShortcut("z")
+            .disabled(engine.locked)
+            Button(title.redo) {
+                if !NSApp.sendAction(Selector(("redo:")), to: nil, from: nil) { engine.undoManager?.redo() }
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .disabled(engine.locked)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidCloseUndoGroup)) { refresh($0) }
+        .onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidUndoChange)) { refresh($0) }
+        .onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidRedoChange)) { refresh($0) }
+    }
+
+    private func refresh(_ note: Notification) {
+        guard let um = engine.undoManager, note.object as? UndoManager === um else { return }
+        let next = (undo: um.canUndo ? um.undoMenuItemTitle : "Undo", redo: um.canRedo ? um.redoMenuItemTitle : "Redo")
+        if next != title { title = next }
     }
 }
 

@@ -106,6 +106,7 @@ public final class CommandInbox {
     private var lastCmdId: String?
     private var lastGainId: String?
     private var lastPanicId: String?
+    private var directGainIds: [String] = []
     private var clockOffset: Double?
     // These memories last as long as the app runs, on purpose: rejoining a
     // show must never replay a fire that already ran here.
@@ -156,10 +157,11 @@ public final class CommandInbox {
             return acks
         }
 
-        // Master volume rides its own field.
+        // Master volume rides its own field. A level that already came over
+        // the direct link is not applied again.
         if let gainId, gainId != lastGainId, Wire.string(g?["sender"]) != sender {
             lastGainId = gainId
-            if let v = Wire.number(g?["v"]), v.isFinite { gain(min(1.2, max(0, v))) }
+            if !directGainIds.contains(gainId), let v = Wire.number(g?["v"]), v.isFinite { gain(min(1.2, max(0, v))) }
         }
 
         // The panic lane runs before the queue: kill first, then the next move.
@@ -215,8 +217,12 @@ public final class CommandInbox {
     /// A volume change from the direct link. Remembers its id, so the same
     /// change arriving through the cloud is not applied again.
     public func directGain(id: String, value: Double, gain: (Double) -> Void) {
-        guard !id.isEmpty, id != lastGainId, value.isFinite else { return }
-        lastGainId = id
+        // The cloud's own gain id is left alone: the browser skips the cloud
+        // write while the direct link is up, so the record keeps its older
+        // level, and that must never look new.
+        guard !id.isEmpty, !directGainIds.contains(id), value.isFinite else { return }
+        directGainIds.append(id)
+        if directGainIds.count > 64 { directGainIds.removeFirst() }
         gain(min(1.2, max(0, value)))
     }
 

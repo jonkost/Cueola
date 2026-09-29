@@ -291,22 +291,30 @@ final class Engine: ObservableObject {
         // A screen plugged in or out (a bumped HDMI cable): put every open
         // output where it belongs again, never over the controls.
         lastScreens = NSScreen.screens.map(\.localizedName)
+        lastFrames = NSScreen.screens.map(\.frame)
         screenWatch = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                              object: nil, queue: .main) { [weak self] _ in
-            self?.screensChanged(NSScreen.screens.map(\.localizedName))
+            guard let self else { return }
+            // The same screens at a new size or place (a quick HDMI
+            // re-handshake) also need the outputs placed again.
+            let frames = NSScreen.screens.map(\.frame)
+            let moved = frames != self.lastFrames
+            self.lastFrames = frames
+            self.screensChanged(NSScreen.screens.map(\.localizedName), force: moved)
         }
     }
 
     private var lastScreens: [String] = []
+    private var lastFrames: [CGRect] = []
     private var screenWatch: NSObjectProtocol?
 
     /// The screens changed. Each open output is placed again: on its own
     /// screen if it is there, otherwise as a normal window on the control
     /// screen, so a full-screen output can never land on top of GO.
-    func screensChanged(_ now: [String]) {
+    func screensChanged(_ now: [String], force: Bool = false) {
         let gone = lastScreens.filter { !now.contains($0) }, back = now.filter { !lastScreens.contains($0) }
         lastScreens = now
-        guard !gone.isEmpty || !back.isEmpty else { return }
+        guard !gone.isEmpty || !back.isEmpty || force else { return }
         for name in gone { log.add(.problem, "Screen \u{201C}\(name)\u{201D} was disconnected") }
         for name in back { log.add(.output, "Screen \u{201C}\(name)\u{201D} connected") }
         for config in outputs where openOutputs.contains(config.id) {
@@ -378,6 +386,9 @@ final class Engine: ObservableObject {
             go()
         }
     }
+
+    /// Where an output is placed, for tests.
+    func debugPlacement(_ id: Int) -> String { windows[id]?.placement ?? "closed" }
 
     /// Moves the standby up or down the list (the arrow keys). Picking what
     /// stands by is not an edit, so it works while locked.
@@ -606,6 +617,9 @@ final class Engine: ObservableObject {
             image = loaded
         }
         let slot: PictureSlot = stillCue == nil ? stillSlot : (stillSlot == .s1 ? .s2 : .s1)
+        // An earlier still may still be dissolving away on this layer: its
+        // clean-up must not blank the new one when it ends.
+        fader.cancel("still-out-\(slot.rawValue)")
         let dissolve = cue.xfade > 0 && (pictureDeck != nil || stillCue != nil)
         let startLevel: Double = (dissolve || cue.fadeIn > 0) ? 0 : 1
         let targets = views(for: cue)
@@ -944,13 +958,6 @@ final class Engine: ObservableObject {
 
     private func restore(_ snap: Snapshot, name: String) {
         let now = Snapshot(cues: cues, pads: pads.pads, banks: pads.banks)
-        // Undoing is an edit too: while locked it waits, and stays on the list.
-        if locked {
-            undoManager?.registerUndo(withTarget: self) { $0.restore(now, name: name) }
-            undoManager?.setActionName(name)
-            notice = "Editing is locked. Unlock it to undo."
-            return
-        }
         restoring = true
         defer { restoring = false; lastUndo = nil }
         undoManager?.registerUndo(withTarget: self) { $0.restore(now, name: name) }
@@ -974,8 +981,11 @@ final class Engine: ObservableObject {
     func replaceShow(cues newCues: [Cue], pads newPads: [Pad], banks: [PadBank], multiTrigger: Bool?) {
         stopEverything()
         durations = [:]
-        // A new or opened show starts a fresh undo history, like any Mac app.
+        // A new or opened show starts a fresh undo history, like any Mac app,
+        // and a crash note about the old show no longer applies.
         undoManager?.removeAllActions()
+        recovered = nil
+        pendingResume = nil
         cues = newCues
         standbyID = newCues.first { $0.armed }?.id ?? newCues.first?.id
         pads.replace(banks: banks, pads: newPads, multiTrigger: multiTrigger)

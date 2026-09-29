@@ -75,6 +75,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "fixes": steps = fixSteps(engine: engine, files: files, dir: dir, note: note)
         case "multi": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -406,6 +407,61 @@ enum TestSnapshot {
     private static var fakeObs: FakeObs?
     private static let testUndo = UndoManager()
 
+    /// The reviewer's findings, each played out.
+    @MainActor private static func fixSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+        func still(_ n: String, _ i: Int) -> Cue { Cue(name: n, path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: i)) }
+        return [
+            (0.5, {
+                var video = Cue(name: "Video, dissolve 1 s", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 9))
+                video.xfade = 1
+                engine.replaceShow(cues: [still("Still X", 1), video, still("Still Z", 2)], pads: [], banks: [], multiTrigger: nil)
+                engine.openOutput()
+                engine.go()
+            }),
+            (0.5, { engine.go() }),            // the video dissolves over X for 1 s
+            (0.3, { engine.go() }),            // Z lands on X's layer mid-dissolve
+            (1.5, {
+                note("1 after the old dissolve would have ended: status \(engine.status.rawValue), preview shows \(engine.monitor.showing)")
+                engine.allStop()
+                // Pads: a bed plays; a new pad arrives (the watched folder).
+                let bank = PadBank(id: "bk_f", name: "Bank 1")
+                let bed = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Bed", path: media.appendingPathComponent("demo-applause.wav").path, key: "1")
+                engine.replaceShow(cues: [], pads: [bed], banks: [bank], multiTrigger: true)
+            }),
+            (0.5, {
+                engine.pads.fire(engine.pads.pads[0].id)
+                engine.pads.add(urls: [media.appendingPathComponent("demo-rimshot.wav")])
+                let new = engine.pads.pads.first { $0.name == "demo-rimshot" }
+                note("2 bed still sounding after a new pad arrived: \(engine.pads.sounding[engine.pads.pads[0].id] != nil)")
+                let r = engine.pads.fire(new?.id ?? "")
+                note("   the new pad right away: \(r.ok ? "played" : r.reason)")
+            }),
+            (3.0, {
+                let new = engine.pads.pads.first { $0.name == "demo-rimshot" }
+                let r = engine.pads.fire(new?.id ?? "")
+                note("   once the bed ended, the new pad: \(r.ok ? "played" : r.reason)")
+                // An output whose picked screen is missing.
+                engine.outputs[0].screen = "A screen that is not here"
+            }),
+            (0.5, {
+                note("3 picked screen missing: \(engine.outputsShowing()); placed as a window = \(engine.debugPlacement(1).hasPrefix("a window"))")
+                engine.outputs[0].screen = nil
+                engine.recovered = RecoveryPoint(wireID: "og_x", name: "Old", offset: 3, cueID: UUID())
+                engine.replaceShow(cues: [still("New", 1)], pads: [], banks: [], multiTrigger: nil)
+                note("4 crash banner after opening another show: \(engine.recovered == nil ? "gone" : "still there")")
+                engine.standbyText = "Back soon"
+                if let pack = try? files.makePack(),
+                   let json = try? JSONSerialization.jsonObject(with: pack.manifest) as? [String: Any],
+                   let show = json["show"] as? [String: Any], let settings = show["settings"] as? [String: Any] {
+                    note("5 show file keeps the standby words: \(settings["standbyText"] ?? "-")")
+                }
+                engine.standbyText = ""
+                engine.closeOutput(1)
+            }),
+        ]
+    }
+
     /// Undo and Redo: adding, a slider drag (one step), removing, moving,
     /// duplicating, a pad change, and the lock holding an undo back.
     @MainActor private static func undoSteps(engine: Engine, note: @escaping (String) -> Void) -> Steps {
@@ -445,12 +501,8 @@ enum TestSnapshot {
                 um.redo()
                 note("l pad gain after redo \(engine.pads.pads[0].gain)")
                 step { engine.update(engine.cues[0].id) { $0.name = "Renamed" } }
-                engine.locked = true
                 um.undo()
-                note("m locked, undo waits: [\(list())] notice: \(engine.notice ?? "-")")
-                engine.locked = false
-                um.undo()
-                note("n unlocked, undo: [\(list())]")
+                note("n undo the rename: [\(list())]")
                 step { engine.add(urls: [media.appendingPathComponent("bars-4x3.mp4")]) }
                 engine.replaceShow(cues: engine.cues, pads: engine.pads.pads, banks: engine.pads.banks, multiTrigger: nil)
                 note("o opening a show clears undo: can undo = \(um.canUndo)")

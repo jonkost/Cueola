@@ -19,6 +19,7 @@ final class WatchFolder: ObservableObject {
     private var seen: Set<String> = []
     private var growing: [String: (size: Int, steady: Int)] = [:]   // size at the last look, and how many looks it held
     private var checking: Set<String> = []
+    private var looking = false
     private var broken: [String: Int] = [:]      // would not open at this size
     private var timer: Timer?
     private static var off: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
@@ -85,18 +86,30 @@ final class WatchFolder: ObservableObject {
         timer = t
     }
 
-    /// One look at the folder.
+    /// One look at the folder. The listing runs off the main thread, so a
+    /// slow network or cloud folder can never hold up GO.
     func look() {
         // Editing is locked for the show: new files wait until it unlocks.
-        guard let folder, !engine.locked else { return }
-        for url in Self.mediaFiles(in: folder) {
+        guard let folder, !engine.locked, !looking else { return }
+        looking = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let found: [(url: URL, size: Int, placeholder: Bool)] = Self.mediaFiles(in: folder).map { url in
+                let v = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
+                let placeholder = v?.ubiquitousItemDownloadingStatus.map { $0 != .current && $0 != .downloaded } ?? false
+                return (url, v?.fileSize ?? 0, placeholder)
+            }
+            DispatchQueue.main.async { self?.consider(found, in: folder) }
+        }
+    }
+
+    private func consider(_ found: [(url: URL, size: Int, placeholder: Bool)], in scanned: URL) {
+        looking = false
+        guard folder == scanned else { return }
+        for (url, size, placeholder) in found {
             let name = url.lastPathComponent
             guard !seen.contains(name), !checking.contains(name) else { continue }
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
             // A cloud file that is still only a placeholder: wait for it.
-            if let status = values?.ubiquitousItemDownloadingStatus, status != .current, status != .downloaded { continue }
-            let size = values?.fileSize ?? 0
-            guard size > 0 else { continue }
+            guard !placeholder, size > 0 else { continue }
             // A file that would not open waits until it changes.
             if broken[name] == size { continue }
             // The same size three looks in a row, then a real test: it must open.
@@ -108,7 +121,7 @@ final class WatchFolder: ObservableObject {
                 let ok = await Self.opens(url)
                 guard let self else { return }
                 self.checking.remove(name)
-                guard self.folder == folder else { return }
+                guard self.folder == scanned else { return }
                 if ok { self.take(url) } else { self.broken[name] = size }
             }
         }
