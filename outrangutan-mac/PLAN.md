@@ -70,7 +70,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Command queue, "got it" replies, panic lane, master volume from the deck | Built (step 5) | Every rule has its own test. |
 | Fix requests from the rundown, preflight report | Built (step 5) | Needs no clicks on the Mac: sound and outputs are always ready. |
 | KeyWi Bird playback keys and strip | Built (step 5, through the cloud). Step 6: direct, same Mac | |
-| Show log, show file save and open, print cue sheet, crash recovery | Step 6 | |
+| Show file save and open (.ogshow, opens in the web app too), crash recovery | Built (step 6) | Opened media is copied to Movies, Outrangutan. |
+| Show log, print cue sheet | Step 6 | |
 | Keyboard shortcuts you can change, lock, wall clock | Step 6 | |
 | MIDI | Step 6 | Uses the Mac's own MIDI system. |
 | Waveform and vectorscope | Step 7 | Reads every frame, not a sample. |

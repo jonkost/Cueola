@@ -162,10 +162,24 @@ struct Cue: Identifiable, Codable, Equatable {
         armed = try c.decodeIfPresent(Bool.self, forKey: .armed) ?? true
     }
 
+    /// Milliseconds as 13 digits, so ids sort in the order they were made.
+    /// (A "%d" format keeps only 32 bits, which made negative ids that
+    /// sorted backwards.)
+    static func padded(_ ms: Int) -> String {
+        let digits = String(max(0, ms))
+        return String(repeating: "0", count: max(0, 13 - digits.count)) + digits
+    }
+
+    /// True for an id made by that old mistake.
+    static func isBackwardsID(_ id: String?) -> Bool {
+        guard let id else { return false }
+        return id.hasPrefix("og_-") || id.hasPrefix("p_-")
+    }
+
     static func newWireID(offsetMs: Int = 0) -> String {
         let ms = Int(Date().timeIntervalSince1970 * 1000) + offsetMs
         let tail = String((0..<3).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
-        return String(format: "og_%013d", ms) + tail
+        return "og_" + Cue.padded(ms) + tail
     }
 
     var url: URL { URL(fileURLWithPath: path) }
@@ -237,5 +251,34 @@ enum ShowStore {
         } catch {
             NSLog("Outrangutan could not save the show: \(error)")
         }
+    }
+}
+
+/// What was on air, noted once a second while a show runs, in
+/// ~/Library/Application Support/Outrangutan/on-air.json. A clean quit
+/// removes it, so finding it at launch means the app closed mid-show.
+struct RecoveryPoint: Codable, Equatable {
+    var wireID: String
+    var name: String
+    var offset: Double              // seconds into the file; 0 for a picture that holds
+    var savedAt = Date()
+    var cueID: UUID?                // filled in at launch
+
+    static var fileURL: URL { ShowStore.fileURL.deletingLastPathComponent().appendingPathComponent("on-air.json") }
+    private static var off: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
+
+    static func load() -> RecoveryPoint? {
+        guard !off, let data = try? Data(contentsOf: fileURL) else { return nil }
+        return try? JSONDecoder().decode(RecoveryPoint.self, from: data)
+    }
+
+    func save() {
+        guard !Self.off, let data = try? JSONEncoder().encode(self) else { return }
+        try? data.write(to: Self.fileURL, options: .atomic)
+    }
+
+    static func clear() {
+        guard !off else { return }
+        try? FileManager.default.removeItem(at: fileURL)
     }
 }

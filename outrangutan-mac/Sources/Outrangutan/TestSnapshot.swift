@@ -13,6 +13,8 @@ import SwiftUI
 /// - "transport" (the default): GO, Pause, All Stop from this Mac.
 /// - "link": a pretend show record in memory plays the rundown's part,
 ///   sending the same commands the rundown and KeyWi Bird send.
+/// - "files": saves a show file, opens it again, opens one shaped like the
+///   web app's, and picks up after a pretend crash.
 enum TestSnapshot {
     static var isOn: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
@@ -22,7 +24,7 @@ enum TestSnapshot {
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
-    static func runIfAsked(engine: Engine, link: ShowLink) {
+    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles) {
         guard let folder = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] else { return }
         let dir = URL(fileURLWithPath: folder, isDirectory: true)
         var log: [String] = []
@@ -35,7 +37,7 @@ enum TestSnapshot {
                       let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
                 view.cacheDisplay(in: view.bounds, to: rep)
                 let which: String
-                if window.title == "Outrangutan" { which = "control" }
+                if window.toolbar != nil { which = "control" }
                 else if window.contentView is OutputView { which = "output-" + window.title.replacingOccurrences(of: " ", with: "") }
                 else { which = "window-" + window.title.replacingOccurrences(of: " ", with: "") }
                 try? rep.representation(using: .png, properties: [:])?
@@ -53,6 +55,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
             (1.0, {
@@ -147,6 +150,156 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
+        ]
+    }
+
+    /// Show files and crash recovery. Everything is written inside the test
+    /// folder; the real show and the Movies folder are never touched.
+    @MainActor private static func fileSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void,
+                                  state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let showURL = dir.appendingPathComponent("Test Show.ogshow")
+        let webURL = dir.appendingPathComponent("Web Show.ogshow")
+        func file(_ name: String, _ kind: CueKind, _ label: String) -> Cue {
+            Cue(name: label, path: media.appendingPathComponent(name).path, kind: kind, wireID: Cue.newWireID())
+        }
+        func cueSummary() -> [String] {
+            engine.cues.map { c in
+                "\(c.name) | \(c.kind.rawValue) | \(c.wireID ?? "-") | trim \(c.trimIn)-\(c.trimOut.map { "\($0)" } ?? "end") | fade \(c.fadeIn)/\(c.fadeOut) \(c.fadeCurve.rawValue) | out \(c.output) | \(c.kind == .matte ? c.color : "") | dur \(c.duration) | \(c.continueMode.rawValue) \(c.endAction.rawValue) | pad \(c.sfxPadId) | armed \(c.armed)"
+            }
+        }
+        func padSummary() -> [String] {
+            engine.pads.pads.sorted { $0.slot < $1.slot }.map { p in
+                "\(p.name) | \(p.id) | slot \(p.slot) | key \(p.key) | \(p.color) | gain \(p.gain) | eq \(p.eq.low)/\(p.eq.mid)/\(p.eq.high) | \(p.retrigger.rawValue)"
+            }
+        }
+        func filesThere() -> String {
+            let missing = engine.cues.filter { !$0.fileIsThere }.map(\.name) + engine.pads.pads.filter { !$0.fileIsThere }.map(\.name)
+            return missing.isEmpty ? "every file is there" : "missing: " + missing.joined(separator: ", ")
+        }
+        var before: (cues: [String], pads: [String]) = ([], [])
+        return [
+            (1.0, {
+                var video = file("bars-16x9.mp4", .video, "1 Bars, 10 to 20 s, fade in")
+                video.trimIn = 10; video.trimOut = 20; video.fadeIn = 0.5; video.fadeCurve = .s
+                var sound = file("demo-applause.wav", .audio, "2 Applause, Continue")
+                sound.continueMode = .autoContinue; sound.volume = 0.8
+                var still = file("still-16x9.png", .still, "3 Still, up 3 s")
+                still.duration = 3; still.fit = .cover
+                var matte = Cue.matte(named: "4 Red matte", color: "#C8102E")
+                matte.xfade = 0.5
+                var side = file("bars-4x3.mp4", .video, "5 Bars 4x3 on output 2, off")
+                side.output = 2; side.armed = false; side.notes = "Side screen"
+                let bank = PadBank(id: "bk_test", name: "Bank 1")
+                var horn = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Air horn", path: media.appendingPathComponent("demo-airhorn.wav").path, key: "1")
+                horn.emoji = "📯"; horn.gain = 1.2; horn.eq = PadEQ(low: 3, mid: 0, high: -2)
+                var rim = Pad(id: Pad.newID(offsetMs: 1), slot: 1, bank: bank.id, name: "Rimshot", path: media.appendingPathComponent("demo-rimshot.wav").path, key: "2")
+                rim.color = "#64D2FF"; rim.retrigger = .poly
+                engine.replaceShow(cues: [video, sound, still, matte, side], pads: [horn, rim], banks: [bank], multiTrigger: true)
+                engine.update(engine.cues[0].id) { $0.sfxPadId = horn.id; $0.sfxDelay = 1 }
+                before = (cueSummary(), padSummary())
+                note("a show built: \(engine.cues.count) cues, \(engine.pads.pads.count) pads")
+                Task { let ok = await files.write(to: showURL); note("b saved: \(ok) \(files.lastProblem ?? "")") }
+            }),
+            (2.5, {
+                do {
+                    let zip = try ShowArchive.Reader(url: showURL)
+                    let payload = try ShowFiles.readManifest(showURL)
+                    let show = payload["show"] as? [String: Any] ?? [:]
+                    note("c the file holds: \(zip.names.sorted().joined(separator: ", "))")
+                    note("   show.json: \((show["cues"] as? [Any])?.count ?? 0) cues, \((show["pads"] as? [Any])?.count ?? 0) pads, \((payload["mediaIndex"] as? [String: Any])?.count ?? 0) media")
+                    let size = (try? FileManager.default.attributesOfItem(atPath: showURL.path)[.size] as? NSNumber)?.intValue ?? 0
+                    note("   size: \(size / 1024) KB")
+                } catch { note("c could not read the file back: \(error)") }
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+                p.arguments = ["-tq", showURL.path]
+                p.standardOutput = FileHandle.nullDevice
+                try? p.run(); p.waitUntilExit()
+                note("   the Mac's zip tool checks it: \(p.terminationStatus == 0 ? "OK" : "FAILED")")
+                engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
+                note("d new show: \(engine.cues.count) cues, \(engine.pads.pads.count) pads")
+                Task {
+                    guard let payload = try? ShowFiles.readManifest(showURL) else { return note("e could not open") }
+                    let ok = await files.load(showURL, payload: payload, mediaFolder: dir.appendingPathComponent("opened-mac"))
+                    note("e opened again: \(ok)")
+                }
+            }),
+            (2.0, {
+                let after = (cueSummary(), padSummary())
+                note("f cues match: \(after.0 == before.0)  pads match: \(after.1 == before.1)")
+                if after.0 != before.0 { zip(before.0, after.0).filter { $0 != $1 }.forEach { note("   was: \($0)\n   now: \($1)") } }
+                if after.1 != before.1 { zip(before.1, after.1).filter { $0 != $1 }.forEach { note("   was: \($0)\n   now: \($1)") } }
+                note("   \(filesThere())")
+                note("   window title: \(files.currentFile?.lastPathComponent ?? "-")")
+                after.0.forEach { note("   cue: \($0)") }
+                after.1.forEach { note("   pad: \($0)") }
+                // A file shaped exactly like the web app's own save.
+                do {
+                    let cues: [[String: Any]] = [
+                        ["id": "c_web0001", "num": 1, "name": "Web open", "type": "video", "mediaId": "m_vid", "color": "var(--video)",
+                         "preWait": 2, "continueMode": "auto_follow", "duration": 120, "trimIn": 0, "trimOut": NSNull(), "volume": 1,
+                         "loop": false, "armed": true, "notes": "", "fadeIn": 0, "fadeOut": 1, "fadeCurve": "", "xfade": 0,
+                         "endAction": "black", "fit": "contain", "scale": 1, "posX": 0, "posY": 0, "output": 1, "sfxPadId": "p_web1", "sfxDelay": 0],
+                        ["id": "c_web0002", "num": 2, "name": "Matte #00B140", "type": "image", "mediaId": "m_png", "color": "var(--yellow)",
+                         "duration": 0, "endAction": "hold", "fit": "cover", "armed": true],
+                        ["id": "c_web0003", "num": 3, "name": "Lost clip", "type": "video", "mediaId": "m_gone", "armed": true],
+                    ]
+                    let pads: [[String: Any]] = [
+                        ["id": "p_web1", "slot": 0, "bank": "bk_web", "name": "Ding", "emoji": "🔔", "mediaId": "m_ding", "color": "var(--cyan)",
+                         "key": "1", "gain": 0.9, "loop": false, "fadeIn": 0, "fadeOut": 0, "dur": 1, "eq": ["low": 0, "mid": 2, "high": 0],
+                         "comp": true, "trimIn": 0, "trimOut": NSNull(), "retrigger": "toggle"],
+                    ]
+                    let index: [String: Any] = [
+                        "m_vid": ["name": "bars.mp4", "mime": "video/mp4", "kind": "video", "file": "media/m_vid"],
+                        "m_png": ["name": "Matte #00B140.png", "mime": "image/png", "kind": "image", "file": "media/m_png"],
+                        "m_ding": ["name": "ding", "mime": "audio/wav", "kind": "audio", "file": "media/m_ding"],
+                    ]
+                    let payload: [String: Any] = ["kind": "outrangutan-show", "app": "outrangutan", "schema": 3, "container": "zip",
+                                                  "show": ["cues": cues, "pads": pads, "banks": [["id": "bk_web", "name": "Web bank", "padCount": 12]],
+                                                           "settings": ["fadeCurve": "s", "multiTrigger": false]] as [String: Any],
+                                                  "mediaIndex": index]
+                    let w = try ShowArchive.Writer(url: webURL)
+                    try w.add(name: "show.json", data: try JSONSerialization.data(withJSONObject: payload))
+                    try w.add(name: "media/m_vid", file: media.appendingPathComponent("bars-4x3.mp4"))
+                    try w.add(name: "media/m_png", file: media.appendingPathComponent("still-16x9.png"))
+                    try w.add(name: "media/m_ding", file: media.appendingPathComponent("sfx-ding.wav"))
+                    try w.finish()
+                } catch { note("g could not make the web file: \(error)") }
+                Task {
+                    guard let payload = try? ShowFiles.readManifest(webURL) else { return note("g could not open the web file") }
+                    let ok = await files.load(webURL, payload: payload, mediaFolder: dir.appendingPathComponent("opened-web"))
+                    note("g opened the web show: \(ok)")
+                }
+            }),
+            (2.0, {
+                cueSummary().forEach { note("   cue: \($0)") }
+                padSummary().forEach { note("   pad: \($0)") }
+                note("   multi-trigger: \(engine.pads.multiTrigger)  standby: \(engine.standbyCue?.name ?? "-")")
+                note("   notice: \(engine.notice ?? "-")")
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("opened-web").path)) ?? []
+                note("   media folder: \(names.sorted().joined(separator: ", "))")
+                // A pretend crash: the web show's first cue was 30 s in.
+                let first = engine.cues[0]
+                engine.recovered = RecoveryPoint(wireID: first.wireID ?? "", name: first.name, offset: 30, cueID: first.id)
+                engine.update(first.id) { $0.preWait = 0 }
+            }),
+            (0.8, { snap("f-recovery") }),
+            (0.2, { engine.standbyRecovered(); engine.openOutput(); engine.go() }),
+            (1.2, {
+                let live = engine.liveState()
+                note("h picked up after the crash: \(live.name) at \(String(format: "%.1f", live.offset ?? 0)) s (should be past 30)")
+                state("h")
+                engine.standbyID = engine.cues[0].id
+                engine.go()
+            }),
+            (1.0, {
+                let live = engine.liveState()
+                note("i the same cue again starts from the top: \(live.name) at \(String(format: "%.1f", live.offset ?? 0)) s")
+                engine.allStop()
+                state("j done")
+            }),
         ]
     }
 

@@ -76,7 +76,7 @@ struct Pad: Identifiable, Codable, Equatable {
     static func newID(offsetMs: Int = 0) -> String {
         let ms = Int(Date().timeIntervalSince1970 * 1000) + offsetMs
         let tail = String((0..<3).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
-        return String(format: "p_%013d", ms) + tail
+        return "p_" + Cue.padded(ms) + tail
     }
 }
 
@@ -395,6 +395,23 @@ final class PadBoard: ObservableObject {
                 ch.buffer = PadChannel.load(pad)
             }
         }
+    }
+
+    /// Swaps in a whole new set of banks and pads, from a show file.
+    func replace(banks newBanks: [PadBank], pads newPads: [Pad], multiTrigger newMulti: Bool?) {
+        stopAll()
+        audio.stop()
+        channels.removeAll()
+        loading = true
+        banks = newBanks.isEmpty ? [PadBank.make("Bank 1")] : newBanks
+        pads = newPads
+        if let newMulti { multiTrigger = newMulti }
+        currentBankID = banks[0].id
+        selectedPadID = nil
+        pads.forEach { channel(for: $0, rewire: false) }
+        loading = false
+        startAudio()
+        onChange?()
     }
 
     func addBank() {

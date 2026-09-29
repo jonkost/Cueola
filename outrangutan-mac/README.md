@@ -58,6 +58,27 @@ a time. While paused, GO carries on, like the web app.
 The show saves itself after every change, to
 `~/Library/Application Support/Outrangutan/show.json`.
 
+## Show files
+
+The **File** menu makes a show file to carry to another Mac or to the web
+app: **Save Show** (Command-S), **Save Show As** (Shift-Command-S), **Open
+Show** (Command-O) and **New Show** (Command-N).
+
+- A show file (`.ogshow`) is the same file the web Outrangutan saves: the
+  cues, the pads and every media file, in one file up to 4 GB.
+- A show saved in the browser opens here, and one saved here opens in the
+  browser. Cues keep their ids, so rundown rows linked to them stay linked.
+- Opening a show copies its media to **Movies, Outrangutan**, in a folder
+  named for the show.
+- Saving runs in the background, with a progress bar in the toolbar. The
+  show keeps running while it saves.
+- The window is named for the show file. Double-clicking a show file in
+  Finder opens it here.
+
+If Outrangutan closes during a show (a crash, a force quit, a pulled plug),
+it says what was on air when it opens again. **Stand By** puts that cue on
+standby, and its next GO picks up where it stopped.
+
 ## Sound effect pads
 
 Switch to **Pads** above the list.
@@ -133,6 +154,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
+- `files`: saves a show file, opens it again and checks every cue and pad
+  came back the same, opens a file shaped like the web app's, and picks up
+  after a pretend crash. Everything is written inside the test folder.
 
 ## What is inside
 
@@ -150,7 +174,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Pads.swift` | The sound effect board and its sound paths |
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
-| `Cue.swift` | What a cue is, and saving the show |
+| `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `ShowFiles.swift` | New, Open and Save: show files the web app shares |
 | `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |
 | `CloudClient.swift` | Signing in and reading and writing the show record |
 | `ConnectView.swift` | The Connect window and the light in the bottom bar |
@@ -166,3 +191,4 @@ so `swift test` can check each one:
 | `FirestoreValue.swift` | The cloud's written form of values |
 | `FadeCurve.swift` | The three fade shapes, the same as the web app |
 | `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |
+| `ShowArchive.swift` | The show file's zip: writing and reading it in slices, and its checksum |

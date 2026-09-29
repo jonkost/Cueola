@@ -56,11 +56,13 @@ final class Deck {
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in ended() })
     }
 
-    /// Starts from the trim in point.
-    func start() {
+    /// Starts from the trim in point, or later when picking up where a
+    /// show left off.
+    func start(at offset: Double? = nil) {
         guard let cue else { return }
-        if cue.trimIn > 0 {
-            player.seek(to: CMTime(seconds: cue.trimIn, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        let from = max(cue.trimIn, offset ?? 0)
+        if from > 0 {
+            player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
         player.play()
     }
@@ -127,6 +129,9 @@ final class Engine: ObservableObject {
     /// Master volume, 0 to 1.2, like the web fader. The Mac plays 1.0 at most.
     @Published private(set) var masterGain: Double = 1
     @Published var notice: String?
+    /// What was on air when Outrangutan last closed without quitting, if
+    /// anything (a crash, a force quit, a pulled plug).
+    @Published var recovered: RecoveryPoint?
 
     /// Called when what is on air changes, so the show link can tell the rundown.
     var onTransport: (() -> Void)?
@@ -163,13 +168,27 @@ final class Engine: ObservableObject {
 
     private var paused = false
     private var clock: Timer?
+    /// The next fire of this cue starts at this point instead of the top.
+    private var pendingResume: (id: UUID, offset: Double)?
+    private var lastRecoveryWrite = Date.distantPast
+    private var recoveryNoted = false
 
     init() {
         var show = ShowStore.load()
-        // Cues saved before the rundown link had no lasting id. Give them one
-        // each, in list order.
-        for i in show.cues.indices where show.cues[i].wireID == nil {
+        // Cues saved before the rundown link had no lasting id, and ids made
+        // before 9/29 sorted backwards. Give them new ones, in list order.
+        for i in show.cues.indices where show.cues[i].wireID == nil || Cue.isBackwardsID(show.cues[i].wireID) {
             show.cues[i].wireID = Cue.newWireID(offsetMs: i)
+        }
+        if var saved = show.pads {
+            var renamed: [String: String] = [:]
+            for i in saved.indices where Cue.isBackwardsID(saved[i].id) {
+                let id = Pad.newID(offsetMs: i)
+                renamed[saved[i].id] = id
+                saved[i].id = id
+            }
+            for i in show.cues.indices { if let id = renamed[show.cues[i].sfxPadId] { show.cues[i].sfxPadId = id } }
+            show.pads = saved
         }
         cues = show.cues
         outputs = (show.outputs?.isEmpty == false) ? show.outputs! : [OutputConfig(id: 1, screen: show.outputScreen)]
@@ -182,7 +201,22 @@ final class Engine: ObservableObject {
         pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
         save()
         loadDurations()
+        if let point = RecoveryPoint.load(), let cue = cues.first(where: { $0.wireID == point.wireID }) {
+            var p = point
+            p.cueID = cue.id
+            recovered = p
+        }
+        RecoveryPoint.clear()
         startClock()
+    }
+
+    /// Stands by the cue that was on air when the app closed. With a point
+    /// to start from, its next GO picks up there.
+    func standbyRecovered() {
+        guard let point = recovered, let id = point.cueID else { return }
+        standbyID = id
+        if point.offset > 0 { pendingResume = (id, point.offset) }
+        recovered = nil
     }
 
     var standbyCue: Cue? { cues.first { $0.id == standbyID } }
@@ -353,7 +387,7 @@ final class Engine: ObservableObject {
         deck.views = views(for: cue)
         deck.views.forEach { $0.showVideo(deck.player, in: deck.slot!, cue: cue, opacity: Float(deck.pictureLevel)) }
         apply(deck)
-        deck.start()
+        deck.start(at: resumePoint(for: cue))
         takeOverPicture(with: dissolve ? cue.xfade : 0, curve: cue.fadeCurve)
         pictureDeck = deck
         if dissolve {
@@ -379,7 +413,7 @@ final class Engine: ObservableObject {
         let dissolve = cue.xfade > 0 && old != nil
         deck.soundLevel = (dissolve || cue.fadeIn > 0) ? 0 : 1
         apply(deck)
-        deck.start()
+        deck.start(at: resumePoint(for: cue))
         if let old {
             if dissolve {
                 let from = old.soundLevel
@@ -430,6 +464,13 @@ final class Engine: ObservableObject {
             applyStill()
         }
         return .done
+    }
+
+    /// Where a cue starts if it is picking up after a crash. Used once.
+    private func resumePoint(for cue: Cue) -> Double? {
+        guard let r = pendingResume, r.id == cue.id else { return nil }
+        pendingResume = nil
+        return r.offset
     }
 
     /// Clears whatever picture was on air, at once or under a dissolve. In
@@ -666,6 +707,17 @@ final class Engine: ObservableObject {
         standbyID = cue.id
     }
 
+    /// Swaps in a whole show: a show file opened, or a new empty show.
+    /// Everything on air stops first.
+    func replaceShow(cues newCues: [Cue], pads newPads: [Pad], banks: [PadBank], multiTrigger: Bool?) {
+        allStop()
+        durations = [:]
+        cues = newCues
+        standbyID = newCues.first { $0.armed }?.id ?? newCues.first?.id
+        pads.replace(banks: banks, pads: newPads, multiTrigger: multiTrigger)
+        notice = nil
+    }
+
     func remove(ids: Set<UUID>) {
         cues.removeAll { ids.contains($0.id) }
         if let id = standbyID, ids.contains(id) { standbyID = cues.first?.id }
@@ -857,6 +909,31 @@ final class Engine: ObservableObject {
         else { left = nil }
         if left != remaining { remaining = left }
         if left != nil || pending != nil { onTick?() }
+        noteRecoveryPoint()
+    }
+
+    /// Once a second, notes what is on air, so a crash can pick up there.
+    /// With nothing on air the note is cleared.
+    private func noteRecoveryPoint() {
+        guard Date().timeIntervalSince(lastRecoveryWrite) >= 1 else { return }
+        lastRecoveryWrite = Date()
+        let deck = [pictureDeck, soundDeck].compactMap { $0 }.first { !$0.held && $0.cue != nil }
+        if let deck, let cue = deck.cue, let wire = cue.wireID {
+            RecoveryPoint(wireID: wire, name: cue.name, offset: deck.current).save()
+            recoveryNoted = true
+        } else if let still = stillCue, let wire = still.wireID {
+            RecoveryPoint(wireID: wire, name: still.name, offset: 0).save()
+            recoveryNoted = true
+        } else if recoveryNoted {
+            RecoveryPoint.clear()
+            recoveryNoted = false
+        }
+    }
+
+    /// A clean quit leaves nothing to recover.
+    func quitting() {
+        clock?.invalidate()
+        RecoveryPoint.clear()
     }
 
     private func loadDurations() {

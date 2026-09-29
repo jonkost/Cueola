@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct ControlView: View {
     @ObservedObject var engine: Engine
     @ObservedObject var link: ShowLink
+    @ObservedObject var files: ShowFiles
     @State private var dropTargeted = false
     @State private var showConnect = false
     @AppStorage("ui.inspector") private var showInspector = true
@@ -18,6 +19,7 @@ struct ControlView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if let point = engine.recovered { recoveryBar(point); Divider() }
             if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
         }
         .inspector(isPresented: $showInspector) {
@@ -27,7 +29,8 @@ struct ControlView: View {
             .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
         }
         .toolbar { toolbar }
-        .navigationTitle("Outrangutan")
+        // Like any Mac document, the window is named for its show file.
+        .navigationTitle(files.currentFile?.deletingPathExtension().lastPathComponent ?? "Outrangutan")
         .navigationSubtitle(link.phase == .linked ? link.message : "")
         .sheet(isPresented: $showConnect) { ConnectView(link: link) }
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
@@ -50,6 +53,16 @@ struct ControlView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if let working = files.working {
+            // Saving or opening a show file runs in the background; the
+            // show keeps running and GO still works.
+            ToolbarItem(placement: .status) {
+                HStack(spacing: 8) {
+                    ProgressView(value: files.progress).frame(width: 110)
+                    Text(working + "\u{2026}").font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+        }
         ToolbarItem(placement: .navigation) {
             Picker("View", selection: $tab) {
                 Label("Cues", systemImage: "list.bullet.rectangle").tag("cues")
@@ -148,6 +161,33 @@ struct ControlView: View {
             }
         }
         .padding(16)
+    }
+
+    /// Shown after Outrangutan closed mid-show: what was on air, and a way
+    /// to pick up from there.
+    private func recoveryBar(_ point: RecoveryPoint) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.uturn.backward.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Outrangutan closed during the show")
+                    .font(.headline)
+                Text("\u{201C}\(point.name)\u{201D} was on air" + (point.offset > 0 ? " at \(Timecode.short(point.offset))." : "."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Dismiss") { engine.recovered = nil }
+            Button(point.offset > 0 ? "Stand By at \(Timecode.short(point.offset))" : "Stand By That Cue") {
+                engine.standbyRecovered()
+            }
+            .buttonStyle(.borderedProminent)
+            .help("The cue stands by. Its next GO starts where it left off.")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.orange.opacity(0.1))
     }
 
     /// A native Mac button, extra large for show use. GO and All Stop are

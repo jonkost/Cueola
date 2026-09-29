@@ -8,16 +8,11 @@ struct OutrangutanApp: App {
     var body: some Scene {
         // One show, one control window.
         Window("Outrangutan", id: "main") {
-            ControlView(engine: appDelegate.engine, link: appDelegate.link)
+            ControlView(engine: appDelegate.engine, link: appDelegate.link, files: appDelegate.files)
                 .frame(minWidth: 960, minHeight: 600)
         }
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("Connect to a Show…") {
-                    NotificationCenter.default.post(name: .showConnect, object: nil)
-                }
-                .keyboardShortcut("k")
-            }
+            FileCommands(files: appDelegate.files)
             CommandGroup(after: .sidebar) {
                 Button("Show or Hide Inspector") {
                     NotificationCenter.default.post(name: .toggleInspector, object: nil)
@@ -29,6 +24,34 @@ struct OutrangutanApp: App {
 
         Settings {
             SettingsView(engine: appDelegate.engine)
+        }
+    }
+}
+
+/// The File menu: show files, and connecting to a show in the cloud.
+struct FileCommands: Commands {
+    @ObservedObject var files: ShowFiles
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Show") { files.newShow() }
+                .keyboardShortcut("n")
+            Button("Open Show\u{2026}") { files.chooseAndOpen() }
+                .keyboardShortcut("o")
+            Divider()
+            Button("Connect to a Show\u{2026}") {
+                NotificationCenter.default.post(name: .showConnect, object: nil)
+            }
+            .keyboardShortcut("k")
+        }
+        CommandGroup(replacing: .saveItem) {
+            Button("Save Show") { files.save() }
+                .keyboardShortcut("s")
+            Button("Save Show As\u{2026}") { files.saveAs() }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            if let file = files.currentFile {
+                Button("Show the Show File in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+            }
         }
     }
 }
@@ -64,6 +87,7 @@ struct PlaybackCommands: Commands {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let engine = Engine()
     lazy var link = ShowLink(engine: engine, store: TestSnapshot.store)
+    lazy var files = ShowFiles(engine: engine)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -76,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Test mode stays in the background so it never catches keys someone
         // is typing in another app.
         _ = link
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link) }
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files) }
         NSApp.activate(ignoringOtherApps: true)
 
         // Tell macOS a show is running: never nap this app, never slow its
@@ -110,6 +134,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return event
             }
         }
+    }
+
+    /// A show file double-clicked in Finder, or dropped on the Dock icon.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard !TestSnapshot.isOn, let url = urls.first else { return }
+        files.open(url)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        engine.quitting()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
