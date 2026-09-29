@@ -202,7 +202,8 @@ final class ShowFiles: ObservableObject {
                 "endAction": cue.endAction.rawValue,
                 "fit": cue.kind == .matte ? "cover" : cue.fit.rawValue, "scale": cue.scale, "posX": cue.posX, "posY": cue.posY,
                 "output": cue.output,
-                "key": ["mode": "off", "color": "#00b140", "sim": 0.3, "smooth": 0.1, "bg": "#000000"],
+                "key": ["mode": cue.key.mode.rawValue, "color": cue.key.color.lowercased(), "sim": cue.key.sim,
+                        "smooth": cue.key.smooth, "bg": cue.key.bg.lowercased()],
                 "obs": ["action": "none", "scene": ""], "obsTriggerScene": "",
                 "sfxPadId": cue.sfxPadId, "sfxDelay": cue.sfxDelay,
                 "mac": mac,
@@ -368,6 +369,13 @@ final class ShowFiles: ObservableObject {
             cue.sfxDelay = max(0, Wire.number(c["sfxDelay"]) ?? 0)
             cue.notes = Wire.string(c["notes"]) ?? ""
             cue.armed = c["armed"] as? Bool ?? true
+            if kind == .video, let k = c["key"] as? [String: Any] {
+                cue.key.mode = KeyMode(rawValue: Wire.string(k["mode"]) ?? "") ?? .off
+                cue.key.color = NSColor(hex: Wire.string(k["color"]) ?? "")?.hexString ?? "#00B140"
+                cue.key.sim = min(1, max(0, Wire.number(k["sim"]) ?? 0.3))
+                cue.key.smooth = min(0.5, max(0, Wire.number(k["smooth"]) ?? 0.1))
+                cue.key.bg = NSColor(hex: Wire.string(k["bg"]) ?? "")?.hexString ?? "#000000"
+            }
             return cue
         }
     }

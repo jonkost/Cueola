@@ -118,6 +118,7 @@ struct Cue: Identifiable, Codable, Equatable {
     // Other
     var notes = ""
     var armed = true                            // false: GO skips this cue
+    var key = VideoKey()                     // video only: chroma, luma or alpha key
 
     init(name: String, path: String, kind: CueKind, wireID: String? = nil) {
         self.name = name
@@ -160,6 +161,7 @@ struct Cue: Identifiable, Codable, Equatable {
         sfxDelay = try c.decodeIfPresent(Double.self, forKey: .sfxDelay) ?? 0
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         armed = try c.decodeIfPresent(Bool.self, forKey: .armed) ?? true
+        key = (try? c.decodeIfPresent(VideoKey.self, forKey: .key)) ?? VideoKey()
     }
 
     /// Milliseconds as 13 digits, so ids sort in the order they were made.

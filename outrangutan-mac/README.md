@@ -32,7 +32,10 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
   - **Trim and Sound:** start at, stop at, loop, volume.
   - **Fades:** fade in, fade out, dissolve in, and the fade's curve.
   - **Picture:** which output it shows on, framing, size and position, or a
-    matte's color.
+    matte's color. Videos also get a **Key**: Chroma (take out a color, like
+    a green screen), Luma (take out the dark parts, for graphics on black)
+    or Alpha (the file's own see-through parts), filled with a background
+    color. It runs on the graphics card at full size and changes on air.
 - **Outputs** in the toolbar opens or closes every output. Its menu opens
   one at a time and has **Identify**, which puts each output's number on its
   screen for three seconds.
@@ -203,6 +206,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `key`: color bars with the green bar keyed out, then a luma key switched
+  on while on air; reads the real frames.
 - `scopes`: color bars, a still and a red matte through the preview and the
   scopes; saves each scope and the frame it read.
 - `listen`: joins show WEBTEST and waits a minute, for trying the direct
@@ -234,6 +239,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |
 | `Midi.swift` | MIDI boxes and Settings, MIDI |

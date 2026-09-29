@@ -176,6 +176,46 @@ struct InspectorView: View {
                 }
             }
         }
+        if cue.kind == .video { keySection(cue) }
+    }
+
+    @ViewBuilder
+    private func keySection(_ cue: Cue) -> some View {
+        let k = live(cue).key
+        InspectorSection(title: "Key", note: keyNote(k.mode)) {
+            Picker("Key", selection: bind(cue, \.key.mode)) {
+                ForEach(KeyMode.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            if k.mode == .chroma {
+                InspectorRow("Key color") { colorWell(cue, \.key.color) }
+            }
+            if k.mode == .chroma || k.mode == .luma {
+                PercentSlider(label: "Similarity", value: bind(cue, \.key.sim))
+                PercentSlider(label: "Smoothness", value: bind(cue, \.key.smooth), range: 0...0.5)
+            }
+            if k.mode != .off {
+                InspectorRow("Background") { colorWell(cue, \.key.bg) }
+            }
+        }
+    }
+
+    private func keyNote(_ mode: KeyMode) -> String {
+        switch mode {
+        case .off: return "Takes a color, the dark parts, or the file's own see-through parts out of the picture."
+        case .chroma: return "Pixels close to the key color go away. Raise Similarity until the screen is gone; Smoothness softens the edge."
+        case .luma: return "Dark pixels go away: graphics made on black. Raise Similarity to take out more."
+        case .alpha: return "Uses the file's own see-through parts, like a ProRes 4444 graphic."
+        }
+    }
+
+    private func colorWell(_ cue: Cue, _ path: WritableKeyPath<Cue, String>) -> some View {
+        ColorPicker("", selection: Binding(
+            get: { Color(nsColor: NSColor(hex: live(cue)[keyPath: path]) ?? .black) },
+            set: { c in engine.update(cue.id) { $0[keyPath: path] = NSColor(c).hexString } }
+        ), supportsOpacity: false)
+        .labelsHidden()
     }
 
     // MARK: Words

@@ -16,6 +16,8 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "key": color bars with the green bar keyed to magenta, then a luma key
+///   switched on while on air; reads the real frames.
 /// - "scopes": the program preview, waveform and vectorscope on color bars,
 ///   a still and a red matte; saves each scope and the frame it read.
 /// - "listen": joins show WEBTEST with two cues and waits 60 seconds, for
@@ -68,6 +70,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "key": steps = keySteps2(engine: engine, scopes: scopes, dir: dir, note: note, snap: snap)
         case "scopes": steps = scopeSteps(engine: engine, scopes: scopes, dir: dir, note: note, state: state, snap: snap)
         case "listen": steps = listenSteps(engine: engine, link: link, note: note)
         case "direct": steps = directSteps(engine: engine, link: link, note: note, state: state)
@@ -174,6 +177,72 @@ enum TestSnapshot {
 
     private static var virtualBox = MIDIEndpointRef()
     private static var sockets: [URLSessionWebSocketTask] = []
+
+    @MainActor private static func keySteps2(engine: Engine, scopes: Scopes, dir: URL, note: @escaping (String) -> Void,
+                                             snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let ctx = CIContext()
+        // The color at a spot in the program frame, as 0-255 values.
+        func sample(_ name: String, x: CGFloat, y: CGFloat) -> String {
+            guard let f = engine.programFrame(), let cg = ctx.createCGImage(f, from: f.extent) else { return "\(name): no frame" }
+            let rep = NSBitmapImageRep(cgImage: cg)
+            guard let c = rep.colorAt(x: Int(x * CGFloat(rep.pixelsWide)), y: Int(y * CGFloat(rep.pixelsHigh)))?.usingColorSpace(.sRGB) else { return "\(name): ?" }
+            return String(format: "%@ = %d,%d,%d", name, Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+        }
+        func save(_ name: String) {
+            guard let f = engine.programFrame(), let cg = ctx.createCGImage(f, from: f.extent) else { return }
+            try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(name + ".png"))
+        }
+        // Bar centers across the top: gray, yellow, cyan, green, magenta, red, blue.
+        func bars(_ label: String) {
+            let names = ["gray", "yellow", "cyan", "green", "magenta", "red", "blue"]
+            note(label)
+            for (i, n) in names.enumerated() { note("   " + sample(n, x: (CGFloat(i) + 0.5) / 7, y: 0.3)) }
+            note("   " + sample("black corner", x: 0.9, y: 0.9))
+        }
+        return [
+            (1.0, {
+                var bars = Cue(name: "Bars, green keyed", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                bars.trimIn = 5
+                bars.key.mode = .chroma; bars.key.color = "#00BF00"; bars.key.sim = 0.2; bars.key.smooth = 0.05; bars.key.bg = "#FF00FF"
+                engine.replaceShow(cues: [bars], pads: [], banks: [], multiTrigger: nil)
+                scopes.isOn = true
+                engine.openOutput()
+                engine.go()
+            }),
+            (1.5, { bars("a chroma key on the green bar, background magenta:"); save("k1-chroma") }),
+            (0.2, {
+                engine.update(engine.cues[0].id) { $0.key.mode = .luma; $0.key.sim = 0.1; $0.key.smooth = 0.02; $0.key.bg = "#0000FF" }
+            }),
+            (0.8, {
+                bars("b switched to a luma key on air, background blue:"); save("k2-luma")
+                // The Inspector's Picture tab, in a separate settings store so
+                // the real app's remembered tab is untouched.
+                let store = UserDefaults(suiteName: "live.cueola.outrangutan.test")!
+                store.set("picture", forKey: "inspector.cueTab")
+                engine.standbyID = engine.cues[0].id
+                let root = InspectorView(engine: engine)
+                    .defaultAppStorage(store)
+                    .frame(width: 340, height: 820)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 340, height: 820), styleMask: [.titled], backing: .buffered, defer: false)
+                win.appearance = NSAppearance(named: .darkAqua)
+                win.contentView = NSHostingView(rootView: root)
+                win.orderBack(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("k2-inspector.png"))
+                    }
+                    win.orderOut(nil)
+                }
+            }),
+            (0.8, {}),
+            (0.2, { engine.update(engine.cues[0].id) { $0.key.mode = .off } }),
+            (0.8, { bars("c key off:"); engine.allStop(); scopes.isOn = false }),
+        ]
+    }
 
     @MainActor private static func scopeSteps(engine: Engine, scopes: Scopes, dir: URL, note: @escaping (String) -> Void,
                                               state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {

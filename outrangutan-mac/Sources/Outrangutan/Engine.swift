@@ -14,6 +14,8 @@ final class Deck {
     var held = false                // parked on its last frame: finished
     var fadingOut = false
     var views: [OutputView] = []    // the outputs this deck's picture is on
+    /// The key on this deck's video, if the cue has one.
+    var keyer: Keyer?
     /// Hands over frames for the scopes; only there while the scopes are on.
     var frames: AVPlayerItemVideoOutput?
     var lastFrame: CIImage?
@@ -54,6 +56,8 @@ final class Deck {
         let item = AVPlayerItem(url: cue.url)
         frames = nil
         lastFrame = nil
+        keyer = nil
+        if cue.kind == .video && cue.key.mode != .off { key(item, cue.key) }
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
@@ -61,6 +65,14 @@ final class Deck {
         }
         watchers.append(NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in ended() })
+    }
+
+    /// Runs the key on this deck's video. Later changes go through
+    /// `keyer.update` and show on the next frame.
+    func key(_ item: AVPlayerItem, _ settings: VideoKey) {
+        let k = Keyer(settings)
+        item.videoComposition = k.composition(for: item.asset)
+        keyer = k
     }
 
     /// Starts from the trim in point, or later when picking up where a
@@ -820,6 +832,9 @@ final class Engine: ObservableObject {
         cues[i] = cue
         for d in [pictureDeck, soundDeck].compactMap({ $0 }) where d.cue?.id == id {
             d.cue = cue
+            // The key changes on the next frame, even on air.
+            if let k = d.keyer { k.update(cue.key) }
+            else if cue.kind == .video, cue.key.mode != .off, let item = d.player.currentItem { d.key(item, cue.key) }
             apply(d)
             if let slot = d.slot { d.views.forEach { $0.restyle(slot, cue) } }
         }
