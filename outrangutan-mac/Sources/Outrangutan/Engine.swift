@@ -809,15 +809,87 @@ final class Engine: ObservableObject {
         var made = urls.compactMap(Cue.make(from:))
         if made.count < urls.count { notice = "Some files were skipped. Outrangutan plays video, sound and still pictures." }
         guard !made.isEmpty else { return }
+        noteUndo(made.count == 1 ? "Add Cue" : "Add Cues")
         for i in made.indices { made[i].wireID = Cue.newWireID(offsetMs: i) }
         cues.append(contentsOf: made)
         if standbyID == nil { standbyID = made.first?.id }
     }
 
     func addMatte(color: String, name: String) {
+        noteUndo("Add Matte")
         let cue = Cue.matte(named: name, color: color)
         cues.append(cue)
         standbyID = cue.id
+    }
+
+    /// Moves cues in the list (drag and drop).
+    func move(from offsets: IndexSet, to offset: Int) {
+        noteUndo("Move Cue")
+        cues.move(fromOffsets: offsets, toOffset: offset)
+    }
+
+    /// A copy of a cue right after it, with its own id, standing by.
+    func duplicate(_ id: UUID) {
+        guard let i = cues.firstIndex(where: { $0.id == id }) else { return }
+        noteUndo("Duplicate Cue")
+        var copy = cues[i]
+        copy.id = UUID()
+        copy.wireID = Cue.newWireID()
+        copy.name += " copy"
+        cues.insert(copy, at: i + 1)
+        standbyID = copy.id
+    }
+
+    // MARK: Undo
+
+    /// The window's undo manager, set by the control window.
+    weak var undoManager: UndoManager? {
+        didSet { pads.willChange = { [weak self] name, key in self?.noteUndo(name, key: key) } }
+    }
+    private struct Snapshot { let cues: [Cue]; let pads: [Pad]; let banks: [PadBank] }
+    private var lastUndo: (key: String, at: Date)?
+    private var restoring = false
+
+    /// Saves how the show looks now, so Edit, Undo can bring it back. Call
+    /// just before a change. Changes with the same key within a second and a
+    /// half count as one step.
+    func noteUndo(_ name: String, key: String? = nil) {
+        guard let um = undoManager, !restoring else { return }
+        if let key, let last = lastUndo, last.key == key, Date().timeIntervalSince(last.at) < 1.5 {
+            lastUndo = (key, Date())
+            return
+        }
+        lastUndo = key.map { ($0, Date()) }
+        let snap = Snapshot(cues: cues, pads: pads.pads, banks: pads.banks)
+        um.registerUndo(withTarget: self) { $0.restore(snap, name: name) }
+        um.setActionName(name)
+    }
+
+    private func restore(_ snap: Snapshot, name: String) {
+        let now = Snapshot(cues: cues, pads: pads.pads, banks: pads.banks)
+        // Undoing is an edit too: while locked it waits, and stays on the list.
+        if locked {
+            undoManager?.registerUndo(withTarget: self) { $0.restore(now, name: name) }
+            undoManager?.setActionName(name)
+            notice = "Editing is locked. Unlock it to undo."
+            return
+        }
+        restoring = true
+        defer { restoring = false; lastUndo = nil }
+        undoManager?.registerUndo(withTarget: self) { $0.restore(now, name: name) }
+        undoManager?.setActionName(name)
+        cues = snap.cues
+        pads.restore(banks: snap.banks, pads: snap.pads)
+        if let id = standbyID, !cues.contains(where: { $0.id == id }) { standbyID = cues.first?.id }
+        // Keep what is on air in step with the restored settings.
+        for d in [pictureDeck, soundDeck].compactMap({ $0 }) {
+            if let c = d.cue, let back = cues.first(where: { $0.id == c.id }) {
+                d.cue = back
+                d.keyer?.update(back.key)
+                apply(d)
+                if let slot = d.slot { d.views.forEach { $0.restyle(slot, back) } }
+            }
+        }
     }
 
     /// Swaps in a whole show: a show file opened, or a new empty show.
@@ -825,6 +897,8 @@ final class Engine: ObservableObject {
     func replaceShow(cues newCues: [Cue], pads newPads: [Pad], banks: [PadBank], multiTrigger: Bool?) {
         stopEverything()
         durations = [:]
+        // A new or opened show starts a fresh undo history, like any Mac app.
+        undoManager?.removeAllActions()
         cues = newCues
         standbyID = newCues.first { $0.armed }?.id ?? newCues.first?.id
         pads.replace(banks: banks, pads: newPads, multiTrigger: multiTrigger)
@@ -832,6 +906,8 @@ final class Engine: ObservableObject {
     }
 
     func remove(ids: Set<UUID>) {
+        guard cues.contains(where: { ids.contains($0.id) }) else { return }
+        noteUndo(ids.count == 1 ? "Remove Cue" : "Remove Cues")
         cues.removeAll { ids.contains($0.id) }
         if let id = standbyID, ids.contains(id) { standbyID = cues.first?.id }
     }
@@ -849,6 +925,9 @@ final class Engine: ObservableObject {
         cue.volume = min(1, max(0, cue.volume))
         cue.fadeIn = max(0, cue.fadeIn); cue.fadeOut = max(0, cue.fadeOut); cue.xfade = max(0, cue.xfade)
         cue.scale = min(4, max(0.1, cue.scale))
+        guard cue != cues[i] else { return }
+        // Quick changes to one cue (a slider drag, typing a name) are one step.
+        noteUndo("Change Cue", key: "cue:\(id)")
         cues[i] = cue
         for d in [pictureDeck, soundDeck].compactMap({ $0 }) where d.cue?.id == id {
             d.cue = cue

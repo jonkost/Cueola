@@ -12,6 +12,7 @@ struct ControlView: View {
     @ObservedObject var files: ShowFiles
     let scopes: Scopes
     @AppStorage("ui.monitor") private var showMonitor = true
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject private var keys = KeyMap.shared
     @AppStorage("clock.24hour") private var clock24 = true
     @State private var dropTargeted = false
@@ -39,6 +40,7 @@ struct ControlView: View {
         .navigationSubtitle(link.phase == .linked ? link.message : "")
         .sheet(isPresented: $showConnect) { ConnectView(link: link) }
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
+        .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
         .dropDestination(for: URL.self) { urls, _ in
             guard !engine.locked else { return false }
@@ -295,7 +297,7 @@ struct ControlView: View {
                     ForEach(Array(engine.cues.enumerated()), id: \.element.id) { index, cue in
                         row(cue, number: index + 1).tag(cue.id)
                     }
-                    .onMove(perform: engine.locked ? nil : { engine.cues.move(fromOffsets: $0, toOffset: $1) })
+                    .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
                 .onDeleteCommand {
@@ -357,6 +359,8 @@ struct ControlView: View {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cue.url]) }
             }
             Button(cue.armed ? "Skip on GO" : "Fire on GO") { engine.update(cue.id) { $0.armed.toggle() } }
+                .disabled(engine.locked)
+            Button("Duplicate") { engine.duplicate(cue.id) }
                 .disabled(engine.locked)
             Divider()
             Button("Remove", role: .destructive) { engine.remove(ids: [cue.id]) }

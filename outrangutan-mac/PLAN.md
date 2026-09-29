@@ -35,10 +35,9 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 
 - **Deck on a different Mac from the playback Mac** (the Pro + Air rig):
   keys go through the shared record, like today.
-- **Deck on the same Mac as the playback Mac:** later we add a direct lane
-  inside the Mac, so playback keys land at once and keep working with the
-  internet down. This needs a small addition to KeyWi Bird. Everything else
-  in KeyWi stays the same.
+- **Deck on the same Mac as the playback Mac:** the direct link (built in
+  step 6): turn on Outrangutan for Mac in KeyWi's Deck settings, and
+  playback keys land at once and keep working with the internet down.
 
 ## Every tool, and what gets better
 
@@ -48,6 +47,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Count-out clock, 29.97 drop-frame | Built (step 1) | Counts from the player itself, 30 times a second. |
 | GO, Pause, Stop, All Stop | Built (step 1) | macOS is told a show is running, so it never slows the app down. |
 | Autosave | Built (step 1) | Saved on this Mac after every change. |
+| Undo, Redo, Duplicate | Built | Not in the web app. Every cue and pad edit. |
 | Output window | Built (step 1), one screen | Fills its own screen edge to edge, above the menu bar. |
 | Fade and Stop All | Built (step 5, for the deck's Fade key) | One second, picture and sound together. |
 | Fades with curves, crossfades | Built (step 2) | A true dissolve: the new picture fades up over the old one, no dip to black. Fade out now works (the web app keeps the setting but never uses it). |

@@ -75,6 +75,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "undo": steps = undoSteps(engine: engine, note: note)
         case "meter": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -230,6 +231,59 @@ enum TestSnapshot {
     private static var sockets: [URLSessionWebSocketTask] = []
 
     private static var fakeObs: FakeObs?
+    private static let testUndo = UndoManager()
+
+    /// Undo and Redo: adding, a slider drag (one step), removing, moving,
+    /// duplicating, a pad change, and the lock holding an undo back.
+    @MainActor private static func undoSteps(engine: Engine, note: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+        let um = testUndo
+        um.groupsByEvent = false
+        func step(_ body: () -> Void) { um.beginUndoGrouping(); body(); um.endUndoGrouping() }
+        func list() -> String { engine.cues.map { "\($0.name)(\(Int($0.volume * 100)))" }.joined(separator: ", ") }
+        func undo(_ label: String) { let name = um.undoActionName; um.undo(); note("\(label): undid \u{201C}\(name)\u{201D} -> [\(list())]") }
+        return [
+            (0.5, {
+                let bank = PadBank(id: "bk_u", name: "Bank 1")
+                let horn = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Air horn", path: media.appendingPathComponent("demo-airhorn.wav").path, key: "1")
+                engine.replaceShow(cues: [], pads: [horn], banks: [bank], multiTrigger: nil)
+                engine.undoManager = um
+                step { engine.add(urls: [media.appendingPathComponent("bars-16x9.mp4"), media.appendingPathComponent("still-16x9.png")]) }
+                note("a added two: [\(list())]")
+                // A slider drag: many changes in a row, one step.
+                step { for v in stride(from: 0.9, through: 0.3, by: -0.1) { engine.update(engine.cues[0].id) { $0.volume = v } } }
+                note("b dragged volume: [\(list())]")
+                undo("c")
+                step { engine.remove(ids: [engine.cues[1].id]) }
+                note("d removed the still: [\(list())]")
+                undo("e")
+                let wireBefore = engine.cues[1].wireID ?? ""
+                note("   the still keeps its rundown name: \(wireBefore == engine.cues[1].wireID)")
+                step { engine.move(from: IndexSet(integer: 1), to: 0) }
+                note("f moved: [\(list())]")
+                undo("g")
+                step { engine.duplicate(engine.cues[0].id) }
+                note("h duplicated: [\(list())]")
+                undo("i")
+                step { engine.pads.update(engine.pads.pads[0].id) { $0.gain = 0.4 } }
+                note("j pad gain now \(engine.pads.pads[0].gain)")
+                um.undo()
+                note("k pad gain after undo \(engine.pads.pads[0].gain)")
+                um.redo()
+                note("l pad gain after redo \(engine.pads.pads[0].gain)")
+                step { engine.update(engine.cues[0].id) { $0.name = "Renamed" } }
+                engine.locked = true
+                um.undo()
+                note("m locked, undo waits: [\(list())] notice: \(engine.notice ?? "-")")
+                engine.locked = false
+                um.undo()
+                note("n unlocked, undo: [\(list())]")
+                step { engine.add(urls: [media.appendingPathComponent("bars-4x3.mp4")]) }
+                engine.replaceShow(cues: engine.cues, pads: engine.pads.pads, banks: engine.pads.banks, multiTrigger: nil)
+                note("o opening a show clears undo: can undo = \(um.canUndo)")
+            }),
+        ]
+    }
 
     @MainActor private static func watchSteps(engine: Engine, watch: WatchFolder, dir: URL, note: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

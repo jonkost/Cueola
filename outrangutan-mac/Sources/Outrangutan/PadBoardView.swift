@@ -59,9 +59,7 @@ struct PadBoardView: View {
         .alert("Rename bank", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Rename") {
-                if let bank = renaming, let i = board.banks.firstIndex(where: { $0.id == bank.id }), !newName.isEmpty {
-                    board.banks[i].name = newName
-                }
+                if let bank = renaming { board.renameBank(bank.id, to: newName) }
                 renaming = nil
             }
             Button("Cancel", role: .cancel) { renaming = nil }

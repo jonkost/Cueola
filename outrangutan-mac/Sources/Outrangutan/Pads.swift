@@ -135,6 +135,8 @@ final class PadBoard: ObservableObject {
     var onChange: (() -> Void)?
     /// Called each time a pad fires, with how long it runs (nil for a loop).
     var onFire: ((Pad, Double?) -> Void)?
+    /// Called just before an edit, with its name, for Undo.
+    var willChange: ((String, String?) -> Void)?
     /// Called with a line for the show log each time a pad plays.
     var onLog: ((String) -> Void)?
 
@@ -340,6 +342,7 @@ final class PadBoard: ObservableObject {
     /// Puts a sound file on a pad slot of the current bank.
     func assign(url: URL, slot: Int) {
         guard let bank = currentBank else { return }
+        willChange?("Load Pad", nil)
         let name = url.deletingPathExtension().lastPathComponent
         if let i = pads.firstIndex(where: { $0.bank == bank.id && $0.slot == slot }) {
             stop(pads[i].id)
@@ -360,6 +363,11 @@ final class PadBoard: ObservableObject {
     /// Fills the next empty slots of the current bank with sound files.
     func add(urls: [URL]) {
         guard let bank = currentBank else { return }
+        guard urls.contains(where: Self.isSound) else { return }
+        willChange?("Add Pads", nil)
+        let saved = willChange
+        willChange = nil     // one step for the whole batch
+        defer { willChange = saved }
         var free = (0..<PadBoard.padCountMax).filter { pad(bank: bank.id, slot: $0) == nil }
         for url in urls where Self.isSound(url) {
             guard !free.isEmpty else { break }
@@ -372,6 +380,7 @@ final class PadBoard: ObservableObject {
     }
 
     func clear(_ id: String) {
+        willChange?("Clear Pad", nil)
         stop(id)
         channels[id] = nil
         pads.removeAll { $0.id == id }
@@ -389,6 +398,8 @@ final class PadBoard: ObservableObject {
         pad.trimIn = max(0, pad.trimIn)
         if let out = pad.trimOut, out <= pad.trimIn { pad.trimOut = nil }
         pad.eq.low = min(12, max(-12, pad.eq.low)); pad.eq.mid = min(12, max(-12, pad.eq.mid)); pad.eq.high = min(12, max(-12, pad.eq.high))
+        guard pad != before else { return }
+        willChange?("Change Pad", "pad:\(id)")
         if !pad.key.isEmpty {
             // A hotkey belongs to one pad at a time.
             for j in pads.indices where j != i && pads[j].key == pad.key { pads[j].key = "" }
@@ -423,6 +434,7 @@ final class PadBoard: ObservableObject {
     }
 
     func addBank() {
+        willChange?("Add Bank", nil)
         let bank = PadBank.make("Bank \(banks.count + 1)")
         banks.append(bank)
         currentBankID = bank.id
@@ -431,12 +443,44 @@ final class PadBoard: ObservableObject {
 
     func removeBank(_ id: String) {
         guard banks.count > 1 else { return }
+        willChange?("Remove Bank", nil)
+        let saved = willChange
+        willChange = nil
+        defer { willChange = saved }
         pads.filter { $0.bank == id }.forEach { clear($0.id) }
         banks.removeAll { $0.id == id }
         if currentBankID == id { currentBankID = banks[0].id }
     }
 
+    func renameBank(_ id: String, to name: String) {
+        guard let i = banks.firstIndex(where: { $0.id == id }), !name.isEmpty, banks[i].name != name else { return }
+        willChange?("Rename Bank", nil)
+        banks[i].name = name
+    }
+
+    /// Puts back an earlier set of pads (Undo). Settings changes apply to
+    /// the pads as they are; a change of sounds rebuilds the board.
+    func restore(banks old: [PadBank], pads oldPads: [Pad]) {
+        let sameSounds = oldPads.map { "\($0.id)|\($0.path)|\($0.trimIn)|\($0.trimOut ?? -1)" }
+            == pads.map { "\($0.id)|\($0.path)|\($0.trimIn)|\($0.trimOut ?? -1)" }
+        guard sameSounds else {
+            let current = currentBankID
+            replace(banks: old, pads: oldPads, multiTrigger: nil)
+            if banks.contains(where: { $0.id == current }) { currentBankID = current }
+            return
+        }
+        banks = old
+        pads = oldPads
+        for pad in oldPads {
+            guard let ch = channels[pad.id] else { continue }
+            ch.setSound(eq: pad.eq, comp: pad.comp)
+            if !fader.isRunning("pad-" + pad.id) { ch.gainMixer.outputVolume = Float(pad.gain) }
+        }
+        if !banks.contains(where: { $0.id == currentBankID }) { currentBankID = banks[0].id }
+    }
+
     func addSlot() {
+        willChange?("Add Pad Slot", nil)
         guard let i = banks.firstIndex(where: { $0.id == currentBankID }) else { return }
         banks[i].padCount = min(PadBoard.padCountMax, banks[i].padCount + 1)
     }

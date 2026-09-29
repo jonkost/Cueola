@@ -24,6 +24,12 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
   and the **Inspector** button.
 - Drag videos, sounds or stills into the window, or click **Add Media**.
 - Click a cue to stand it by. Drag cues to reorder them.
+- **Edit, Undo** (Command-Z) and **Redo** (Shift-Command-Z) take back any
+  change to the cues or pads: adding, removing, moving, Inspector changes (a
+  slider drag is one step) and pad edits. Opening or starting a show clears
+  the list, like any Mac app. While editing is locked, Undo waits.
+- **Edit, Duplicate Cue** (Command-D) copies the cue standing by, right
+  after it.
 - The **Inspector** on the right (Command-I) holds every setting for the
   cue standing by. Its icon tabs show one group at a time:
   - **Cue:** name, notes, Fire on GO, and a pad that comes with the cue.
@@ -232,6 +238,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `undo`: Undo and Redo for adding, a slider drag, removing, moving,
+  duplicating and a pad change, the lock holding an undo back, and opening a
+  show clearing the history.
 - `meter`: the cue sound meter at full and quarter volume, a dozen fast cue
   swaps, and the meter falling after All Stop.
 - `padsearch`: pictures of the pad search, with matches and with none.

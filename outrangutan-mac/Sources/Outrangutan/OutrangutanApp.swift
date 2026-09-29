@@ -21,6 +21,10 @@ struct OutrangutanApp: App {
                 MonitorToggles()
             }
             PlaybackCommands(engine: appDelegate.engine)
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                DuplicateButton(engine: appDelegate.engine)
+            }
             CommandGroup(before: .windowList) {
                 OpenLogButton()
                 Divider()
@@ -73,6 +77,17 @@ struct FileCommands: Commands {
                 Button("Show the Show File in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
             }
         }
+    }
+}
+
+/// Edit menu: a copy of the cue standing by.
+struct DuplicateButton: View {
+    @ObservedObject var engine: Engine
+
+    var body: some View {
+        Button("Duplicate Cue") { if let id = engine.standbyID { engine.duplicate(id) } }
+            .keyboardShortcut("d")
+            .disabled(engine.locked || engine.standbyID == nil)
     }
 }
 
