@@ -2123,6 +2123,9 @@ const RESUME_KEY = 'cueola_resume';
 const RESUME_MAX_AGE = 12 * 3600 * 1000;
 function markResumeState() {
   if (!session?.code || session.isDemo || session.isExpert) return;
+  // Signed out while still in a profile's show: do not write a record that
+  // the next person on this computer could pick up.
+  if (session.username && !window.CueolaIdentity?.identity?.()) return;
   try {
     localStorage.setItem(RESUME_KEY, JSON.stringify({
       code: session.code, name: session.userName || '', role: session.role || 'instructor',
@@ -2130,7 +2133,8 @@ function markResumeState() {
       profileAliases: Array.isArray(session.profileAliases) ? session.profileAliases : [],
       showName: show?.name || '',
       screen: sessionStorage.getItem('cueola_screen') || 'build',
-      scriptOp: !!livePrompterOpen, lsIdx, ts: Date.now(),
+      scriptOp: !!livePrompterOpen, lsIdx, lsRow: lsIdx >= 0 ? rowDisplayNumber(lsIdx) : 0,
+      ts: Date.now(),
     }));
   } catch {}
 }
@@ -2151,9 +2155,10 @@ function initResumeBanner() {
   const banner = document.getElementById('resumeBanner');
   if (!r || !banner) return;
   if (!document.getElementById('entry')?.classList.contains('on')) return;  // a deep link already routed elsewhere
-  const where = r.screen === 'live' ? 'live on row ' + ((r.lsIdx ?? 0) + 1) : 'building';
+  // lsRow is the crew's row number (segments do not count); old records lack it.
+  const where = r.screen === 'live' ? 'live on row ' + (r.lsRow || ((r.lsIdx ?? 0) + 1)) : 'building';
   const text = document.getElementById('resumeBannerText');
-  if (text) text.innerHTML = `You were ${where} in session <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
+  if (text) text.innerHTML = `You were ${where} in show <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
   banner.hidden = false;
 }
 function dismissResumeBanner() {
@@ -2209,7 +2214,7 @@ async function resumeLastSession() {
   };
   if (ready) { enterRundown(); setTimeout(after, 400); }
   else { try { openLocalSession(r.code, r.name || 'Operator', r.role || 'instructor'); } catch {} setTimeout(after, 400); }
-  logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + ((r.lsIdx ?? 0) + 1) + ')' : ''));
+  logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + (r.lsRow || ((r.lsIdx ?? 0) + 1)) + ')' : ''));
 }
 // Refresh the record every 20 s while in a session — the ts doubles as the
 // "was recently in use" signal for the banner's freshness window. Gated on a
@@ -2264,6 +2269,7 @@ let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise,
 let liveClockRunning = false;
 let paperworkDirty = false;
 let flowmingoRemoteOverrideUntil = 0;
+let _flowOpDocControlSeenId = null;   // last prompter.control id seen on the doc (null until the first snapshot of a show)
 // How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
 // Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
 // clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
@@ -2295,7 +2301,13 @@ function setSessionCodeInUrl(code) {
 
 function leaveSessionForFrontPage() {
   resetLiveShared();
+  // Save typed paperwork now, while it still goes to this group's copy.
+  if (_pbFieldSaveTimer) { try { flushPaperworkDraftForExport(); } catch {} }
   if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
+  // A rejoin must attach a fresh group listener, and the next show picks its
+  // own group (each show remembers its group on this device).
+  _pbGroupSubKey = '';
+  activeGroupId = '';
   captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   try { liveSessionController.leave({ reason:'session-leave' }); }
@@ -2315,6 +2327,7 @@ function leaveSessionForFrontPage() {
   sessionStorage.removeItem('cueola_screen');
   setSessionCodeInUrl('');   // a reload after leaving must not rejoin
   sessionQuestionCards = [];   // prepared question cards belong to the session just left
+  sessionCustomSources = {};   // so do its saved source buttons
   // The roster belongs to the session just left too; a stale copy would let
   // the Admin People pane list the wrong show's people until the next snapshot.
   sessionParticipantRecords = [];
@@ -2324,6 +2337,14 @@ function leaveSessionForFrontPage() {
   // live entry of the next one, and the grant (with its banner and CALLER
   // tag) belongs to the session just left.
   _remoteClockState = null;
+  // The show clock belongs to the show just left: the next show starts at 0.
+  // Forget which clock write we saw last, so a rejoin (same show) picks the
+  // room's clock back up instead of staying at 0.
+  elapsedSecs = 0;
+  liveTimerStartMs = null;
+  _clockRanThisLoad = false;
+  _lastAppliedClockSig = '';
+  _lastAppliedClockTs = 0;
   sessionControlGrant = null;
   _heldControlGrantBefore = false;
   _lastCallerTruth = null;
@@ -2741,6 +2762,14 @@ function closeDialog(id) {
 }
 
 function initDialogAttrs() {
+  // Tie each field's label to its box: a tap on the words focuses the box,
+  // and a screen reader reads the label. Only when the field has one box,
+  // never a checkbox or radio (a tap on the words would flip it).
+  document.querySelectorAll('.field > label.field-lbl:not([for])').forEach(label => {
+    const boxes = label.parentElement.querySelectorAll('input:not([type=hidden]),select,textarea');
+    const box = boxes.length === 1 ? boxes[0] : null;
+    if (box && box.id && box.type !== 'checkbox' && box.type !== 'radio') label.htmlFor = box.id;
+  });
   document.querySelectorAll('.modal-wrap,.overlay').forEach(el => {
     ensureDialogAttrs(el);
     if (!el.classList.contains('on')) el.setAttribute('aria-hidden', 'true');
@@ -2828,11 +2857,12 @@ function reportCloudWriteFailure(context='Cloud save', err=null) {
   }
   console.warn(`${context} failed.`, err);
   logShow('sync', context + ' failed. Local draft kept' + (code ? ' (' + code + ')' : ''));
-  setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
+  setCloudSyncState('error', 'Not saved. Your copy is kept on this computer and will try again.');
   const now = Date.now();
   if (now - _lastCloudErrorToastAt > 8000) {
     _lastCloudErrorToastAt = now;
-    toast(`${context} failed. Local copy kept.`);
+    // Not every caller is a save (Force live, snapshot restore), so stay neutral.
+    toast('That did not reach the cloud. Your copy is kept on this computer. Check the connection.');
   }
 }
 
@@ -3173,7 +3203,7 @@ async function loadLocalNarrationManifest() {
   if (cueolaTTS.localManifestLoaded) return cueolaTTS.localAssetRefs;
   cueolaTTS.localManifestPromise = (async () => {
     cueolaTTS.localManifestLoaded = true;
-    setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Checking Heart voice files...');
+    setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Loading the voice over.');
     setTTSDot(cueolaTTS.muted ? null : 'tts-system-loading');
     try {
       const response = await fetch(LOCAL_NARRATION_MANIFEST, { cache:'no-store' });
@@ -3181,24 +3211,24 @@ async function loadLocalNarrationManifest() {
       const manifest = await response.json();
       if (!browserCanPlayMp3()) {
         cueolaTTS.localAssetRefs = new Set();
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro MP3 playback unavailable in this browser.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'This browser cannot play the voice over.');
         setTTSDot(null);
         return cueolaTTS.localAssetRefs;
       }
       const files = Array.isArray(manifest.files) ? manifest.files : [];
       cueolaTTS.localAssetRefs = new Set(files.map(item => String(item).replace(/\.mp3$/i, '')));
       if (cueolaTTS.localAssetRefs.size) {
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Heart voice ready.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Voice over ready.');
         setTTSDot(cueolaTTS.muted ? null : 'tts-system-ready');
       } else {
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro files pending.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Voice over is not ready yet.');
         setTTSDot(null);
       }
     } catch {
       cueolaTTS.localAssetRefs = new Set();
       setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : (window.location.protocol === 'file:'
-        ? 'Use the preview URL for Kokoro voice over.'
-        : 'Kokoro files pending.'));
+        ? 'Open Cueola from its web address to hear the voice over.'
+        : 'Voice over is not ready yet.'));
       setTTSDot(null);
     }
     return cueolaTTS.localAssetRefs;
@@ -3209,7 +3239,7 @@ async function loadLocalNarrationManifest() {
 function playLocalNarration(refId) {
   if (!refId) return Promise.resolve(false);
   if (cueolaTTS.localMissingRefs.has(refId) || !cueolaTTS.localAssetRefs.has(refId)) {
-    setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+    setTTSAssetStatus('No voice over for this lesson yet.');
     return Promise.resolve(false);
   }
   const url = getLocalNarrationUrl(refId);
@@ -3227,17 +3257,17 @@ function playLocalNarration(refId) {
     audio.playbackRate = cueolaTTS.rate;
     audio.onended = () => {
       if (cueolaTTS._audio === audio) cueolaTTS._audio = null;
-      setTTSAssetStatus('Heart voice ready.');
+      setTTSAssetStatus('Voice over ready.');
     };
     audio.onerror = () => {
       cueolaTTS.localMissingRefs.add(refId);
-      setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+      setTTSAssetStatus('No voice over for this lesson yet.');
       finish(false);
     };
     audio.play()
       .then(() => {
         cueolaTTS._audio = audio;
-        setTTSAssetStatus('Playing Heart voice.');
+        setTTSAssetStatus('Playing the lesson.');
         finish(true);
       })
       .catch(() => {
@@ -3257,7 +3287,8 @@ async function ttsSpeak(text, priority=true, refId='') {
   if (priority) ttsStop();
   await initTTS();
   if (refId && await playLocalNarration(refId)) return true;
-  setTTSAssetStatus(refId ? `Kokoro file pending: ${refId}` : 'Kokoro narration file pending.');
+  // playLocalNarration already said why it could not play (like "Tap once").
+  if (!refId) setTTSAssetStatus('No voice over for this lesson yet.');
   return false;
 }
 
@@ -3509,7 +3540,7 @@ function openGuideAction(action) {
   else if (action === 'profile') window.CueolaIdentity?.openHub?.();
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
-  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
+  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || (session.isDemo || session.isExpert ? '' : session.code) || '');
   else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
   else if (action === 'keywi') openControlSurface();
 }
@@ -3622,12 +3653,15 @@ function updateAdminUI() {
   try { renderShowCallerBadge(); renderCallerBanner(); } catch (error) { containError('Caller chip', error); }
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
+  // The rundown bar hides Admin in CSS; the inline display shows it to a signed-in instructor only.
   if (adminSession) {
     btn.textContent = adminSession.name.split(' ')[0];
     btn.className = 'tbtn tbtn-admin';
+    btn.style.display = 'inline-flex';
   } else {
     btn.textContent = 'Admin';
     btn.className = 'tbtn tbtn-ghost';
+    btn.style.display = '';
   }
 }
 
@@ -3785,14 +3819,10 @@ function renderAdminPaneSession() {
   }
   if (session.code) {
     const presenceNames = getActivePresencePeople().map(p=>p.name);
-    const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     html += `<div class="admin-section">
       <div class="admin-section-label">Live control</div>
-      <div class="u-note u-mb8">Send every connected device to the live screen, all following one operator.</div>
+      <div class="u-note u-mb8">${presenceNames.length ? 'Opens Live on every connected device, on the director\'s cue.' : 'Nobody shows as connected right now, not even this computer.'}</div>
       <div class="u-row-wrap">
-        <select id="adminFollowSelect" class="field-in admin-follow-in">
-          ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
-        </select>
         <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive()">Move everyone to Live</button>
       </div>
     </div>`;
@@ -3870,12 +3900,12 @@ function renderAdminPanePeople() {
 
 function renderAdminPaneSources() {
   return `<div class="admin-section">
-    <div class="admin-section-label">Session sources <span class="admin-section-tag">(this session only)</span></div>
+    <div class="admin-section-label">Sources <span class="admin-section-tag">(this show only)</span></div>
+    <div class="u-note u-mb8">Each name is a button on every Video, Audio or Script cue card in this show.</div>
     <div class="admin-sources-grid">
       ${renderSourcesRow('video','Video')}
       ${renderSourcesRow('audio','Audio')}
-      ${renderSourcesRow('gfx','GFX')}
-      ${renderSourcesRow('scriptWho','Script / Who')}
+      ${renderSourcesRow('scriptWho','Speaker')}
     </div>
   </div>`;
 }
@@ -31213,7 +31243,7 @@ window.addEventListener('popstate', () => {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
     return;
   }
-  if (confirm('Leave this session and return to the front page?')) {
+  if (confirm('Leave this show and go back to the front page?')) {
     leaveSessionForFrontPage();
   } else {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
@@ -31406,9 +31436,9 @@ function cueolaAppPath() {
 
   const code = urlCode || stored?.code;
   if (!code) return;
-  // ?prepro=1 is the workspace launcher's window-safe variant of the
-  // dashboard's localStorage flag (a flag would race between two tabs
-  // opened in the same gesture).
+  // ?prepro=1 is the window-safe variant of the dashboard's localStorage flag
+  // (a flag would race between two tabs opened in the same gesture). Show
+  // setup now opens ?app=plandabear instead; this keeps older links working.
   const shouldOpenPrePro = localStorage.getItem('cueola_open_prepro') === '1' || params.get('prepro') === '1';
   localStorage.removeItem('cueola_open_prepro');
 
@@ -31473,6 +31503,8 @@ keymapDispatch = guardFn(keymapDispatch, 'Keyboard dispatch');
 // Offer to resume after an unclean exit (Decisions #14). The banner lives on
 // the entry screen; a deep link that routes elsewhere hides it with the screen.
 initResumeBanner();
+// Signing in or out changes whose record it is, so check again.
+document.addEventListener('cueola-identity-change', initResumeBanner);
 
 // P7: Save the show file with the standard shortcut — Cmd/Ctrl+S saves the
 // open surface in place (Outrangutan screen → .ogshow, otherwise → .cueola)
@@ -31523,6 +31555,9 @@ window.addEventListener('keydown', e => {
   const enter = e => {
     const t = e.target.closest?.('[data-tip],[data-fullname]');
     if (!t) { if (anchor && e.type === 'mouseover') hide(); return; }
+    // A sheet moving focus as it opens is not a request for help: only
+    // keyboard focus shows the label.
+    if (e.type === 'focusin') { try { if (!e.target.matches(':focus-visible')) return; } catch {} }
     arm(t);
   };
   const leave = e => {
