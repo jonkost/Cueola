@@ -19,6 +19,9 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 
 ## Use it
 
+**Help, Outrangutan Help** (Command-?) explains all of this in plain words,
+for students running the show.
+
 - The toolbar holds the everyday tools: **Cues / Pads**, **Add Media**,
   **Add Matte** (a solid color picture), **Outputs**, the connection light,
   and the **Inspector** button.
@@ -264,6 +267,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `help`: a picture of the Help window.
 - `extras`: standby words on an empty output, the arrow keys moving the
   standby, and the numbers behind the count-up clock.
 - `screens`: a pretend projector connects and is unplugged while a video
@@ -328,6 +332,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |
 | `Midi.swift` | MIDI boxes and Settings, MIDI |
+| `HelpView.swift` | Outrangutan Help, in plain words |
 | `Keys.swift` | The show keys and Settings, Keys |
 | `ShowLog.swift` | The show log and its window |
 | `Printer.swift` | Printing the cue sheet and the log |

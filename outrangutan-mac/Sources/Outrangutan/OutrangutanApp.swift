@@ -25,6 +25,7 @@ struct OutrangutanApp: App {
                 Divider()
                 DuplicateButton(engine: appDelegate.engine)
             }
+            CommandGroup(replacing: .help) { HelpButton() }
             CommandGroup(before: .windowList) {
                 OpenLogButton()
                 Divider()
@@ -36,6 +37,10 @@ struct OutrangutanApp: App {
             ShowLogView(log: appDelegate.engine.log) { [files = appDelegate.files] in files.showName }
         }
         .defaultSize(width: 720, height: 480)
+
+        // Help, in plain words (Help menu, Command-?).
+        Window("Outrangutan Help", id: "help") { HelpView() }
+            .defaultSize(width: 860, height: 560)
 
         Settings {
             SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch)

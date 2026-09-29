@@ -75,6 +75,10 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "help": steps = [
+            (0.3, { picture(HelpView(), size: CGSize(width: 860, height: 560), to: dir.appendingPathComponent("help.png")) }),
+            (1.0, {}),
+        ]
         case "extras": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
