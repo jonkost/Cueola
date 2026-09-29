@@ -19,6 +19,8 @@ struct SettingsView: View {
                 .tabItem { Label("Keys", systemImage: "keyboard") }
             MidiSettings(midi: midi, engine: engine)
                 .tabItem { Label("MIDI", systemImage: "pianokeys") }
+            ObsSettings(obs: ObsClient.shared)
+                .tabItem { Label("OBS", systemImage: "video.circle") }
         }
         .frame(width: 560, height: 470)
     }

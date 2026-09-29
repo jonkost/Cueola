@@ -137,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var midi = MidiInput(engine: engine)
     lazy var direct = DirectLink(link: link)
     lazy var scopes = Scopes(engine: engine)
+    let obs = ObsClient.shared
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -173,6 +174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = link
         _ = midi
         _ = direct
+        obs.onScene = { [weak self] scene in self?.engine.obsSceneChanged(scene) }
+        obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
+        engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }
         if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes) }
         NSApp.activate(ignoringOtherApps: true)
 

@@ -7,6 +7,7 @@ import SwiftUI
 /// timing counts from the cue's next GO.
 struct InspectorView: View {
     @ObservedObject var engine: Engine
+    @ObservedObject private var obs = ObsClient.shared
     @AppStorage("inspector.cueTab") private var tab = "cue"
 
     var body: some View {
@@ -68,12 +69,13 @@ struct InspectorView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: 180)
+                .frame(maxWidth: 180, alignment: .trailing)
             }
             if !live(cue).sfxPadId.isEmpty {
                 NumberField(label: "After", value: bind(cue, \.sfxDelay), step: 0.5)
             }
         }
+        obsSection(cue)
         if cue.kind != .matte {
             InspectorSection(title: "File") {
                 Text(cue.url.lastPathComponent).foregroundStyle(cue.fileIsThere ? .secondary : Color.orange)
@@ -102,7 +104,7 @@ struct InspectorView: View {
                 Picker("At the end", selection: bind(cue, \.endAction)) {
                     ForEach(endChoices(cue), id: \.self) { Text(endLabel($0, cue)).tag($0) }
                 }
-                .labelsHidden().frame(maxWidth: 170)
+                .labelsHidden().frame(maxWidth: 170, alignment: .trailing)
             }
         }
     }
@@ -134,7 +136,7 @@ struct InspectorView: View {
                 Picker("Curve", selection: bind(cue, \.fadeCurve)) {
                     ForEach(FadeCurve.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
-                .labelsHidden().frame(maxWidth: 150)
+                .labelsHidden().frame(maxWidth: 150, alignment: .trailing)
             }
         }
     }
@@ -148,7 +150,7 @@ struct InspectorView: View {
                     Divider()
                     Text("Every output").tag(0)
                 }
-                .labelsHidden().frame(maxWidth: 170)
+                .labelsHidden().frame(maxWidth: 170, alignment: .trailing)
             }
         }
         if cue.kind == .matte {
@@ -166,7 +168,7 @@ struct InspectorView: View {
                     Picker("Fit", selection: bind(cue, \.fit)) {
                         ForEach(Fit.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
-                    .labelsHidden().frame(maxWidth: 170)
+                    .labelsHidden().frame(maxWidth: 170, alignment: .trailing)
                 }
                 PercentSlider(label: "Size", value: bind(cue, \.scale), range: 0.25...2)
                 NumberField(label: "Move right", value: bind(cue, \.posX), unit: "%", step: 1, range: -100...100)
@@ -216,6 +218,40 @@ struct InspectorView: View {
             set: { c in engine.update(cue.id) { $0[keyPath: path] = NSColor(c).hexString } }
         ), supportsOpacity: false)
         .labelsHidden()
+    }
+
+    @ViewBuilder
+    private func obsSection(_ cue: Cue) -> some View {
+        let c = live(cue)
+        InspectorSection(title: "OBS", note: obs.isConnected ? nil : "Connect OBS in Settings, OBS, to pick its scenes. Actions run only while it is connected.") {
+            InspectorRow("When it starts") {
+                Picker("When it starts", selection: bind(cue, \.obs.action)) {
+                    ForEach(ObsAction.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden().frame(maxWidth: 170, alignment: .trailing)
+            }
+            if c.obs.action == .scene {
+                InspectorRow("Scene") { scenePicker(cue, \.obs.scene, none: "Pick a scene") }
+            }
+            InspectorRow("Fire when OBS shows") { scenePicker(cue, \.obsTriggerScene, none: "Never") }
+                .help("When OBS switches to this scene, this cue stands by and fires.")
+        }
+    }
+
+    /// OBS's scenes when it is connected; a typed name when it is not.
+    @ViewBuilder
+    private func scenePicker(_ cue: Cue, _ path: WritableKeyPath<Cue, String>, none: String) -> some View {
+        let value = live(cue)[keyPath: path]
+        if obs.scenes.isEmpty {
+            TextField(none, text: bind(cue, path)).textFieldStyle(.roundedBorder).frame(maxWidth: 170, alignment: .trailing)
+        } else {
+            Picker(none, selection: bind(cue, path)) {
+                Text(none).tag("")
+                if !value.isEmpty && !obs.scenes.contains(value) { Text(value + " (not in OBS)").tag(value) }
+                ForEach(obs.scenes, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden().frame(maxWidth: 170, alignment: .trailing)
+        }
     }
 
     // MARK: Words

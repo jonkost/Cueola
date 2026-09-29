@@ -204,7 +204,7 @@ final class ShowFiles: ObservableObject {
                 "output": cue.output,
                 "key": ["mode": cue.key.mode.rawValue, "color": cue.key.color.lowercased(), "sim": cue.key.sim,
                         "smooth": cue.key.smooth, "bg": cue.key.bg.lowercased()],
-                "obs": ["action": "none", "scene": ""], "obsTriggerScene": "",
+                "obs": ["action": cue.obs.action.rawValue, "scene": cue.obs.scene], "obsTriggerScene": cue.obsTriggerScene,
                 "sfxPadId": cue.sfxPadId, "sfxDelay": cue.sfxDelay,
                 "mac": mac,
             ])
@@ -369,6 +369,11 @@ final class ShowFiles: ObservableObject {
             cue.sfxDelay = max(0, Wire.number(c["sfxDelay"]) ?? 0)
             cue.notes = Wire.string(c["notes"]) ?? ""
             cue.armed = c["armed"] as? Bool ?? true
+            if let o = c["obs"] as? [String: Any] {
+                cue.obs.action = ObsAction(rawValue: Wire.string(o["action"]) ?? "") ?? .none
+                cue.obs.scene = Wire.string(o["scene"]) ?? ""
+            }
+            cue.obsTriggerScene = Wire.string(c["obsTriggerScene"]) ?? ""
             if kind == .video, let k = c["key"] as? [String: Any] {
                 cue.key.mode = KeyMode(rawValue: Wire.string(k["mode"]) ?? "") ?? .off
                 cue.key.color = NSColor(hex: Wire.string(k["color"]) ?? "")?.hexString ?? "#00B140"

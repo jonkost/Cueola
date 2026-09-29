@@ -153,6 +153,19 @@ Run only one Outrangutan on a show at a time: this app or the web one.
 Pads work from the rundown and the deck too: a pad key, a TAKE-linked sound
 effect, or a rundown row's sound effect hits the pad on this Mac.
 
+## OBS
+
+In **Settings, OBS**, enter OBS's address (localhost for OBS on this Mac),
+port and password from OBS's Tools, WebSocket Server Settings, and click
+Connect. Then in a cue's Inspector (Cue tab, OBS):
+
+- **When it starts:** switch OBS to a scene, or start or stop recording or
+  streaming, as the cue starts.
+- **Fire when OBS shows:** the cue stands by and fires when OBS switches to
+  that scene. A cue's own scene switch never fires it again.
+
+The password stays on this Mac, in the app's settings.
+
 ## Program preview and scopes
 
 Under the transport sits a strip with the **program preview** (a live copy
@@ -206,6 +219,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `obs`: a pretend OBS checks the password proof (against openssl), takes a
+  cue's scene switch and a start recording, and fires a cue with its own
+  scene change.
 - `key`: color bars with the green bar keyed out, then a luma key switched
   on while on air; reads the real frames.
 - `scopes`: color bars, a still and a red matte through the preview and the
@@ -239,6 +255,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `Obs.swift` | OBS Studio control and Settings, OBS |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |

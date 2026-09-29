@@ -119,6 +119,8 @@ struct Cue: Identifiable, Codable, Equatable {
     var notes = ""
     var armed = true                            // false: GO skips this cue
     var key = VideoKey()                     // video only: chroma, luma or alpha key
+    var obs = CueObs()                          // what OBS does when this cue starts
+    var obsTriggerScene = ""                    // OBS switching to this scene fires this cue
 
     init(name: String, path: String, kind: CueKind, wireID: String? = nil) {
         self.name = name
@@ -162,6 +164,8 @@ struct Cue: Identifiable, Codable, Equatable {
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         armed = try c.decodeIfPresent(Bool.self, forKey: .armed) ?? true
         key = (try? c.decodeIfPresent(VideoKey.self, forKey: .key)) ?? VideoKey()
+        obs = (try? c.decodeIfPresent(CueObs.self, forKey: .obs)) ?? CueObs()
+        obsTriggerScene = try c.decodeIfPresent(String.self, forKey: .obsTriggerScene) ?? ""
     }
 
     /// Milliseconds as 13 digits, so ids sort in the order they were made.

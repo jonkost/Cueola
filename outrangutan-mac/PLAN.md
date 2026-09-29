@@ -76,7 +76,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | MIDI | Built (step 6) | Uses the Mac's own MIDI system. |
 | Waveform and vectorscope | Built (step 7) | Rec. 709, 15 times a second, only while showing. |
 | Keying: chroma, luma, alpha | Built (step 7) | Keys on the graphics card, full resolution, live on air. Show files carry it both ways. |
-| OBS control | Step 7 | Same connection as the web version. |
+| OBS control | Built (step 7) | The same protocol as the web (obs-websocket 5): scene, record and stream actions per cue, and scene triggers. |
 | Dropbox folder sync | Step 7 | |
 | Convert on upload | Not needed | The Mac plays the pro formats as they are. |
 | Kiosk helper and kiosk windows | Not needed | Native outputs replace them. |

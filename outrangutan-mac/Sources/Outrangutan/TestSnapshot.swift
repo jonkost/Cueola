@@ -1,3 +1,4 @@
+import Network
 import CoreMIDI
 import OutrangutanCore
 import AppKit
@@ -16,6 +17,8 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "obs": a pretend OBS checks the password proof, takes a cue's scene
+///   switch, and fires a cue with its own scene change.
 /// - "key": color bars with the green bar keyed to magenta, then a luma key
 ///   switched on while on air; reads the real frames.
 /// - "scopes": the program preview, waveform and vectorscope on color bars,
@@ -70,6 +73,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "obs": steps = obsSteps(engine: engine, dir: dir, note: note)
         case "key": steps = keySteps2(engine: engine, scopes: scopes, dir: dir, note: note, snap: snap)
         case "scopes": steps = scopeSteps(engine: engine, scopes: scopes, dir: dir, note: note, state: state, snap: snap)
         case "listen": steps = listenSteps(engine: engine, link: link, note: note)
@@ -177,6 +181,69 @@ enum TestSnapshot {
 
     private static var virtualBox = MIDIEndpointRef()
     private static var sockets: [URLSessionWebSocketTask] = []
+
+    private static var fakeObs: FakeObs?
+
+    /// Saves a picture of a SwiftUI view in its own dark window. `store`
+    /// keeps remembered settings (like an Inspector tab) away from the real app's.
+    @MainActor static func picture<V: View>(_ view: V, size: CGSize, to url: URL, store: UserDefaults? = nil) {
+        let root = view
+            .defaultAppStorage(store ?? UserDefaults(suiteName: "live.cueola.outrangutan.test")!)
+            .frame(width: size.width, height: size.height)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+        win.appearance = NSAppearance(named: .darkAqua)
+        win.contentView = NSHostingView(rootView: root)
+        win.orderBack(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if let v = win.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+                v.cacheDisplay(in: v.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: url)
+            }
+            win.orderOut(nil)
+        }
+    }
+
+    @MainActor private static func obsSteps(engine: Engine, dir: URL, note: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let obs = ObsClient.shared
+        let fake = FakeObs(port: 44559, password: "showtime", note: note)
+        fakeObs = fake
+        func gos() -> [String] { engine.log.entries.filter { $0.kind == .cue }.map { "\($0.text) (\($0.from))" } }
+        return [
+            (0.5, {
+                var a = Cue(name: "Open on the tight shot", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                a.obs.action = .scene; a.obs.scene = "Tight"; a.obsTriggerScene = "Tight"
+                var b = Cue(name: "Break slate", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                b.obsTriggerScene = "Break"
+                var c = Cue(name: "Roll and record", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
+                c.obs.action = .startRecord
+                engine.replaceShow(cues: [a, b, c], pads: [], banks: [], multiTrigger: nil)
+                obs.host = "localhost"; obs.port = 44559; obs.password = "wrong"
+                obs.connect()
+            }),
+            (1.0, { note("a wrong password: \(obs.status)"); obs.password = "showtime"; obs.connect() }),
+            (1.0, { note("b right password: \(obs.status); scenes \(obs.scenes); program \(obs.current)"); engine.go() }),
+            (1.0, { note("c after GO on cue 1 (it asks for Tight, and waits for Tight): GOs \(gos())"); fake.switchScene("Break") }),
+            (1.0, {
+                note("d OBS switched to Break by itself: GOs \(gos())")
+                picture(ObsSettings(obs: obs), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("obs-settings.png"))
+                let store = UserDefaults(suiteName: "live.cueola.outrangutan.test")!
+                store.set("cue", forKey: "inspector.cueTab")
+                engine.standbyID = engine.cues[0].id
+                picture(InspectorView(engine: engine), size: CGSize(width: 340, height: 760), to: dir.appendingPathComponent("obs-inspector.png"), store: store)
+            }),
+            (1.0, { engine.standbyID = engine.cues[2].id; engine.go() }),
+            (1.0, {
+                note("e cue 3 started recording: OBS recording = \(obs.recording)")
+                engine.log.entries.filter { $0.from == "OBS" }.forEach { note("   log: \($0.line)") }
+                engine.allStop()
+                obs.disconnect()
+            }),
+            (0.3, {}),
+        ]
+    }
 
     @MainActor private static func keySteps2(engine: Engine, scopes: Scopes, dir: URL, note: @escaping (String) -> Void,
                                              snap: @escaping (String) -> Void) -> Steps {
@@ -1037,6 +1104,118 @@ enum TestSnapshot {
                 snap("link-12-end")
             }),
         ]
+    }
+}
+
+/// A pretend OBS: the same WebSocket protocol (version 5), with a password.
+/// It checks the password proof against the Mac's own openssl tool, so the
+/// test does not just agree with itself.
+final class FakeObs {
+    private var listener: NWListener?
+    private var conns: [NWConnection] = []
+    private let password: String
+    private let note: (String) -> Void
+    private var scene = "Wide"
+    private var recording = false
+    let salt = "c2FsdHlzYWx0", challenge = "Y2hhbGxlbmdl"
+
+    init(port: UInt16, password: String, note: @escaping (String) -> Void) {
+        self.password = password
+        self.note = note
+        let ws = NWProtocolWebSocket.Options()
+        let params = NWParameters.tcp
+        params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
+        params.requiredInterfaceType = .loopback
+        guard let l = try? NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!) else { return }
+        l.newConnectionHandler = { [weak self] c in self?.accept(c) }
+        l.start(queue: .main)
+        listener = l
+    }
+
+    private func accept(_ c: NWConnection) {
+        conns.append(c)
+        c.stateUpdateHandler = { [weak self] state in
+            if case .ready = state {
+                self?.send(["op": 0, "d": ["obsWebSocketVersion": "5.5.0", "rpcVersion": 1,
+                                           "authentication": ["challenge": self?.challenge ?? "", "salt": self?.salt ?? ""]]], c)
+            }
+        }
+        c.start(queue: .main)
+        receive(c)
+    }
+
+    private func receive(_ c: NWConnection) {
+        c.receiveMessage { [weak self] data, _, _, error in
+            guard let self, error == nil else { return }
+            if let data, let m = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { self.handle(m, c) }
+            self.receive(c)
+        }
+    }
+
+    /// The proof worked out by openssl, not by the app.
+    private func expected() -> String {
+        func run(_ input: String) -> String {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = ["-c", "printf %s \"$IN\" | /usr/bin/openssl dgst -sha256 -binary | /usr/bin/base64"]
+            p.environment = ["IN": input]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            try? p.run(); p.waitUntilExit()
+            return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return run(run(password + salt) + challenge)
+    }
+
+    private func handle(_ m: [String: Any], _ c: NWConnection) {
+        let d = m["d"] as? [String: Any] ?? [:]
+        switch m["op"] as? Int {
+        case 1:
+            if (d["authentication"] as? String) == expected() {
+                note("   fake OBS: password proof matches openssl")
+                send(["op": 2, "d": ["negotiatedRpcVersion": 1]], c)
+            } else {
+                note("   fake OBS: wrong password proof, closing with 4009")
+                let meta = NWProtocolWebSocket.Metadata(opcode: .close)
+                meta.closeCode = .privateCode(4009)
+                c.send(content: nil, contentContext: NWConnection.ContentContext(identifier: "close", metadata: [meta]),
+                       isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+            }
+        case 6:
+            let type = d["requestType"] as? String ?? ""
+            let data = d["requestData"] as? [String: Any] ?? [:]
+            var response: [String: Any] = [:]
+            switch type {
+            case "GetSceneList":
+                response = ["currentProgramSceneName": scene, "scenes": [["sceneName": "Break"], ["sceneName": "Tight"], ["sceneName": "Wide"]]]
+            case "GetRecordStatus": response = ["outputActive": recording]
+            case "GetStreamStatus": response = ["outputActive": false]
+            default: break
+            }
+            if type != "GetSceneList" && type != "GetRecordStatus" && type != "GetStreamStatus" {
+                note("   fake OBS got: \(type) \(data.isEmpty ? "" : "\(data)")")
+            }
+            send(["op": 7, "d": ["requestType": type, "requestId": d["requestId"] ?? "", "requestStatus": ["result": true, "code": 100],
+                                 "responseData": response]], c)
+            if type == "SetCurrentProgramScene", let name = data["sceneName"] as? String { switchScene(name) }
+            if type == "StartRecord" {
+                recording = true
+                conns.forEach { send(["op": 5, "d": ["eventType": "RecordStateChanged", "eventData": ["outputActive": true]]], $0) }
+            }
+        default:
+            break
+        }
+    }
+
+    func switchScene(_ name: String) {
+        scene = name
+        conns.forEach { send(["op": 5, "d": ["eventType": "CurrentProgramSceneChanged", "eventData": ["sceneName": name]]], $0) }
+    }
+
+    private func send(_ object: [String: Any], _ c: NWConnection) {
+        guard let data = try? JSONSerialization.data(withJSONObject: object) else { return }
+        let meta = NWProtocolWebSocket.Metadata(opcode: .text)
+        c.send(content: data, contentContext: NWConnection.ContentContext(identifier: "m", metadata: [meta]), isComplete: true, completion: .idempotent)
     }
 }
 

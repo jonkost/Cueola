@@ -164,6 +164,8 @@ final class Engine: ObservableObject {
 
     /// Called when what is on air changes, so the show link can tell the rundown.
     var onTransport: (() -> Void)?
+    /// Called when a cue starts (after its pre-wait), for OBS.
+    var onCueBegan: ((Cue) -> Void)?
     /// Called when a video, sound or still starts, with its length in seconds.
     var onClipStart: ((Cue, Double) -> Void)?
     /// Called when the cue list changes.
@@ -311,6 +313,15 @@ final class Engine: ObservableObject {
         source = was
     }
 
+    /// OBS switched to a scene: fire the cue waiting for it, if one is.
+    func obsSceneChanged(_ scene: String) {
+        guard !scene.isEmpty, let cue = cues.first(where: { $0.obsTriggerScene == scene }) else { return }
+        run(from: "OBS, scene \(scene)") {
+            standbyID = cue.id
+            go()
+        }
+    }
+
     /// Runs a show key.
     func perform(_ action: KeyMap.Action) {
         switch action {
@@ -456,6 +467,7 @@ final class Engine: ObservableObject {
         pads.tie(cue)
         refresh()
         onClipStart?(cue, playLength(cue))
+        onCueBegan?(cue)
         // Continue: the next cue fires as this one starts.
         if cue.continueMode == .autoContinue { fireNext(after: cue) }
         return result

@@ -328,6 +328,8 @@ struct ControlView: View {
                 if cue.preWait > 0 { chip("PRE \(Timecode.short(cue.preWait))", .yellow) }
                 if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
                 if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
+                if cue.key.mode != .off && cue.kind == .video { chip("KEY", .green) }
+                if cue.obs.action != .none || !cue.obsTriggerScene.isEmpty { chip("OBS", .indigo) }
             }
             // The small icons each keep their own column, shown or not, so
             // they line up from row to row.

@@ -325,7 +325,7 @@ struct PadInspectorView: View {
 
     private func eqSlider(_ label: String, _ value: Binding<Double>) -> some View {
         InspectorRow(label) {
-            Slider(value: value, in: -12...12, step: 0.5).frame(maxWidth: 150)
+            Slider(value: value, in: -12...12, step: 0.5).frame(maxWidth: 150, alignment: .trailing)
             Text(String(format: "%+.1f dB", value.wrappedValue))
                 .monospacedDigit().foregroundStyle(.secondary).frame(width: 62, alignment: .trailing)
         }
