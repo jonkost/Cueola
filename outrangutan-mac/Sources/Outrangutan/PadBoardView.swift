@@ -378,15 +378,16 @@ struct PadInspectorView: View {
 struct LevelMeterView: View {
     @ObservedObject var meter: LevelMeter
     var label = "PADS"
+    var width: CGFloat = 90
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).fixedSize()
             VStack(spacing: 2) {
                 bar(meter.left)
                 bar(meter.right)
             }
-            .frame(width: 90)
+            .frame(width: width)
             Circle()
                 .fill(meter.clipped ? Color.red : Color.secondary.opacity(0.25))
                 .frame(width: 7, height: 7)

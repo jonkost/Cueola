@@ -108,7 +108,7 @@ struct MonitorStrip: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.35)))
                 HStack(spacing: 6) {
                     Circle().fill(engine.pictureCue != nil ? Color.red : Color.secondary.opacity(0.5)).frame(width: 7, height: 7)
-                    Text("PROGRAM").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                    Text("PROGRAM").font(.caption2.weight(.bold)).foregroundStyle(.secondary).fixedSize()
                     if engine.outputs.count > 1 {
                         Picker("Preview", selection: $engine.monitorOutput) {
                             ForEach(engine.outputs) { Text($0.label).tag($0.id) }
@@ -119,7 +119,7 @@ struct MonitorStrip: View {
                         .help("Which output the preview shows. It picks up from the next cue.")
                     }
                     Spacer()
-                    LevelMeterView(meter: engine.cueMeter, label: "SOUND")
+                    LevelMeterView(meter: engine.cueMeter, label: "SOUND", width: 56)
                         .help("How loud the cues are: videos and sound cues, at their volume. Pads have their own meter.")
                     Toggle(isOn: $showScopes) { Image(systemName: "waveform.path.ecg") }
                         .toggleStyle(.button)

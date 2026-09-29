@@ -13,6 +13,7 @@ struct ControlView: View {
     let scopes: Scopes
     @AppStorage("ui.monitor") private var showMonitor = true
     @Environment(\.undoManager) private var undoManager
+    @ObservedObject private var thumbs = Thumbnails.shared
     @ObservedObject private var keys = KeyMap.shared
     @AppStorage("clock.24hour") private var clock24 = true
     @State private var dropTargeted = false
@@ -372,19 +373,23 @@ struct ControlView: View {
 
     @ViewBuilder
     private func icon(_ cue: Cue, onAir: Bool) -> some View {
-        if cue.kind == .matte {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color(nsColor: NSColor(hex: cue.color) ?? .black))
-                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1))
-                .frame(width: 16, height: 12)
-                .frame(width: 20)
-        } else {
-            Image(systemName: cue.kind.symbol)
-                .symbolRenderingMode(.hierarchical)
-                .symbolEffect(.variableColor.iterative, isActive: onAir && cue.kind == .audio)
-                .frame(width: 20)
-                .foregroundStyle(cue.kind == .audio ? Color.cyan : (cue.kind == .still ? Color.yellow : Color.purple))
+        // A 16:9 picture of the cue: a frame of the video, the still, the
+        // matte's color, or the kind's symbol for sound.
+        ZStack {
+            RoundedRectangle(cornerRadius: 4).fill(cue.kind == .matte ? Color(nsColor: NSColor(hex: cue.color) ?? .black) : Color.black.opacity(0.35))
+            if let image = thumbs.image(for: cue) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+            } else if cue.kind != .matte {
+                Image(systemName: cue.kind.symbol)
+                    .symbolRenderingMode(.hierarchical)
+                    .symbolEffect(.variableColor.iterative, isActive: onAir && cue.kind == .audio)
+                    .foregroundStyle(cue.kind == .audio ? Color.cyan : (cue.kind == .still ? Color.yellow : Color.purple))
+            }
         }
+        .frame(width: 48, height: 27)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(onAir ? Color.red : Color.secondary.opacity(0.35), lineWidth: onAir ? 2 : 1))
+        .accessibilityHidden(true)
     }
 
     /// One icon column in a cue row: the symbol when the setting is on, an
