@@ -23,6 +23,30 @@ enum CueKind: String, Codable {
     var wireType: String { holds ? "image" : rawValue }
 }
 
+/// A color to group cues by, the same six as the web app's cue colors.
+enum CueLabel: String, Codable, CaseIterable {
+    case none, blue, green, red, yellow, purple, cyan
+
+    var label: String { rawValue == "none" ? "None" : rawValue.capitalized }
+
+    /// The web app's name for it ("var(--green)").
+    var web: String? {
+        switch self {
+        case .none: return nil
+        case .blue: return "var(--video)"
+        case .green: return "var(--green)"
+        case .red: return "var(--red)"
+        case .yellow: return "var(--yellow)"
+        case .purple: return "var(--purple)"
+        case .cyan: return "var(--cyan)"
+        }
+    }
+
+    init(web: String?) {
+        self = CueLabel.allCases.first { $0.web == web } ?? .none
+    }
+}
+
 /// What happens after a cue starts, the same three as the web app.
 enum ContinueMode: String, Codable, CaseIterable {
     case manual
@@ -121,6 +145,7 @@ struct Cue: Identifiable, Codable, Equatable {
     var key = VideoKey()                     // video only: chroma, luma or alpha key
     var obs = CueObs()                          // what OBS does when this cue starts
     var obsTriggerScene = ""                    // OBS switching to this scene fires this cue
+    var label: CueLabel = .none                 // a color to group cues by
 
     init(name: String, path: String, kind: CueKind, wireID: String? = nil) {
         self.name = name
@@ -166,6 +191,7 @@ struct Cue: Identifiable, Codable, Equatable {
         key = (try? c.decodeIfPresent(VideoKey.self, forKey: .key)) ?? VideoKey()
         obs = (try? c.decodeIfPresent(CueObs.self, forKey: .obs)) ?? CueObs()
         obsTriggerScene = try c.decodeIfPresent(String.self, forKey: .obsTriggerScene) ?? ""
+        label = (try? c.decodeIfPresent(CueLabel.self, forKey: .label)) ?? CueLabel.none
     }
 
     /// Milliseconds as 13 digits, so ids sort in the order they were made.

@@ -312,6 +312,9 @@ struct ControlView: View {
         let onAir = cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id
         let waiting = cue.id == engine.pendingCue?.id
         return HStack(spacing: 10) {
+            // The cue's color, as a stripe, like a label in Finder.
+            Capsule().fill(cue.label == .none ? Color.clear : Self.color(cue.label)).frame(width: 4, height: 22)
+                .padding(.trailing, -6)
             Text("\(number)")
                 .font(.body.weight(.semibold))
                 .monospacedDigit()
@@ -423,6 +426,18 @@ struct ControlView: View {
     }
 
     // MARK: Words and colors
+
+    static func color(_ label: CueLabel) -> Color {
+        switch label {
+        case .none: return .clear
+        case .blue: return .blue
+        case .green: return .green
+        case .red: return .red
+        case .yellow: return .yellow
+        case .purple: return .purple
+        case .cyan: return .cyan
+        }
+    }
 
     private var clockText: String {
         if engine.status == .pre, let p = engine.preRemaining { return Timecode.dropFrame(p) }

@@ -909,7 +909,7 @@ enum TestSnapshot {
         }
         func cueSummary() -> [String] {
             engine.cues.map { c in
-                "\(c.name) | \(c.kind.rawValue) | \(c.wireID ?? "-") | trim \(c.trimIn)-\(c.trimOut.map { "\($0)" } ?? "end") | fade \(c.fadeIn)/\(c.fadeOut) \(c.fadeCurve.rawValue) | out \(c.output) | \(c.kind == .matte ? c.color : "") | dur \(c.duration) | \(c.continueMode.rawValue) \(c.endAction.rawValue) | pad \(c.sfxPadId) | armed \(c.armed)"
+                "\(c.name) | \(c.kind.rawValue) | \(c.wireID ?? "-") | trim \(c.trimIn)-\(c.trimOut.map { "\($0)" } ?? "end") | fade \(c.fadeIn)/\(c.fadeOut) \(c.fadeCurve.rawValue) | out \(c.output) | \(c.kind == .matte ? c.color : "") | dur \(c.duration) | \(c.continueMode.rawValue) \(c.endAction.rawValue) | pad \(c.sfxPadId) | armed \(c.armed) | color \(c.label.rawValue)"
             }
         }
         func padSummary() -> [String] {
@@ -925,7 +925,7 @@ enum TestSnapshot {
         return [
             (1.0, {
                 var video = file("bars-16x9.mp4", .video, "1 Bars, 10 to 20 s, fade in")
-                video.trimIn = 10; video.trimOut = 20; video.fadeIn = 0.5; video.fadeCurve = .s
+                video.trimIn = 10; video.trimOut = 20; video.fadeIn = 0.5; video.fadeCurve = .s; video.label = .red
                 var sound = file("demo-applause.wav", .audio, "2 Applause, Continue")
                 sound.continueMode = .autoContinue; sound.volume = 0.8
                 var still = file("still-16x9.png", .still, "3 Still, up 3 s")
@@ -933,7 +933,7 @@ enum TestSnapshot {
                 var matte = Cue.matte(named: "4 Red matte", color: "#C8102E")
                 matte.xfade = 0.5
                 var side = file("bars-4x3.mp4", .video, "5 Bars 4x3 on output 2, off")
-                side.output = 2; side.armed = false; side.notes = "Side screen"
+                side.output = 2; side.armed = false; side.notes = "Side screen"; side.label = .cyan
                 let bank = PadBank(id: "bk_test", name: "Bank 1")
                 var horn = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Air horn", path: media.appendingPathComponent("demo-airhorn.wav").path, key: "1")
                 horn.emoji = "📯"; horn.gain = 1.2; horn.eq = PadEQ(low: 3, mid: 0, high: -2)
@@ -981,7 +981,7 @@ enum TestSnapshot {
                 // A file shaped exactly like the web app's own save.
                 do {
                     let cues: [[String: Any]] = [
-                        ["id": "c_web0001", "num": 1, "name": "Web open", "type": "video", "mediaId": "m_vid", "color": "var(--video)",
+                        ["id": "c_web0001", "num": 1, "name": "Web open", "type": "video", "mediaId": "m_vid", "color": "var(--red)",
                          "preWait": 2, "continueMode": "auto_follow", "duration": 120, "trimIn": 0, "trimOut": NSNull(), "volume": 1,
                          "loop": false, "armed": true, "notes": "", "fadeIn": 0, "fadeOut": 1, "fadeCurve": "", "xfade": 0,
                          "endAction": "black", "fit": "contain", "scale": 1, "posX": 0, "posY": 0, "output": 1, "sfxPadId": "p_web1", "sfxDelay": 0],

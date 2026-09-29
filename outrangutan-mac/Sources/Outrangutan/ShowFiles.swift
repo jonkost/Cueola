@@ -191,7 +191,7 @@ final class ShowFiles: ObservableObject {
             let web: [CueKind: String] = [.video: "var(--video)", .audio: "var(--green)", .still: "var(--yellow)", .matte: "var(--yellow)"]
             cues.append([
                 "id": cue.wireID ?? Cue.newWireID(offsetMs: i), "num": i + 1, "name": cue.name,
-                "type": cue.kind.wireType, "mediaId": mediaId, "color": web[cue.kind]!,
+                "type": cue.kind.wireType, "mediaId": mediaId, "color": cue.label.web ?? web[cue.kind]!,
                 "srcW": 0, "srcH": 0, "broken": false,
                 "preWait": cue.preWait, "continueMode": cue.continueMode.rawValue,
                 "duration": cue.kind.holds ? cue.duration : (engine.durations[cue.id] ?? 0), "thumb": NSNull(),
@@ -374,6 +374,9 @@ final class ShowFiles: ObservableObject {
                 cue.obs.scene = Wire.string(o["scene"]) ?? ""
             }
             cue.obsTriggerScene = Wire.string(c["obsTriggerScene"]) ?? ""
+            // The web gives every cue a color; its kind's own color means none was picked.
+            let kindColor = ["video": "var(--video)", "audio": "var(--green)", "image": "var(--yellow)"][type]
+            if let color = Wire.string(c["color"]), color != kindColor { cue.label = CueLabel(web: color) }
             if kind == .video, let k = c["key"] as? [String: Any] {
                 cue.key.mode = KeyMode(rawValue: Wire.string(k["mode"]) ?? "") ?? .off
                 cue.key.color = NSColor(hex: Wire.string(k["color"]) ?? "")?.hexString ?? "#00B140"

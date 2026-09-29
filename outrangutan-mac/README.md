@@ -32,7 +32,8 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
   after it.
 - The **Inspector** on the right (Command-I) holds every setting for the
   cue standing by. Its icon tabs show one group at a time:
-  - **Cue:** name, notes, Fire on GO, and a pad that comes with the cue.
+  - **Cue:** name, notes, a color (a stripe on its row, the web app's six
+    cue colors), Fire on GO, a pad that comes with the cue, and OBS.
   - **Timing:** pre-wait, what happens after it starts (Manual, Continue,
     Follow), how long a still stays up, and what happens at the end.
   - **Trim and Sound:** a picture of the clip (frames and its sound wave)

@@ -54,6 +54,24 @@ struct InspectorView: View {
             TextField("Notes", text: bind(cue, \.notes), axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(2...5)
+            InspectorRow("Color") {
+                HStack(spacing: 6) {
+                    ForEach(CueLabel.allCases, id: \.self) { l in
+                        let on = live(cue).label == l
+                        Button { engine.update(cue.id) { $0.label = l } } label: {
+                            ZStack {
+                                Circle().fill(l == .none ? Color.secondary.opacity(0.15) : ControlView.color(l))
+                                if l == .none { Image(systemName: "nosign").font(.caption2).foregroundStyle(.secondary) }
+                            }
+                            .frame(width: 18, height: 18)
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(on ? 0.9 : 0), lineWidth: 2).padding(-3))
+                        }
+                        .buttonStyle(.plain)
+                        .help(l.label)
+                        .accessibilityLabel("Color \(l.label)")
+                    }
+                }
+            }
             InspectorRow("Fire on GO") { Toggle("", isOn: bind(cue, \.armed)).labelsHidden().toggleStyle(.switch) }
                 .help("Off: GO skips this cue. The rundown and the deck can still fire it.")
         }
