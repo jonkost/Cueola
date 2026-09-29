@@ -26,12 +26,20 @@ struct PadBoardView: View {
                             }
                         }
                         if bank.padCount < PadBoard.padCountMax {
+                            // Shaped like an empty pad, so the grid stays even.
                             Button { board.addSlot() } label: {
-                                Label("Add a pad", systemImage: "plus")
-                                    .frame(maxWidth: .infinity, minHeight: 96)
+                                VStack(spacing: 6) {
+                                    Image(systemName: "plus").font(.system(size: 20))
+                                    Text("Add a Pad").font(.system(size: 12))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 96)
+                                .background(RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+                                .contentShape(RoundedRectangle(cornerRadius: 12))
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
+                            .help("Add one more pad to this bank")
                         }
                     }
                 }
@@ -70,9 +78,10 @@ struct PadBoardView: View {
                             }
                         }
                     }
-                    Button { board.addBank() } label: { Image(systemName: "plus") }
-                        .buttonStyle(.plain)
-                        .padding(6)
+                    Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .padding(.horizontal, 4)
                         .help("Add a bank")
                 }
             }
@@ -82,7 +91,10 @@ struct PadBoardView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help("Off: hitting a pad stops every other pad.")
-            Button("Stop pads") { board.stopAll() }
+            Button { board.stopAll() } label: {
+                Label("Stop Pads", systemImage: "stop.fill")
+            }
+            .help("Stops every pad that is playing")
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
     }
@@ -167,7 +179,7 @@ struct EmptyPadTile: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: "plus.circle").font(.system(size: 20))
-            Text("Drop a sound").font(.system(size: 12))
+            Text("Drop a Sound").font(.system(size: 12))
         }
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, minHeight: 96)

@@ -63,7 +63,7 @@ struct ControlView: View {
                 }
             }
         }
-        ToolbarItem(placement: .navigation) {
+        ToolbarItem(placement: .principal) {
             Picker("View", selection: $tab) {
                 Label("Cues", systemImage: "list.bullet.rectangle").tag("cues")
                 Label("Pads", systemImage: "square.grid.3x3.fill").tag("pads")
@@ -105,7 +105,13 @@ struct ControlView: View {
                 engine.toggleOutput()
             }
             .help(engine.openOutputs.isEmpty ? "Open the outputs" : "Close the outputs")
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
             LinkBadge(link: link) { showConnect = true }
+        }
+        // The Inspector button sits last, at the window's right edge, over
+        // the Inspector it opens.
+        ToolbarItemGroup(placement: .primaryAction) {
             Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
                 .help(showInspector ? "Hide the Inspector (Command-I)" : "Show the Inspector (Command-I)")
         }
@@ -140,9 +146,9 @@ struct ControlView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // SF Mono with fixed-width digits, so the clock never jiggles.
+                // SF Pro with fixed-width digits, so the clock never jiggles.
                 Text(clockText)
-                    .font(.system(size: 54, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 60, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(engine.remaining == nil && engine.status != .pre ? Color.secondary : clockColor)
                     .fixedSize()
@@ -196,16 +202,18 @@ struct ControlView: View {
     @ViewBuilder
     private func transport(_ title: String, symbol: String, key: String, color: Color, prominent: Bool = false,
                            action: @escaping () -> Void) -> some View {
-        let label = VStack(spacing: 2) {
-            Label {
-                Text(title)
-            } icon: {
-                Image(systemName: symbol).foregroundStyle(prominent ? Color.white : color)
-            }
-            .font(.headline)
+        // Symbol, word and key stacked on one center line, so every button
+        // lines up with its neighbors.
+        let label = VStack(spacing: 3) {
+            Image(systemName: symbol)
+                .font(.title2)
+                .foregroundStyle(prominent ? Color.white : color)
+                .frame(height: 24)
+            Text(title).font(.headline)
             Text(key).font(.caption2).opacity(0.75)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
         Group {
             if prominent {
                 Button(action: action) { label }.buttonStyle(.borderedProminent).tint(color)
@@ -262,15 +270,26 @@ struct ControlView: View {
                     .foregroundStyle(.orange)
             }
             Spacer(minLength: 6)
-            if !cue.armed { chip("SKIP", .gray) }
-            if cue.preWait > 0 { chip("PRE \(Timecode.short(cue.preWait))", .yellow) }
-            if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
-            if !cue.sfxPadId.isEmpty { Image(systemName: "square.grid.3x3.fill").foregroundStyle(.secondary).help("Brings a pad with it") }
-            if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
-            if cue.loop { Image(systemName: "repeat").foregroundStyle(.secondary).help("Loops") }
-            if cue.xfade > 0 { Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary).help("Dissolves in") }
-            if waiting { chip("PRE-WAIT", .orange, solid: true) }
-            if onAir { chip("ON AIR", .red, solid: true) }
+            // Settings tags, right-aligned against the icon columns.
+            HStack(spacing: 4) {
+                if !cue.armed { chip("SKIP", .gray) }
+                if cue.preWait > 0 { chip("PRE \(Timecode.short(cue.preWait))", .yellow) }
+                if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
+                if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
+            }
+            // The small icons each keep their own column, shown or not, so
+            // they line up from row to row.
+            HStack(spacing: 2) {
+                slot(cue.xfade > 0, "circle.lefthalf.filled", "Dissolves in")
+                slot(cue.loop, "repeat", "Loops")
+                slot(!cue.sfxPadId.isEmpty, "square.grid.3x3.fill", "Brings a pad with it")
+            }
+            Group {
+                if waiting { chip("PRE-WAIT", .orange, solid: true) }
+                else if onAir { chip("ON AIR", .red, solid: true) }
+                else { Color.clear.frame(height: 1) }
+            }
+            .frame(width: 66, alignment: .center)
             Text(durationText(cue))
                 .font(.callout)
                 .monospacedDigit()
@@ -306,6 +325,18 @@ struct ControlView: View {
                 .frame(width: 20)
                 .foregroundStyle(cue.kind == .audio ? Color.cyan : (cue.kind == .still ? Color.yellow : Color.purple))
         }
+    }
+
+    /// One icon column in a cue row: the symbol when the setting is on, an
+    /// empty space the same size when it is off.
+    private func slot(_ on: Bool, _ symbol: String, _ help: String) -> some View {
+        Image(systemName: symbol)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(width: 18)
+            .opacity(on ? 1 : 0)
+            .help(on ? help : "")
+            .accessibilityHidden(!on)
     }
 
     private func chip(_ text: String, _ color: Color, solid: Bool = false) -> some View {
