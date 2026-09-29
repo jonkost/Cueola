@@ -75,6 +75,29 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "screens": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                engine.replaceShow(cues: [bars], pads: [], banks: [], multiTrigger: nil)
+                engine.openOutput()
+                engine.go()
+            }),
+            (1.0, {
+                let real = NSScreen.screens.map(\.localizedName)
+                engine.screensChanged(real + ["Pretend Projector"])
+                note("a a projector connects: output shows \(engine.outputsShowing())")
+                engine.screensChanged(real)
+                note("b it is unplugged mid-show: status \(engine.status.rawValue), output shows \(engine.outputsShowing())")
+                note("   notice: \(engine.notice ?? "-")")
+            }),
+            (1.0, {
+                let live = engine.liveState()
+                note("c a second later the video is still playing: \(live.status) at \(String(format: "%.1f", live.offset ?? 0)) s")
+                engine.log.entries.filter { $0.kind == .output || $0.kind == .problem }.forEach { note("   log: \($0.line)") }
+                engine.allStop()
+            }),
+        ]
         case "check": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

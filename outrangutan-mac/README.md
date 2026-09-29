@@ -54,6 +54,9 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 - The **Playback** menu lists every show control with its key.
 - **Open Output** puts the picture on the second screen. With one screen it
   opens as a normal window.
+- If a program screen's cable gets bumped, its output turns into a normal
+  window on the control screen (never on top of GO), and goes back full
+  screen when the screen returns. The show keeps playing through it.
 
 | Key | What it does |
 |---|---|
@@ -254,6 +257,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `screens`: a pretend projector connects and is unplugged while a video
+  plays; the video keeps playing and the output lands as a window.
 - `check`: Show Check with planted problems (a missing file, closed
   outputs, an unplugged sound device, OBS off), then two fixes pressed.
 - `record`: a pretend microphone records onto a pad; a second take with

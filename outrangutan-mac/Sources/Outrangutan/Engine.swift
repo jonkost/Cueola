@@ -269,6 +269,36 @@ final class Engine: ObservableObject {
         }
         RecoveryPoint.clear()
         startClock()
+        // A screen plugged in or out (a bumped HDMI cable): put every open
+        // output where it belongs again, never over the controls.
+        lastScreens = NSScreen.screens.map(\.localizedName)
+        screenWatch = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                                             object: nil, queue: .main) { [weak self] _ in
+            self?.screensChanged(NSScreen.screens.map(\.localizedName))
+        }
+    }
+
+    private var lastScreens: [String] = []
+    private var screenWatch: NSObjectProtocol?
+
+    /// The screens changed. Each open output is placed again: on its own
+    /// screen if it is there, otherwise as a normal window on the control
+    /// screen, so a full-screen output can never land on top of GO.
+    func screensChanged(_ now: [String]) {
+        let gone = lastScreens.filter { !now.contains($0) }, back = now.filter { !lastScreens.contains($0) }
+        lastScreens = now
+        guard !gone.isEmpty || !back.isEmpty else { return }
+        for name in gone { log.add(.problem, "Screen \u{201C}\(name)\u{201D} was disconnected") }
+        for name in back { log.add(.output, "Screen \u{201C}\(name)\u{201D} connected") }
+        for config in outputs where openOutputs.contains(config.id) {
+            window(config.id).open(on: config.screen, title: config.label)
+            let placed = window(config.id).placement
+            log.add(.output, "\(config.label) is now \(placed)")
+            if placed.hasPrefix("a window") && !gone.isEmpty {
+                notice = "\(config.label)'s screen was disconnected. It is a window for now and goes back when the screen returns."
+            }
+        }
+        if gone.isEmpty && notice?.contains("screen was disconnected") == true { notice = nil }
     }
 
     /// Stands by the cue that was on air when the app closed. With a point

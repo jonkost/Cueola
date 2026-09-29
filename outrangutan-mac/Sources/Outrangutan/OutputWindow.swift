@@ -21,6 +21,8 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
     var onClose: (() -> Void)?
 
     var isOpen: Bool { window?.isVisible ?? false }
+    /// Where the output is now, in words, for the show log.
+    private(set) var placement = "closed"
 
     /// Opens the output on the named screen, or moves it there if it is
     /// already open.
@@ -36,6 +38,7 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
             win.level = .screenSaver
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             win.setFrame(screen.frame, display: true)
+            placement = "full screen on \u{201C}\(screen.localizedName)\u{201D}"
         } else {
             // Same screen as the controls: a normal window you can move and size.
             let frame = NSRect(x: 0, y: 0, width: 960, height: 540)
@@ -45,6 +48,7 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
             win.delegate = self
             win.contentAspectRatio = NSSize(width: 16, height: 9)
             win.center()
+            placement = "a window on this screen"
         }
         win.isReleasedWhenClosed = false
         win.backgroundColor = .black
