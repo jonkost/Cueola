@@ -4,12 +4,12 @@
   const THEMES = ['cool', 'warm', 'white', 'green', 'koala', 'panda', 'flamingo', 'outrangutan', 'prepbear'];
   // Tab names and grouping mirror the in-app Script Op panel
   // (LS_INSP_LABELS); the pop-out stops at four tabs, so Screen rides
-  // Playback (behind More) and the editor helpers ride Display & Theme.
+  // Playback (behind More) and the editor helpers ride Display.
   const TAB_LABELS = {
     transport: 'Playback',
-    live: 'Cue & On Air',
-    clocks: 'Clocks & Alerts',
-    display: 'Display & Theme'
+    live: 'On air',
+    clocks: 'Clocks',
+    display: 'Display'
   };
   // Remembered tab keys from the pre-regroup layout map onto their new homes.
   const LEGACY_TAB_KEYS = { prompter: 'transport', formatting: 'display' };

@@ -275,17 +275,17 @@ function liveSyncStatusRecord() {
   if (reconnecting || navigator.onLine === false) {
     return {
       status:navigator.onLine === false ? 'disconnected' : 'recovering',
-      detail:navigator.onLine === false ? 'Network offline. Saved state is retained locally' : 'Reconnecting. Showing the last confirmed state',
+      detail:navigator.onLine === false ? 'Offline. Your changes are kept on this computer' : 'Reconnecting. Showing the last saved version',
     };
   }
-  if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'Local workspace' };
+  if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'On this computer only' };
+  // Fixed glossary words: the caller's detail can name code parts.
   const state = cloudSyncProjection.state;
-  const detail = cloudSyncProjection.detail;
-  if (state === 'synced') return { status:'ready', detail:detail || 'Cloud synchronized' };
-  if (state === 'saving') return { status:'connecting', detail:detail || 'Cloud sync saving changes...' };
-  if (state === 'error') return { status:'error', detail:detail || 'Cloud sync failed' };
-  if (state === 'local') return { status:'disconnected', detail:detail || 'Cloud sync unavailable; saved locally' };
-  return { status:'disconnected', detail:detail || 'Cloud sync is not connected' };
+  if (state === 'synced') return { status:'ready', detail:'Everyone has your latest change' };
+  if (state === 'saving') return { status:'connecting', detail:'Saving…' };
+  if (state === 'error') return { status:'error', detail:'Not saved. Check the connection' };
+  if (state === 'local') return { status:'disconnected', detail:'Saved on this computer only' };
+  return { status:'disconnected', detail:'Not connected to the show' };
 }
 
 function renderLiveStatusRail(state=liveSessionController?.getState?.()) {
@@ -499,14 +499,14 @@ function _applyControlGrantHeldTransition() {
     // resolver treats an active follow as "not calling") and the grant looks
     // dead on their machine until they manually switch to Myself.
     browsingSelf = false; followTarget = ''; followTargetId = '';
-    toast('You have rundown control. GO advances the show for everyone.');
-    logShow('cue', `Rundown control granted to ${sessionControlGrant.displayName || sessionControlGrant.username}`);
+    toast('You are the director. TAKE moves everyone to the next cue.');
+    logShow('cue', `${sessionControlGrant.displayName || sessionControlGrant.username} is the director`);
   } else if (!held && _heldControlGrantBefore) {
     // Say where it actually went: a regrant moves it to another student, a
     // revoke returns it to the instructors.
     toast(sessionControlGrant
-      ? `Rundown control moved to ${sessionControlGrant.displayName || sessionControlGrant.username}.`
-      : 'Rundown control went back to the instructor.');
+      ? `${sessionControlGrant.displayName || sessionControlGrant.username} is the director now.`
+      : 'The instructor is the director again.');
   }
   _heldControlGrantBefore = held;
   // A window that just stopped calling the show (grant moved away, or a
@@ -520,7 +520,7 @@ function _applyControlGrantHeldTransition() {
 }
 
 function grantRundownControl(username, displayName, position='') {
-  if (!adminSession) { toast('Only a signed-in admin can hand out rundown control.'); return; }
+  if (!adminSession) { toast('Only a signed-in instructor can choose the director.'); return; }
   if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
   const grant = {
     username: String(username || '').toLowerCase(),
@@ -536,7 +536,7 @@ function grantRundownControl(username, displayName, position='') {
   // The grant rides with a claim release: the holder's live window claims
   // on its next tick instead of waiting out the 15 s stale window.
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: grant, busExecutor: null })
-    .then(() => toast(`${grant.displayName} now has rundown control.`))
+    .then(() => toast(`${grant.displayName} is the director now.`))
     .catch(err => toast(firebaseConnectionLabel(err, 'Handing control failed')));
   hideOverlay('lsGrantOv');
 }
@@ -545,7 +545,7 @@ function revokeRundownControl() {
   if (!adminSession) return;
   if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: null })
-    .then(() => toast('Rundown control is back with the instructors.'))
+    .then(() => toast('The instructor is the director again.'))
     .catch(err => toast(firebaseConnectionLabel(err, 'Taking control back failed')));
   hideOverlay('lsGrantOv');
 }
@@ -617,7 +617,7 @@ function renderControlGrantPickerBody() {
   const director = rows.find(row => suggested(row) && row.username !== holderKey);
   const grantCall = row => `grantRundownControl('${esc(row.username)}', ${esc(JSON.stringify(String(row.name || row.username)))}, ${esc(JSON.stringify(String(row.position || '')))})`;
   body.innerHTML = `
-    ${holder ? `<div class="ls-grant-current">${sfIcon('marker.ready')} <b>${esc(holder.displayName || holder.username)}</b> has control${grantHolderPresent() ? '' : ' (not connected yet)'}
+    ${holder ? `<div class="ls-grant-current">${sfIcon('marker.ready')} <b>${esc(holder.displayName || holder.username)}</b> is the director${grantHolderPresent() ? '' : ' (not connected yet)'}
       <button class="admin-add-btn" onclick="revokeRundownControl()">Take back</button></div>` : ''}
     ${director ? `<button class="btn-primary u-mt8" style="width:100%" onclick="${grantCall(director)}">Give control to the ${esc(director.position)}: ${esc(director.name)}</button>` : ''}
     ${rows.length ? rows.map(row => `
@@ -627,8 +627,8 @@ function renderControlGrantPickerBody() {
         ${row.connected ? '' : '<span class="ls-grant-pos">not connected</span>'}
         <span class="ls-grant-user">@${esc(row.username)}</span>
       </button>`).join('')
-      : '<div class="u-note">No one with a signed-in profile is in this session yet. Assign positions in Planda Bear or have students sign in and join.</div>'}
-    <div class="u-note u-mt8">While a student holds control, your GO is off. Take back to drive.</div>
+      : '<div class="u-note">No one with a signed-in profile is in this show yet. Assign positions in Planda Bear or have students sign in and join.</div>'}
+    <div class="u-note u-mt8">While a student director is connected, your TAKE is off. Press Take back to be director again.</div>
   `;
 }
 
@@ -646,7 +646,9 @@ function liveBeatKey(beat, index) {
 
 function ensureLiveRunLedger() {
   const state = liveSessionState();
-  if (state.lifecycle === 'builder') return state.runLedger || {};
+  // Off Live a ledger only exists if Live ran earlier; rebuild it when the rows
+  // changed since, or adopting the room's cue throws on a new row.
+  if (state.lifecycle === 'builder' && !(state.runOrder || []).length) return state.runLedger || {};
   const expected = beats.map(liveBeatKey);
   const configured = state.runOrder || [];
   const changed = expected.length !== configured.length || expected.some((key, index) => key !== configured[index]);
@@ -774,10 +776,11 @@ function projectTalentLinkTransition(link, previousStatus) {
     // Same recovery point as the old watchdog: reset the handshake so the
     // returning talent re-applies state, and say so without flapping.
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
-    projectPrompterSessionStatus('recovering', 'Talent unresponsive · missed heartbeats');
+    projectPrompterSessionStatus('recovering', 'The talent screen is not answering');
   } else if (link.status === 'lost') {
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
-    setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost: no heartbeat');
+    // The model keeps the last ack detail ("Talent connected") when it demotes.
+    setLiveSubsystemStatus('prompter', 'disconnected', link.detail && !/^Talent connected/.test(link.detail) ? link.detail : 'The talent screen stopped answering');
     // D11.8: a same-device talent window that is OPEN but silent gets
     // automatic reconnect nudges (hello → READY → full state resync), now on
     // a backoff instead of exactly once: one missed nudge used to strand the
@@ -896,6 +899,7 @@ const liveShared = window.CueolaLiveState.createLiveState({ clientId: CLIENT_ID 
 const liveTakeGate = window.CueolaLiveState.createTakeGate({ debounceMs: 300 });
 let _liveRecordSeen = false;   // the doc carries a `live` record (legacy activeIdx is ignored from then on)
 let _liveTakeWrite = null;     // { seq, sentAt, ackAt } of this director's in-flight take
+let _takeLockToken = 0;        // which TAKE currently holds the in-flight lock
 let _presenceClockWrite = null; // { sentAt, ackAt } of this window's last presence write
 let _presenceClockSeen = 0;    // server ms of the last presence stamp sampled
 
@@ -951,6 +955,7 @@ function adoptLiveRecordFromDoc(d, snap) {
 function applyRoomLiveCue(state, reason) {
   let idx = Number(state?.idx);
   if (!Number.isFinite(idx) || idx < 0 || idx >= beats.length) return;
+  try { ensureLiveRunLedger(); } catch (error) { containError('Live cue adoption', error); return; }
   if (liveCueIsDisabled(idx)) idx = liveNextPlayableCueIndex(idx);
   if (idx < 0) return;
   const follower = !isShowCaller();
@@ -967,6 +972,9 @@ function takeCue(index, reason, opts = {}) {
   const gate = liveTakeGate.tryAcquire(Date.now());
   if (!gate.ok) return false;
   blurLiveControl();
+  // A newer TAKE, Back or Cue to cancels a pre-roll that is still counting,
+  // so a clip never rolls under a cue that is no longer ON AIR.
+  if (_rtrtCall) abortPlayoutCall('superseded');
   const fromIdx = liveActiveCueIndex();
   const beat = beats[index];
   let take = null;
@@ -993,6 +1001,15 @@ function takeCue(index, reason, opts = {}) {
   updateLiveGoControl();
   markResumeState();
   publishLiveTake(take.patch).finally(() => { liveTakeGate.release(); updateLiveGoControl(); });
+  // Slow or dropped Wi-Fi can hold the write for seconds, or until the network
+  // is back. The sequence number already keeps the room in order, so the lock
+  // gives way after 1.5 s instead of freezing TAKE for the whole outage.
+  const lockToken = ++_takeLockToken;
+  steadyTimeout(() => {
+    if (lockToken !== _takeLockToken || !liveTakeGate.isBusy()) return;
+    liveTakeGate.release();
+    updateLiveGoControl();
+  }, 1500);
   return true;
 }
 
@@ -1152,7 +1169,7 @@ function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
 function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
 function cueolaThemeToPlandaBearTheme(t) {
-  const map = { cool: 'glacier', warm: 'honey', white: 'polar-bear' };
+  const map = { cool: 'glacier', warm: 'honey', white: 'polar-bear', green: 'eucalyptus' };
   return normalizePlandaBearTheme(map[normalizeCueolaTheme(t)] || normalizeCueolaTheme(t));
 }
 function hasPlandaBearThemeOverride() {
@@ -1945,7 +1962,13 @@ async function importRundownFile(file) {
   try {
     show = { name: payload.show?.name || 'Untitled Show', start: normalizeTimeValue(payload.show?.start) };
     beats = payload.beats.map(migrateBeat);
-    sessionCustomSources = payload.customSources || {};
+    // Only a file that names sources replaces this show's list: a file saved
+    // from a show with no saved names carries {} and must not wipe them for everyone.
+    const hasNames = v => Array.isArray(v) ? v.length > 0 : Boolean(v) && typeof v === 'object' && Object.values(v).some(hasNames);
+    if (payload.customSources && typeof payload.customSources === 'object' && !Array.isArray(payload.customSources) && hasNames(payload.customSources)) {
+      sessionCustomSources = payload.customSources;
+      syncSessionSources();   // the file's sources become this show's, for everyone
+    }
     freeTextMode = Boolean(payload.freeTextMode);
     renderRundown();
     syncToFirestore();
@@ -1978,10 +2001,22 @@ function showLogKey() {
 function loadShowLog() {
   const key = showLogKey();
   if (key === _showLogLoadedKey) return;
+  const previousKey = _showLogLoadedKey;
   _showLogLoadedKey = key;
+  // Moving from one show to another: file the buffer under the show it came
+  // from and start this show's own log, so no show collects another's entries.
+  if (previousKey && previousKey !== 'cueola_showlog_local') {
+    clearTimeout(_showLogSaveTimer);
+    try { localStorage.setItem(previousKey, JSON.stringify(showLogEntries)); } catch {}
+    showLogEntries = [];
+  }
   try {
     const prior = JSON.parse(localStorage.getItem(key) || '[]');
-    if (Array.isArray(prior) && prior.length) showLogEntries = prior.concat(showLogEntries).slice(-SHOWLOG_MAX);
+    if (Array.isArray(prior) && prior.length) {
+      // Front-page entries filed here on an earlier visit merge only once.
+      const seen = new Set(prior.map(e => e.t + '|' + e.cat + '|' + e.msg));
+      showLogEntries = prior.concat(showLogEntries.filter(e => !seen.has(e.t + '|' + e.cat + '|' + e.msg))).slice(-SHOWLOG_MAX);
+    }
   } catch {}
 }
 function logShow(cat, msg, data) {
@@ -1993,7 +2028,9 @@ function logShow(cat, msg, data) {
     if (showLogEntries.length > SHOWLOG_MAX) showLogEntries.splice(0, showLogEntries.length - SHOWLOG_MAX);
     clearTimeout(_showLogSaveTimer);
     _showLogSaveTimer = setTimeout(() => {
-      try { localStorage.setItem(showLogKey(), JSON.stringify(showLogEntries)); } catch {}
+      // Always file under the key the buffer was loaded for: after leaving a
+      // show, showLogKey() is already the front-page key.
+      try { localStorage.setItem(_showLogLoadedKey || showLogKey(), JSON.stringify(showLogEntries)); } catch {}
     }, 800);
     // Live-append when the viewer is open.
     const wrap = document.getElementById('modal-showlog');
@@ -10196,11 +10233,13 @@ function openEdit(id) {
   editId = id;
   editStyle = b.style||'flex';
   editColor = rowTintDef(b) ? rowTintDef(b).id : '';
-  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit Segment Marker' : 'Edit Row';
+  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit segment' : 'Edit row';
+  const delBtn = document.querySelector('#editOv .del-btn');
+  if (delBtn) delBtn.textContent = b.style === 'segment' ? 'Delete this segment' : 'Delete this row';
   let h;
   if (b.style === 'segment') {
     h = `
-      <div class="field"><label class="field-lbl">Section Label</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
+      <div class="field"><label class="field-lbl">Segment name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
       <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
       ${rowTintChipsHTML(editColor)}`;
   } else {
@@ -10213,7 +10252,7 @@ function openEdit(id) {
           <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
           <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
         </div></div>
-      <div class="field"><label class="field-lbl">Style</label>
+      <div class="field"><label class="field-lbl">Kind</label>
         <div class="chip-grid">
           <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
           <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
@@ -10245,13 +10284,21 @@ function closeEdit(e) {
 }
 
 function saveEdit() {
-  const b = beats.find(x=>x.id===editId); if (!b) return;
+  const b = beats.find(x=>x.id===editId);
+  if (!b) {
+    // Someone else deleted this row while the sheet was open.
+    hideOverlay('editOv'); setRundownPresence(null);
+    toast('That row was deleted by someone else, so the change was not saved.', 6000);
+    return;
+  }
   b.info  = document.getElementById('ed-info').value.trim()||b.info;
   b.notes = document.getElementById('ed-notes').value.trim();
   if (editColor) b.color = editColor; else delete b.color;
   if (b.style !== 'segment') {
-    b.min = parseInt(document.getElementById('ed-min')?.value)||0;
-    b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
+    // 90 seconds saves as 1:30, never shows as 00:90.
+    const totalSec = Math.max(0, (parseInt(document.getElementById('ed-min')?.value)||0) * 60 + (parseInt(document.getElementById('ed-sec')?.value)||0));
+    b.min = Math.floor(totalSec / 60);
+    b.sec = totalSec % 60;
     if (editStyle && editStyle !== 'segment') b.style = editStyle;
   }
   hideOverlay('editOv');
@@ -10262,14 +10309,15 @@ function saveEdit() {
 function v(id) { return document.getElementById(id)?.value?.trim()||''; }
 
 function deleteCue() {
-  if (!dangerConfirm(`Remove ${rowConfirmLabel(editId)}?`, 'This removes the entire row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
+  const isSeg = beats.find(x => x.id === editId)?.style === 'segment';
+  if (!dangerConfirm(`Delete ${rowConfirmLabel(editId)}?`, isSeg ? 'Only the segment heading goes. The rows under it stay.' : 'The row and every cue on it are deleted for everyone in the show.')) return;
   // Mirror removeRow: a parent playback row takes its PREP/OUT helper rows too.
   const helperIds = beats.filter(b => String(b.helperFor || '') === String(editId)).map(b => b.id);
   beats = beats.filter(b => b.id !== editId && !helperIds.includes(b.id));
   hideOverlay('editOv');
   setRundownPresence(null);
   renderRundown(); syncToFirestore();
-  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : 'Row removed.');
+  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : (isSeg ? 'Segment deleted.' : 'Row deleted.'));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -10285,10 +10333,10 @@ function preLiveCheck() {
   const scriptLabel = !totalRows
     ? 'No rows in the rundown'
     : !cuesWithScript
-      ? `${totalRows} row${totalRows===1?'':'s'} but no script copy yet (rows show dimmed label guidance)`
+      ? `${totalRows} row${totalRows===1?'':'s'} but no script yet`
       : cuesWithScript === totalRows
-        ? `All ${totalRows} row${totalRows===1?'':'s'} have script copy`
-        : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script copy · the rest show dimmed label guidance`;
+        ? `All ${totalRows} row${totalRows===1?'':'s'} have script`
+        : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script · the rest have none yet`;
 
   // Local ping OR any remote sighting counts: heartbeats over the session doc
   // land before the operator runtime starts on first Go Live.
@@ -10305,12 +10353,12 @@ function preLiveCheck() {
   const cloudReady = !!(window._firebaseReady && session.code && !isDemo);
   const cloudOk = isDemo || cloudReady;
   const cloudLabel = isDemo
-    ? 'Demo mode · same-browser sync only'
+    ? 'Demo: changes stay in this browser'
     : !session.code
-      ? 'No show code: cross-device sync off'
+      ? 'No show code: other computers will not see changes'
       : cloudReady
-        ? `Syncing · ${session.code}`
-        : 'Cloud not connected';
+        ? `Connected · show ${session.code}`
+        : 'Not connected';
 
   return {
     script: { ok: scriptOk, label: scriptLabel },
@@ -10377,6 +10425,9 @@ function preflightToggleGroup(id) {
 }
 window.preflightToggleGroup = preflightToggleGroup;
 
+// Plain words for checks whose keys are code names. The keys stay: tests and
+// fix requests address rows by key.
+const PREFLIGHT_LABELS = { 'Cloud round-trip': 'Saving speed', 'Theme & brand assets': 'Colors and logos' };
 function preflightRowHtml(r) {
   const inFlight = !!(r.fixId && r.state === 'pend');
   const fixBtn = r.fix && r.fix.label
@@ -10389,7 +10440,7 @@ function preflightRowHtml(r) {
       <div class="precheck-row ${r.state}" data-key="${esc(r.key)}">
         <div class="precheck-icon">${preflightIcon(r.state)}</div>
         <div class="precheck-body">
-          <div class="precheck-label">${esc(r.label || r.key)}</div>
+          <div class="precheck-label">${esc(r.label || PREFLIGHT_LABELS[r.key] || r.key)}</div>
           <div class="precheck-detail">${esc(r.detail)}</div>
           ${r.fixNote ? `<div class="precheck-fix-note">${esc(r.fixNote)}</div>` : ''}
         </div>
@@ -10424,13 +10475,13 @@ function renderPreflightRows() {
   const goBtn = document.getElementById('goLiveCheckGo');
   if (goBtn) {
     goBtn.disabled = !_preflightReviewOnly && checking;
-    goBtn.textContent = _preflightReviewOnly ? 'Done' : checking ? 'Checking' : (fails || warns || fixing ? 'Continue Anyway' : 'Go Live');
+    goBtn.textContent = _preflightReviewOnly ? 'Close' : checking ? 'Checking' : (fails || warns || fixing ? 'Continue Anyway' : 'Go Live');
   }
   const note = document.getElementById('goLiveCheckNote');
   if (note) note.textContent = checking ? 'Running preflight checks…'
     : fixing ? 'A fix is on its way to the other machine. Wait for the answer, or continue anyway.'
     : fails ? fails + ' check' + (fails === 1 ? '' : 's') + ' failed. Use the fix button on the row, or jump to the item.'
-    : warns ? 'A couple of things aren\'t set yet. Review before going live.'
+    : warns ? (warns === 1 ? 'One thing is not set yet. Review it before going live.' : warns + ' things are not set yet. Review them before going live.')
     : 'Every check passed. You\'re clear to go live.';
   const title = document.getElementById('goLiveCheckTitle');
   if (title) title.textContent = _preflightReviewOnly ? 'Show preflight' : 'Ready to go live?';
@@ -10648,7 +10699,7 @@ function recheckPreflightRow(key, f, id) {
         const pct = _talentMirrorFresh() && Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : null;
         if (answered && pct !== null && pct <= 2) return finish('ok', 'Talent script is at the top');
         if (!final) return false;
-        return finish('warn', !answered ? 'The talent display answered, but no heartbeat has landed since'
+        return finish('warn', !answered ? 'The talent display got the request but has not checked in since'
           : pct === null ? 'The talent display answered but has not reported its position yet'
           : 'The talent display answered but still reports ' + pct + '%. Press the fix again', '');
       }
@@ -10677,9 +10728,9 @@ function recheckPreflightRow(key, f, id) {
       } else {
         r.fix = { label: 'Reload talent display', remote: { target: 'talent', kind: 'reload', extra: _talentFixAddress() } };
       }
-      return finish('warn', 'The talent display answered the nudge but no heartbeat has landed since. Reload it', 'A reload keeps the show code and re-links on its own when that laptop is signed in');
+      return finish('warn', 'The talent display got the nudge but has not checked in since. Reload it', 'A reload keeps the show code and re-links on its own when that laptop is signed in');
     };
-    if (verdict(false) === false) waitFor('Answered. Waiting for the next talent heartbeat', r.key === 'Talent build' ? 20000 : 8000, verdict);
+    if (verdict(false) === false) waitFor('Got it. Waiting for the talent display to check in', r.key === 'Talent build' ? 20000 : 8000, verdict);
     return;
   }
   if (f.target === 'playout') {
@@ -10690,12 +10741,12 @@ function recheckPreflightRow(key, f, id) {
         const b = _buildRowState('Air', outrangutanState.live?.build);
         if (fresh && b.state === 'ok') return finish('ok', b.detail);
         if (!final) return false;
-        return finish('warn', fresh ? b.detail : 'The Air reloaded but is not publishing status yet. Open Outrangutan there and join ' + (session.code || 'this show'));
+        return finish('warn', fresh ? b.detail : 'The Air reloaded but is not reporting yet. Open Outrangutan there and join ' + (session.code || 'this show'));
       }
       if (kind === 'rejoin') {
         if (fresh) { _setRemotePlayoutMachineRow(out); r.fixId = ''; renderPreflightRows(); return true; }
         if (!final) return false;
-        return finish('fail', 'The Air answered but is not publishing status yet. Open Outrangutan there and join ' + (session.code || 'this show'));
+        return finish('fail', 'The Air answered but is not reporting yet. Open Outrangutan there and join ' + (session.code || 'this show'));
       }
       if (kind === 'openOutput') {
         if (out && out.status === 'ready') { _setRemotePlayoutMachineRow(out); r.fixId = ''; renderPreflightRows(); return true; }
@@ -10704,9 +10755,9 @@ function recheckPreflightRow(key, f, id) {
       }
       if (kind === 'syncMedia') {
         const missing = Number(out?.kioskMediaMissing || 0);
-        if (out && missing === 0) return finish('ok', 'Kiosk media synced' + (f.result ? ': ' + f.result : ''));
+        if (out && missing === 0) return finish('ok', 'Kiosk media is up to date' + (f.result ? ': ' + f.result : ''));
         if (!final) return false;
-        return finish('fail', out ? preflightCleanDetail(out.detail) : 'The Air synced but has not published its output status yet', f.result || '');
+        return finish('fail', out ? preflightCleanDetail(out.detail) : 'The Air copied the media but has not reported its outputs yet', f.result || '');
       }
       if (kind === 'preflight') {
         const rep = outrangutanState.preflight;
@@ -10730,7 +10781,7 @@ function recheckPreflightRow(key, f, id) {
       }
       return finish('ok', 'Done on the Air' + (f.result ? ': ' + f.result : ''));
     };
-    if (verdict(false) === false) waitFor('Done on the Air. Waiting for its next status packet', r.key === 'Air build' ? 20000 : 5000, verdict);
+    if (verdict(false) === false) waitFor('Done on the Air. Waiting for it to report back', r.key === 'Air build' ? 20000 : 5000, verdict);
     return;
   }
   if (f.target === 'keywi') {
@@ -10978,7 +11029,7 @@ function _cueTalentToTopFix(r) {
   try { dispatchPrompterCommand(buildPrompterControl('reset', 'script-op'), 'live', true); } catch {}
   if (fixSessionRef()) { sendFixRequest(r.key, 'talent', 'top', _talentFixAddress()); return; }
   sendPrompterControl('reset');
-  r.state = 'pend'; r.fixId = 'local_reset'; r.detail = 'Cue to top sent. Waiting for the talent heartbeat';
+  r.state = 'pend'; r.fixId = 'local_reset'; r.detail = 'Cue to top sent. Waiting for the talent display to check in';
   renderPreflightRows();
   const run = _preflightRun;
   steadyTimeout(() => {
@@ -11271,7 +11322,7 @@ function _connectObsFix(r, run) {
   try { obs.connect(); } catch {}
   steadyTimeout(() => {
     const st = obsSystemStatus();
-    _localFixSettle(r, id, run, st ? { state: st.state, detail: st.detail + (st.state === 'ok' ? '' : (obs.lastError?.() ? '. ' + obs.lastError() : '')), fix: st.state === 'ok' ? null : { label: 'Connect OBS', run: _connectObsFix } } : { state: 'warn', detail: 'OBS did not answer' });
+    _localFixSettle(r, id, run, st ? { state: st.state, detail: st.detail, fix: st.state === 'ok' ? null : { label: 'Connect OBS', run: _connectObsFix } } : { state: 'warn', detail: 'OBS did not answer' });
   }, 4000);
 }
 function _talkbackHowFix() {
@@ -11325,7 +11376,7 @@ function _remoteFirstGoRow(armed) {
 }
 function _applyFirstGoArmed(armed) {
   if (!armed) {
-    setPreflightRow('Playout first GO', { state: 'warn', detail: 'Arming failed. Fire one GO before air to prove playback', fix: { label: 'Arm again', run: _armAgainFix } });
+    setPreflightRow('Playout first GO', { state: 'warn', detail: 'Playback did not get ready. Roll one clip before the show to test it', fix: { label: 'Arm again', run: _armAgainFix } });
     return;
   }
   const bits = [];
@@ -11338,16 +11389,16 @@ function _applyFirstGoArmed(armed) {
 // Cloud round-trip verdict; a failed echo gets Retry, a second failure gets
 // Reconnect (the Live rail's sync recovery).
 function _applyCloudRoundTrip(rtt, attempt) {
-  if (rtt >= 0) { setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Write → server ack in ' + rtt + ' ms', fix: null }); return; }
+  if (rtt >= 0) { setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Test save confirmed in ' + rtt + ' ms', fix: null }); return; }
   const retry = { label: 'Retry', run: (r, run) => {
-    const id = _localFixStart(r, 'Writing a ping and waiting for the server echo…');
+    const id = _localFixStart(r, 'Sending a test save…');
     preflightCloudRoundTrip().then(v => { if (run !== _preflightRun || r.fixId !== id) return; r.fixId = ''; _applyCloudRoundTrip(v, attempt + 1); renderPreflightRows(); });
   } };
   const reconnect = { label: 'Reconnect', run: (r, run) => {
     const id = _localFixStart(r, 'Reconnecting to the cloud');
     Promise.resolve(recoverLiveSubsystem('sync')).catch(() => {}).then(() => preflightCloudRoundTrip()).then(v => { if (run !== _preflightRun || r.fixId !== id) return; r.fixId = ''; _applyCloudRoundTrip(v, 0); renderPreflightRows(); });
   } };
-  setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Write failed. Check the connection' : 'No server echo within 8 s. Sync may be degraded', fix: attempt > 0 ? reconnect : retry });
+  setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Test save failed. Check the connection' : 'No answer in 8 seconds. Saving may be slow', fix: attempt > 0 ? reconnect : retry });
 }
 async function resolveDeckPreflightRow(run) {
   const sd = window.CueolaStreamDeck;
@@ -11475,7 +11526,7 @@ async function preflightThemeAssets() {
   } catch (e) { svgWarn = 'brand SVG unreachable (offline?). In-page sprite still renders'; }
   if (notes.length) return { state: 'fail', detail: notes.join(' · ') };
   if (svgWarn) return { state: 'warn', detail: svgWarn };
-  return { state: 'ok', detail: 'Theme “' + currentTheme + '” tokens live · brand sprite + SVG present' };
+  return { state: 'ok', detail: 'Colors and logos loaded (' + (CUEOLA_THEME_LABELS[currentTheme] || currentTheme) + ' theme)' };
 }
 
 // Jump from a failing preflight row straight to the rundown row it points at.
@@ -11632,6 +11683,7 @@ function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('rundown').classList.add('on');
+  updateNowNext();   // the bottom bar names the row that is on air now
   sessionStorage.setItem('cueola_screen','build');
   pushSessionHistoryState('build');
   logShow('session', 'Left live → build screen');
@@ -11978,11 +12030,11 @@ async function applyLiveExitOutputs(outputs, choices={}) {
 }
 
 function liveExitSavedStateLabel() {
-  if (session.isDemo || session.isExpert || !window._firebaseReady) return 'Saved locally';
+  if (session.isDemo || session.isExpert || !window._firebaseReady) return 'Saved on this computer';
   const dot = document.getElementById('syncDot');
-  if (rundownPendingBatches.length || _syncReconnState || dot?.classList.contains('saving')) return 'Saved locally · cloud sync pending';
-  if (dot?.classList.contains('error') || dot?.classList.contains('off') || dot?.classList.contains('local')) return 'Saved locally · cloud sync unavailable';
-  return 'Cloud saved';
+  if (rundownPendingBatches.length || _syncReconnState || dot?.classList.contains('saving')) return 'Still saving';
+  if (dot?.classList.contains('error') || dot?.classList.contains('off') || dot?.classList.contains('local')) return 'Saved on this computer only';
+  return 'Saved';
 }
 
 // Leave live. Outputs FIRST (the talent hold and any requested Air stop),
@@ -12153,6 +12205,7 @@ function toggleShowClock(opts={}) {
 // where the session is parked. Before this, the only way back to row 1 was
 // Admin → Restart Show Clock with a typed RESTART confirm.
 function liveStartShowPressed() {
+  blurLiveControl();
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!canDriveShowClock()) {
     toast('Only the director runs the show clock.');
@@ -12200,7 +12253,7 @@ function lsStartFromHere() {
 // back to the first row — so you can leave live, restart, and go live again to
 // take it from the top. Syncs the reset to any followers.
 function restartShowClock() {
-  if (!dangerConfirm('Restart the show clock for this session?', 'This stops the clock, resets it to 0:00, jumps back to the first row, and broadcasts the reset to synced collaborators.', { requireText:'RESTART' })) return;
+  if (!dangerConfirm('Restart the show clock?', 'This stops the clock and sets it to 0:00 for everyone. When you are the director, it also moves the show back to the first row.', { requireText:'RESTART' })) return;
   stopTimer(false);
   liveClockRunning = false;
   elapsedSecs = 0;
@@ -12209,9 +12262,17 @@ function restartShowClock() {
   // Same as goLive: never park the live position on a leading segment marker
   while (restartIdx >= 0 && restartIdx < beats.length && beats[restartIdx]?.style === 'segment') restartIdx++;
   if (restartIdx >= beats.length) restartIdx = beats.length ? beats.length - 1 : -1;
+  let movedRoom = true;
   if (restartIdx >= 0) {
     if (liveRuntimeOn()) takeCue(restartIdx, 'restart-show', { fire:false, logVerb:'Restart → from the top' });
-    else setOperatorLiveCue(restartIdx, 'restart-show');
+    else {
+      setOperatorLiveCue(restartIdx, 'restart-show');
+      // Off Live the room still has to hear it: without this everyone else stays
+      // on the old cue, and a reload here brings the old cue back.
+      if (isShowCaller()) publishLiveTake(liveShared.take(restartIdx, { nowMs: liveServerNow(), reason: 'restart-show' }).patch);
+      else movedRoom = false;
+      updateNowNext();
+    }
   }
   setLiveText('ls-timer', fmtProductionClock(0));
   document.getElementById('ls-timer')?.classList.remove('warn');
@@ -12221,7 +12282,7 @@ function restartShowClock() {
   if (document.getElementById('liveshow')?.classList.contains('on')) { renderLive(); sendToPrompter(false); }
   broadcastShowClock();  // reset everyone's clock to 0:00 / stopped
   closeAdminPanel();
-  toast('Show restarted: clock at 0:00, back to the top.');
+  toast(movedRoom ? 'Show restarted: clock at 0:00, back to the top.' : 'Show clock is back at 0:00. Only the director can move the show back to the top.');
 }
 
 function getPrompterPayload(isInit=false) {
@@ -12314,7 +12375,8 @@ function scriptSpeakerLabel(d) {
   const explicit = d?.speaker || d?.customSrc || d?.who || '';
   if (explicit) return explicit;
   const cue = getCueOff(d) || getCueOn(d);
-  return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').trim();
+  // Strip the line's verb too ('Cue Host' reads as HOST, not CUE HOST).
+  return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').replace(/^(cue|standby)\s+/i, '').trim();
 }
 
 // EVERY playable row is emitted, script copy or not. Rows without copy carry
@@ -12437,14 +12499,14 @@ function updateLiveOverview() {
   const nextIdx = liveNextPlayableCueIndex(activeIdx);
   const next = nextIdx >= 0 ? beats[nextIdx] : null;
   const total = totalSecs();
-  const remain = liveRemainingSecs();
   const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (activeIdx+1)/beats.length*100 : 0);
   const setText = setLiveText;
+  // A stopped clock is never painted by the ticker: show it in the house format.
+  if (!liveClockRunning) setText('ls-timer', fmtProductionClock(elapsedSecs * 1000));
   setText('ls-show-title', show.name || 'Untitled Show');
   setText('ls-show-sub', `${beats.length ? `Row ${Math.min(rowDisplayNumber(activeIdx), rowDisplayTotal())} of ${rowDisplayTotal()}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
   setText('ls-stat-now', cur ? cur.info || `Row ${rowDisplayNumber(activeIdx)}` : '—');
   setText('ls-stat-next', next ? next.info || `Row ${rowDisplayNumber(nextIdx)}` : 'End of show');
-  setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   // Time on the ON AIR cue: server-time arithmetic against the take stamp.
   const rec = liveShared.get();
   const cueDur = cur ? window.CueolaLiveState.cueSeconds(cur) : 0;
@@ -12671,7 +12733,7 @@ function liveRowPreview(idx) {
   const titleEl = document.getElementById('lrpTitle');
   const bodyEl  = document.getElementById('lrpBody');
   if (!titleEl||!bodyEl) return;
-  titleEl.textContent = `${idx+1}. ${b.info||'—'}`;
+  titleEl.textContent = `${b.style === 'segment' ? '' : rowDisplayNumber(idx) + '. '}${b.info||'Untitled row'}`;
   const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
   let html = '';
   if (b.notes) html += `<div style="color:var(--text2);font-size:13px;margin-bottom:12px;line-height:1.5">${esc(b.notes)}</div>`;
@@ -12741,7 +12803,7 @@ function liveCellForBeat(b, type, beatIdx) {
   const isScript = type === 'script';
   const scriptText = isScript ? scriptCueText(d) : '';
   const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
-  if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
+  if (!on && !off && !scriptMeta && !(type === 'playback' && outrangutanCellLinked(d))) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
   // D11.4: linked playout rows carry the badge (cue name · ON AIR · live
@@ -12794,7 +12856,7 @@ function liveCueOperationLine(operation, text, className='', style='', cueType='
 function focusCuesForBeat(b) {
   const filled = colOrder.filter(type => {
     const d = b.cues?.[type];
-    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)));
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)) || (type === 'playback' && outrangutanCellLinked(d)) || ((type === 'playback' || type === 'audio') && (d.outPadId || d.outPadName)));
   });
   if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
   return `<div class="lf-cues">` + filled.map(type => {
@@ -12828,6 +12890,14 @@ const LIVE_ROW_STATE_LABEL = Object.freeze({
   completed:'Done', skipped:'Skipped', failed:'Failed', disabled:'Disabled',
 });
 
+// After a Back or a Cue to an earlier row, ON AIR and the rows below it air
+// again: they are not dimmed, and read Standby / Later instead of the Done or
+// Skipped they got the first time. Display only; the run history is unchanged.
+function liveRowShownStatus(index, activeIdx) {
+  const status = liveCueExecutionStatus(index);
+  return activeIdx >= 0 && index >= activeIdx && (status === 'completed' || status === 'skipped') ? 'upcoming' : status;
+}
+
 // One quiet pill per row, in the original show vocabulary: the active row is
 // On Air, the next playable row is Next, everything else Later — with the run
 // ledger's terminal states (Done / Skipped / Failed / Disabled) kept intact.
@@ -12841,7 +12911,7 @@ function liveRowStateChips(index, options={}) {
   const failureTitle = execution.failure ? ` data-tip="${esc(execution.failure)}"` : '';
   if (isActive) {
     chips.push('<span class="live-status now">On Air</span>');
-  } else if (LIVE_ROW_STATE_LABEL[execution.status]) {
+  } else if (LIVE_ROW_STATE_LABEL[execution.status] && liveRowShownStatus(index, state.activeCueIndex) !== 'upcoming') {
     const cls = execution.status === 'completed' ? 'done' : execution.status;
     chips.push(`<span class="live-status ${cls}"${failureTitle}>${LIVE_ROW_STATE_LABEL[execution.status]}</span>`);
   } else if (index === liveNextPlayableCueIndex(state.activeCueIndex)) {
@@ -12916,7 +12986,7 @@ function renderLiveFocus() {
 
   if (next) {
     html += `<div class="lf-next" onclick="liveRowPreview(${nextBeatIdx})">
-      <span class="lf-next-badge">NEXT</span>
+      <span class="lf-next-badge">STANDBY</span>
       <span class="lf-next-name">${helperRoleTagHTML(next)}${esc(next.info || '—')}</span>
       <span class="lf-next-time">${fmtDur(next)}</span>
     </div>`;
@@ -12932,8 +13002,8 @@ function renderLiveFocus() {
       if (b.style === 'segment') {
         return `<div class="lf-up-seg">${esc(b.info || 'Segment')}</div>`;
       }
-      const execution = liveCueExecutionStatus(i);
-      return `<div class="lf-up-row live-row-${execution}${i === liveSelectedCueIndex() ? ' live-row-selected' : ''}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" role="button" tabindex="0" aria-label="Select row ${i + 1}; ${execution}">
+      const execution = liveRowShownStatus(i, liveActiveCueIndex());
+      return `<div class="lf-up-row live-row-${execution}${i === liveSelectedCueIndex() ? ' live-row-selected' : ''}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" role="button" tabindex="0" aria-label="Select row ${rowDisplayNumber(i)}; ${execution}">
         <span class="lf-up-num">${rowDisplayNumber(i)}</span>
         <span class="lf-up-name">${helperRoleTagHTML(b)}${esc(b.info || '—')}</span>
         <span class="lf-up-time">${fmtDur(b)}</span>
@@ -12952,6 +13022,7 @@ function updateLiveFocusToggle() {
 }
 
 function toggleLiveFocus() {
+  blurLiveControl();
   liveFocusMode = !liveFocusMode;
   try { localStorage.setItem('cueola_live_focus', liveFocusMode ? '1' : '0'); } catch {}
   renderLive();
@@ -12984,7 +13055,7 @@ function renderLive() {
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
   // Only show department columns actually used in this show — no empty lanes.
-  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))); }));
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))||(type==='playback'&&outrangutanCellLinked(d))); }));
   const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">
@@ -13017,17 +13088,18 @@ function renderLive() {
     const isCur = i === activeIdx;
     const execution = liveCueExecution(i);
     const isDisabled = execution.status === 'disabled';
+    const shownStatus = liveRowShownStatus(i, activeIdx);
     const rowClass = [
-      `live-row-${execution.status}`,
+      `live-row-${shownStatus}`,
       isCur ? 'live-row-active live-row-current' : '',
       i === selectedIdx ? 'live-row-selected' : '',
       isHelperBeat(b) ? `live-row-helper helper-${b.helperRole}` : '',
       rowTintClass(b).trim(),
     ].filter(Boolean).join(' ');
     const goButton = canJump && !isCur && !isDisabled && execution.status !== 'failed'
-      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Activate row ${rowDisplayNumber(i)}" aria-label="GO row ${rowDisplayNumber(i)}">GO</button>`
+      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Cue to row ${rowDisplayNumber(i)}" aria-label="Cue to row ${rowDisplayNumber(i)}">CUE</button>`
       : '';
-    html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${rowDisplayNumber(i)}, ${esc(b.info || 'untitled')}, ${execution.status}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
+    html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${rowDisplayNumber(i)}, ${esc(b.info || 'untitled')}, ${shownStatus}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
       <td><div class="live-num">${rowDisplayNumber(i)}</div></td>
       <td><div class="live-row-states">${liveRowStateChips(i)}</div>${goButton}</td>
       <td>
@@ -13298,6 +13370,7 @@ function lsBrowseAsFollower(direction) {
 }
 
 function lsNext() {
+  blurLiveControl();   // a mouse press must not leave focus on a button: Space would press it again
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!isShowCaller()) return lsBrowseAsFollower(1);
   detachIfFollowing();
@@ -13318,12 +13391,13 @@ function rowLogLabel(b) {
 }
 
 function lsPrev() {
+  blurLiveControl();
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!isShowCaller()) return lsBrowseAsFollower(-1);
   detachIfFollowing();
   const fromIdx = liveActiveCueIndex();
   const ni = livePreviousPlayableCueIndex(fromIdx);
-  if (ni < 0) return false;
+  if (ni < 0) { toast('This is the first cue. There is nothing to go back to.'); return false; }
   // Backward: the bare verb, so the talent glides back to the row (on the
   // talent an advance never travels backward, so Back must not be one).
   return takeCue(ni, 'previous-cue', { fire:false, logVerb:'Back' });
@@ -13437,7 +13511,7 @@ function renderShowCallerBadge() {
     const label = chip.querySelector('.rd-caller-label') || chip;
     label.textContent = model.chipText;
     chip.setAttribute('data-tip', model.title);
-    chip.setAttribute('aria-label', `${model.chipText}. Tap to choose who calls the show`);
+    chip.setAttribute('aria-label', `${model.chipText}. Tap to choose the director`);
   }
 }
 
@@ -13464,7 +13538,7 @@ function renderCallerBanner() {
   const tag = document.getElementById('roleTag');
   if (tag && session.code && !session.isExpert) {
     if (held) {
-      tag.textContent = 'CALLER';
+      tag.textContent = 'DIRECTOR';
       tag.className = 'role-badge role-inst';
     } else {
       // Revoke restores the plain role: enterRundown writes it only once.
@@ -13620,7 +13694,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       delete wireMessage.state.effectiveSpeed;
     }
   }
-  projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Output returned · restoring state' : 'Output connected · applying state');
+  projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Talent screen is back. Catching it up' : 'Talent screen connected. Sending the script');
   _postPrompterMessage(wireMessage);
   if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
     // Honest doc copy: with no fresh talent mirror there is no position or
@@ -13645,7 +13719,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       'prompter.sender':FLOWMINGO_ENDPOINT_ID,
       'prompter.senderClient':CLIENT_ID,
     }).catch(err => {
-      projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Flowmingo state sync failed'));
+      projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Could not update the talent screen'));
     });
   }
   clearTimeout(_prompterHandshakeTimer);
@@ -13660,7 +13734,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       sendPrompterStateSnapshot(outputInstanceId, 'resend', 'sync');
       return;
     }
-    projectPrompterSessionStatus('recovering', 'Output did not acknowledge the state snapshot');
+    projectPrompterSessionStatus('recovering', 'The talent screen did not answer. Trying again');
   }, PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD);
   return message;
 }
@@ -14008,8 +14082,8 @@ function _adoptDocPrompterSession(d) {
   logShow('prompter', `Prompter takeover: another operator surface re-seeded the session (${docSid}). This window joined it`);
   if (_prompterOperatorRuntimeActive && Date.now() - _lastPrompterTakeoverNoticeTs > 10000) {
     _lastPrompterTakeoverNoticeTs = Date.now();
-    toast('Another operator window took the prompter. This window joined their session.');
-    markLivePrompterStatus('Joined the other operator’s prompter session', 'ok');
+    toast('Another operator window took the prompter. This window now follows it.');
+    markLivePrompterStatus('Following the other operator', 'ok');
   }
 }
 
@@ -14233,7 +14307,7 @@ function _setPrompterStatus(connected, unavailable=false) {
     const truth = _talentStatusLine();
     projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', truth || (ready ? (ptPlaying ? 'Talent scrolling' : pausedLabel) : 'Talent connected · applying state'));
   } else {
-    projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for Flowmingo output');
+    projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'The talent screen stopped answering' : 'Waiting for the talent screen');
   }
 }
 
@@ -14840,7 +14914,7 @@ async function scriptOperatorExecuteCommand(command) {
       const applied = scriptOperatorApplyPreview(action);
       return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
     }
-    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
       return { ok:false, error:'Flowmingo Op currently owns transport controls' };
     }
     const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
@@ -14869,7 +14943,7 @@ async function scriptOperatorExecuteCommand(command) {
     // Transport over the doc path is delivery, not a promise the talent
     // applied it: the ack (prompter.controlAck) drives 'applied' separately.
     const viaDoc = sent !== false && !isCollaborativePrompterControl(action) && prompterControlDocPathAvailable(null);
-    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the session' : prompterControlLabel(action) + ' sent' };
+    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the prompter' : prompterControlLabel(action) + ' sent' };
   }
   if (kind === 'draft') {
     const text = String(data.text || '').slice(0, 500000);
@@ -14877,7 +14951,7 @@ async function scriptOperatorExecuteCommand(command) {
     livePrompterDraftVersion += 1;
     adoptPrompterText(text, { forceEditor:true, source:'script-op-popout' });
     markLivePrompterStatus('Draft held', 'busy');
-    return { ok:true, detail:'Draft synchronized' };
+    return { ok:true, detail:'Draft held in Live' };
   }
   if (kind === 'push') {
     const text = String(data.text || '').slice(0, 500000);
@@ -15009,7 +15083,7 @@ function startScriptOperatorHost(identity) {
     if (!_scriptOpHost.checkHeartbeat()) {
       if (!_scriptOpDisconnectAnnounced) {
         _scriptOpDisconnectAnnounced = true;
-        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost, resyncing');
+        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'The Script Op pop-out stopped answering. Reconnecting');
         logShow('error', 'Script Operator disconnected · missed three heartbeats · automatic resync attempt');
         console.warn('[Script Operator] Heartbeat lost', status);
         // D11.8 (Jul 17 pop-out death): checkHeartbeat just cleared
@@ -15070,7 +15144,7 @@ function syncScriptOperatorSubsystemStatus() {
     setLiveSubsystemStatus('scriptOperator', 'closed', 'Script Operator window closed');
     return;
   }
-  if (status.timedOut) setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost');
+  if (status.timedOut) setLiveSubsystemStatus('scriptOperator', 'disconnected', 'The Script Op pop-out stopped answering');
   else if (status.ready) setLiveSubsystemStatus('scriptOperator', 'ready', 'Script Operator synchronized');
   else if (status.connected) setLiveSubsystemStatus('scriptOperator', 'connecting', 'Applying Script Operator state');
   else setLiveSubsystemStatus('scriptOperator', 'opening', 'Opening Script Operator window');
@@ -15244,7 +15318,7 @@ function queueLivePrompterDraftPush() {
 }
 
 function clearPrompter() {
-  if (!dangerConfirm('Clear Flowmingo text?', 'This pushes an empty script to the talent display for this session.', { requireText:'CLEAR' })) return;
+  if (!dangerConfirm('Clear the script?', 'This sends an empty script to the prompter.', { requireText:'CLEAR' })) return;
   adoptPrompterText('', { forceEditor:true, source:'cleared' });
   livePrompterDraftDirty = false;
   sendToPrompter(true); // reset scroll on clear
@@ -15388,7 +15462,7 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     if (!_pendingPrompterControls[control.controlId]) return;
     const pending = _pendingPrompterControls[control.controlId];
     delete _pendingPrompterControls[control.controlId];
-    pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
+    pending?.settle?.({ ok:false, acknowledged:false, error:`${label} was sent, but the talent screen did not answer` });
     markPrompterToggleState(control.action, 'failed');
     if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
     else markLivePrompterStatus('No talent ack', 'busy');
@@ -15660,7 +15734,7 @@ function launchWorkspace() {
   };
   let blocked = 0;
   if (talent && !openFlowmingoTalentWindow({ code, fallbackInPage: false })) blocked++;
-  if (plandabear && !openPlaced(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code, 'plandabear')) blocked++;
+  if (plandabear && !openPlaced(`index.html?app=plandabear&code=${encodeURIComponent(code)}`, 'cueola-plandabear-' + code, 'plandabear')) blocked++;
   if (outrangutan && !openPlaced(`index.html?app=outrangutan&code=${encodeURIComponent(code)}`, 'cueola-outrangutan-' + code, 'outrangutan')) blocked++;
   if (keywi && !openPlaced(`index.html?app=keywibird&code=${encodeURIComponent(code)}`, 'cueola-keywi-' + code, 'keywi')) blocked++;
   _wsPendingScriptop = scriptop;
@@ -15744,7 +15818,9 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
 }
 
 function sendPrompterControl(action, payload=null) {
-  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+  // Stops always go through: a refused brake_stop / boost_stop would leave
+  // the talent braking or boosting on air.
+  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return false;   // strict false: a deck key can flash the refusal
   }
@@ -15868,7 +15944,8 @@ let flowOpKeydownHandler = null;
 let flowOpKeyupHandler = null;
 let flowOpLastRemoteControlTs = 0;
 let _flowOpTalentHeartbeatTs = 0;   // dedup: last doc heartbeat ts the Flowmingo Op reader fed in
-let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'talent online' label)
+let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'Talent connected' label)
+let flowOpTalentCheckTimer = null;  // re-checks that label when no doc writes arrive
 let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
 let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
 let ptColorBarsOn = false;    // generated NTSC bars on the talent display
@@ -16600,7 +16677,7 @@ function poScreenSectionHTML() {
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
         <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide controls</button>
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
-        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
+        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Fullscreen</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
     </div>`;
@@ -16632,9 +16709,9 @@ function scriptOpDisplayPaneHTML() {
       <div class="flow-control-title">Panel Text</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Zoom <output class="pt-ctrl-val" id="lsq-zoom-value" for="lsq-zoom-range">${zoom}%</output></span>
-        <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)">−</button>
+        <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)" aria-label="Smaller text">−</button>
         <input type="range" class="pt-range" id="lsq-zoom-range" min="85" max="150" step="5" value="${zoom}" oninput="setLiveTextZoomPct(this.value)">
-        <button class="pt-btn" onclick="stepLiveTextZoom(0.05)">+</button>
+        <button class="pt-btn" onclick="stepLiveTextZoom(0.05)" aria-label="Bigger text">+</button>
       </div>
     </div>`;
   return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poThemeSectionHTML())}</div>`;
@@ -17409,7 +17486,7 @@ function liveActionsHTML(scope = 'lsq', disabled = false) {
       </div>
     </div>
 	    <div class="flow-control-section flow-control-cue">
-	      <div class="flow-control-title">Scrub</div>
+	      <div class="flow-control-title">Position</div>
 	      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
 	        <span class="pt-ctrl-label">Cue</span>
 	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
@@ -18871,10 +18948,10 @@ function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
         <button type="button" class="pt-btn pt-question-lane-push" data-question-push onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
-        ${isFlow ? '' : `<button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>`}
+        ${isFlow ? '' : `<button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Add this question to the end of the row the talent is reading, so they read it in order."${dis}>${sfIcon('action.add')}<span>Into script</span></button>`}
       </div>
       <div class="pt-question-state" data-question-state role="status"${questionOn ? '' : ' hidden'}>${sfIcon('notification.unread')}<span data-question-state-label>Question is up</span></div>
-      <div class="field-hint">${isFlow ? 'Push card shows the question to the talent as a card. Enter pushes, Esc clears.' : 'Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.'}</div>
+      <div class="field-hint">${isFlow ? 'Push card shows the question to the talent as a card. Enter pushes, Esc clears.' : 'Push card shows the question to the talent as a card. Into script adds it to the end of the row the talent is reading. Enter pushes, Esc clears.'}</div>
       <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
         ${btn('action.reset', 'Clear all overlays', send('overlays_clear'), false, '', 'data-overlays-clear data-tip="Drop the clock, wrap, question, and slates in one go"')}
       </div>
@@ -19120,11 +19197,11 @@ function flowOpControlsHTML(disabled=false) {
       </div>
     </div>
     <div class="flow-control-section flow-control-cue">
-      <div class="flow-control-title">Scrub</div>
+      <div class="flow-control-title">Position</div>
       <div class="pt-ctrl-group pt-live-cue flow-control-slider">
         <span class="pt-ctrl-label">Cue</span>
         <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(-3)" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
-        <input type="range" class="pt-range" id="flow-seek" min="0" max="100" value="0" aria-label="Cue prompter position" onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''" ${seekDrag}${dis}>
+        <input type="range" class="pt-range" id="flow-seek" min="0" max="100" value="${Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : 0}" aria-label="Cue prompter position" onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''" ${seekDrag}${dis}>
         <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(3)" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
         <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="flowOpPunchInSeek()" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
       </div>
@@ -19221,6 +19298,10 @@ function flowOpSyncControls() {
   });
   const rowInfo = flowOpEl('flowOpRowInfo');
   if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
+  // The Position slider follows the talent's reported spot, so Play from
+  // here starts where the talent is instead of at the top of the script.
+  const seek = flowOpEl('flow-seek');
+  if (scriptOpInputCanPatch(seek, 'seekDragging') && Number.isFinite(_talentReportedPct)) seek.value = String(Math.round(_talentReportedPct));
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
     btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
@@ -19289,7 +19370,7 @@ async function flowOpOfferAssignedSessions() {
   const preview = flowOpEl('flowOpScriptPreview');
   if (!preview || !preview.querySelector('.flowop-empty')) return;
   preview.innerHTML = '<div class="flowop-empty flowop-choices">'
-    + '<div class="join-yours-label">Your sessions</div>'
+    + '<div class="join-yours-label">Your shows</div>'
     + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
     + '<div class="flowop-note" style="margin-top:12px">Or type a show code above.</div>'
     + '</div>';
@@ -19301,7 +19382,7 @@ async function flowOpLoadSession(codeOverride='') {
   const code = (codeOverride || input?.value || '').trim().toUpperCase();
   const btn = flowOpEl('flowOpLoadBtn');
   if (!code) {
-    flowOpSetStatus('Enter a code', true);
+    flowOpSetStatus('Type the show code first', true);
     input?.focus();
     return;
   }
@@ -19328,6 +19409,15 @@ async function flowOpLoadSession(codeOverride='') {
   flowOpSetStatus('Loading...');
   _prompterOperatorRuntimeActive = true;
   _ensurePrompterOperatorBridge(true);
+  // The talent's heartbeat is often the only doc write. When the talent
+  // closes, no snapshot comes, so re-check the connected line every 5 s.
+  clearInterval(flowOpTalentCheckTimer);
+  flowOpTalentCheckTimer = setInterval(() => {
+    if (!flowOpCode || !flowOpEl('flowOp')?.classList.contains('on')) return;
+    const st = flowOpEl('flowOpStatus');
+    if (st && st.textContent.startsWith('Talent connected') && (!_flowOpTalentSeenAt || Date.now() - _flowOpTalentSeenAt >= 20000)) flowOpSetStatus(`Waiting for the talent · ${flowOpCode}`);
+  }, 5000);
+  let firstSnapshot = true;
   const load = () => {
     try {
       if (flowOpSub) { flowOpSub(); flowOpSub = null; }
@@ -19337,7 +19427,7 @@ async function flowOpLoadSession(codeOverride='') {
           flowOpData = null;
           flowOpRenderSession(null);
           flowOpRenderControls(true);
-          flowOpSetStatus('Not found', true);
+          flowOpSetStatus('Show not found. Check the code', true);
           if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
           return;
         }
@@ -19367,9 +19457,9 @@ async function flowOpLoadSession(codeOverride='') {
         const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && (Date.now() - _flowOpTalentSeenAt) < 20000;
         if (talentOnline) {
           const status = prompterSessionController.getState().status;
-          flowOpSetStatus(`${prompterStatusLabel(status).toUpperCase()} · ${code} · talent online`);
+          flowOpSetStatus(`Talent connected · ${code}${status === 'connected' ? '' : ' · ' + prompterStatusLabel(status)}`);
         } else {
-          flowOpSetStatus(`OPENING · ${code} · waiting for talent`);
+          flowOpSetStatus(`Waiting for the talent · ${code}`);
         }
         const control = flowOpData.prompter?.control;
         if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
@@ -19378,6 +19468,12 @@ async function flowOpLoadSession(codeOverride='') {
         }
         if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+        // Loaded: hand the keyboard to the hotkeys (Enter left the caret in
+        // the code box, so Space typed a space instead of playing).
+        if (firstSnapshot) {
+          firstSnapshot = false;
+          if (document.activeElement === input || document.activeElement === btn) document.activeElement.blur();
+        }
       }, err => {
         flowOpCode = '';
         flowOpSetStatus(firebaseConnectionLabel(err, 'Error'), true);
@@ -19400,6 +19496,8 @@ function flowOpStopListening() {
     try { flowOpSub(); } catch {}
     flowOpSub = null;
   }
+  clearInterval(flowOpTalentCheckTimer);
+  flowOpTalentCheckTimer = null;
   if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
 }
 
@@ -19455,20 +19553,32 @@ function flowOpFindInScript() {
   if (flowOpSendControl('seek_text', false, { q }) !== false) flowOpSetStatus(`Finding “${q.slice(0, 28)}${q.length > 28 ? '…' : ''}”`);
 }
 
+// The Op's own held arrow keys. Its sends never set ptBraking / ptBoosting
+// (those only mirror other desks), so it tracks its holds here and lets go
+// on key-up, on exit, and when this window loses focus.
+const flowOpKeyHolds = { brake:false, boost:false };
 function flowOpReleaseHoldKeys() {
-  if (!flowOpCode) return;
-  if (ptBraking) flowOpSendControl('brake_stop', true);
-  if (ptBoosting) flowOpSendControl('boost_stop', true);
+  if (flowOpCode && flowOpKeyHolds.brake) flowOpSendControl('brake_stop', true);
+  if (flowOpCode && flowOpKeyHolds.boost) flowOpSendControl('boost_stop', true);
+  flowOpKeyHolds.brake = false;
+  flowOpKeyHolds.boost = false;
   ptBraking = false;
   ptBoosting = false;
 }
+window.addEventListener('blur', () => { if (flowOpEl('flowOp')?.classList.contains('on')) flowOpReleaseHoldKeys(); });
 
 function flowOpBindKeys() {
   if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
   if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
   flowOpKeydownHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (isInteractiveEventTarget(e)) return;
+    // Cmd/Ctrl shortcuts stay the browser's (Cmd+R reload, Cmd+F find), and
+    // typing never fires a hotkey. A clicked button keeps focus in Chrome, so
+    // a focused button no longer blocks the keys (Space used to re-press it).
+    if (e.isComposing || e.metaKey || e.ctrlKey) return;
+    if (isTextEditingTarget(e.target) || e.target?.closest?.('select, .modal, .modal-wrap, .overlay, [role="dialog"]')) return;
+    // No show yet: Space presses the focused button (Load, a show in the list).
+    if (!flowOpCode && e.key !== 'Escape' && e.target?.closest?.('button, summary, a')) return;
     if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
     if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
     if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
@@ -19478,8 +19588,8 @@ function flowOpBindKeys() {
     switch (e.key) {
       case ' ':
       case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
-      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('boost_start'); break;
-      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('brake_start'); break;
+      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.boost = true; flowOpSendControl('boost_start'); } break;
+      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.brake = true; flowOpSendControl('brake_start'); } break;
       case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
       case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
       case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
@@ -19491,8 +19601,10 @@ function flowOpBindKeys() {
   };
   flowOpKeyupHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (e.key === 'ArrowUp') { consumeRemoteKey(e); flowOpSendControl('boost_stop', true); }
-    if (e.key === 'ArrowDown') { consumeRemoteKey(e); flowOpSendControl('brake_stop', true); }
+    // Only a hold this screen started gets a stop: arrow keys in a text or
+    // number field used to send stray stops that let go of another desk's hold.
+    if (e.key === 'ArrowUp' && flowOpKeyHolds.boost) { consumeRemoteKey(e); flowOpKeyHolds.boost = false; flowOpSendControl('boost_stop', true); }
+    if (e.key === 'ArrowDown' && flowOpKeyHolds.brake) { consumeRemoteKey(e); flowOpKeyHolds.brake = false; flowOpSendControl('brake_stop', true); }
   };
   document.addEventListener('keydown', flowOpKeydownHandler);
   document.addEventListener('keyup', flowOpKeyupHandler);
@@ -19524,7 +19636,6 @@ function openFlowmingoOperator(codeOverride='') {
 
 function exitFlowmingoOperator() {
   flowOpReleaseHoldKeys();
-  flowOpStopListening();
   flowOpEl('flowOp')?.classList.remove('on');
   if (flowOpReturnScreen === 'promptypus') {
     enterPrompter();
@@ -19538,6 +19649,9 @@ function exitFlowmingoOperator() {
     document.getElementById('entry')?.classList.add('on');
     sessionStorage.setItem('cueola_screen', 'entry');
   }
+  // Last, once the return screen is back: a Live window keeps its prompter
+  // link (this only closes it when Live is not on screen).
+  flowOpStopListening();
 }
 
 function openPrompterFromFlowOp() {
@@ -19926,6 +20040,7 @@ function enterPrompter() {
       return;
     }
     if (isInteractiveEventTarget(e)) return;
+    if (e.metaKey || e.ctrlKey) return;   // Cmd+F / Cmd+R / Cmd+M belong to the browser
     if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptReversing = true; return; }
     if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptReversing = false; return; }
     if (e.repeat) return;
@@ -20063,7 +20178,12 @@ function applyRemoteShowClock(clock) {
   if (!clock || typeof clock !== 'object') return;
   _remoteClockState = clock;
   if (Number.isFinite(Number(clock.seq))) _showClockSeq = Math.max(_showClockSeq, Number(clock.seq));
-  if (clock.senderId === presenceId || (clock.senderClient && clock.senderClient === CLIENT_ID)) return;  // my own write coming back
+  // Only this window's own echo is skipped. CLIENT_ID is shared by every window
+  // of this browser and survives a reload, so it must not count as mine: the
+  // writer+seq signature below already ignores the echo of our own broadcast.
+  // Right after leaving a show the signature is empty: then even this window's
+  // own earlier write is the room's clock, so a rejoin adopts it.
+  if (clock.senderId === presenceId && _lastAppliedClockSig) return;
   if (Number.isFinite(Number(clock.seq)) && (clock.senderClient || clock.senderId)) {
     // Signature dedupe, same pattern as prompter controls: cross-machine wall
     // clocks cannot order writes, so any NEW writer+seq signature applies.
@@ -20305,6 +20425,8 @@ function saveSettings() {
   frameRate = normalizeFrameRate(document.getElementById('set-framerate')?.value);
   applyTheme(currentTheme);
   localStorage.setItem('cueola_theme', currentTheme);
+  // Same as the front-page picker: Planda Bear follows unless it has its own theme.
+  if (!hasPlandaBearThemeOverride()) applyPlandaBearTheme(cueolaThemeToPlandaBearTheme(currentTheme));
   localStorage.setItem('cueola_frame_rate', String(frameRate));
   hideModal('modal-settings');
   renderRundown(); syncToFirestore();

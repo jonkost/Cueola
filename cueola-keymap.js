@@ -113,7 +113,7 @@
     options = options || {};
     var chip = function (b) { return '<span class="km-key">' + escapeHtml(b) + '</span>'; };
     var html = '<div class="km-card"><div class="km-head"><h3>' + escapeHtml(options.title || 'Keyboard shortcuts')
-      + '</h3><button type="button" class="btn-secondary km-x">Done</button></div><div class="km-cols">';
+      + '</h3><button type="button" class="btn-secondary km-x">Close</button></div><div class="km-cols">';
     (options.sections || []).forEach(function (section) {
       html += '<div class="km-group"><div class="km-group-t">' + escapeHtml(section.title) + '</div>'
         + (section.rows || []).map(function (row) {
