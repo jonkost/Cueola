@@ -20716,12 +20716,15 @@ function pbCollectionsToArrays(doc) {
   return out;
 }
 
-// 3.0: field-level writes are ON. Every Planner save writes only the leaves
-// that changed (masked field paths + per-leaf stamps), so two people editing
-// different fields of the same page never clobber each other. The engine
-// reads both wire shapes; 3.0 ships with a WORKER_SCHEMA bump so no
-// array-only client stays live (the P2607 mixed-version incident guard).
-window.CUEOLA_PB_LEAF_SYNC = true;
+// Field-level writes are OFF again (Sept 29, the night before a class show).
+// Turned on in 3.0 without the one-time move of old lists: a field saved into
+// a list the cloud still holds whole REPLACES that list with the one field,
+// and every re-read added another copy of each row that had no id. Planner
+// saves write each changed section whole again (the 2.x behavior; two people
+// typing on the same page at once: the later save wins). The engine still
+// reads both shapes. Turn this back on only with the one-time list move and
+// a WORKER_SCHEMA bump (PB_COLLAB_PLAN.md, P2607 notes).
+window.CUEOLA_PB_LEAF_SYNC = false;
 
 function persistPreProData(patch, section) {
   const Sync = preProSyncEngine();
@@ -20895,7 +20898,14 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
   // while CUEOLA_PB_LEAF_SYNC is dark — mergePreProFromCloudLegacy handles that.
   if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) {
     const digestible = Sync ? pbCollectionsToArrays(Sync.normalizeDoc(server).doc) : server;
-    return mergePreProFromCloudLegacy(digestible, recoverNewerLocal, sessionCreatedAt);
+    if (Sync) digestible._fieldUpdatedAt = pbSaveTimesWithFieldStamps(server);
+    const putBack = Sync ? pbListsCutByOldWindows(server, digestible) : {};
+    const mergedLegacy = mergePreProFromCloudLegacy(digestible, recoverNewerLocal, sessionCreatedAt);
+    if (Object.keys(putBack).length) {
+      syncPreProToFirestore(putBack, null, liveServerNow());
+      logShow('sync', `Put back ${Object.keys(putBack).length} Planda Bear list(s) that an old open window cut down`);
+    }
+    return mergedLegacy;
   }
   const local = loadPreProData();
   const { merged, recovery } = Sync.mergeDocs(local, server, { pendingPaths:_pbPendingCloudKeys, recoverNewerLocal });
@@ -21236,6 +21246,56 @@ function pbRefreshCallSheetFields() {
   pbSetFieldIfIdle('pp-call', timeTo24(sheet.call));
   pbSetFieldIfIdle('pp-location', sheet.location || '');
   pbSetFieldIfIdle('pp-address', sheet.address || '');
+// From Sept 25 to this fix, Planda Bear saved one field at a time and
+// stamped each field under _stamps, never touching the per-section save time
+// the whole-list merge compares. Count those stamps, so a device that missed
+// a later edit takes the newer cloud copy instead of pushing its older one
+// back. A list the cloud holds as a map keeps its old time: that map may be
+// a list 3.x cut down, and the instructor decides which copy is right.
+function pbSaveTimesWithFieldStamps(server) {
+  const times = { ...(server._fieldUpdatedAt || {}) };
+  const stamps = server._stamps && typeof server._stamps === 'object' ? server._stamps : {};
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const newest = node => (typeof node === 'number' ? node : isMap(node) ? Math.max(0, ...Object.values(node).map(newest)) : 0);
+  for (const [key, node] of Object.entries(stamps)) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist
+      : ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows'].includes(key) ? server[key] : undefined;
+    if (isMap(list)) continue;
+    const at = newest(node);
+    if (at > (Number(times[key]) || 0)) times[key] = at;
+  }
+  return times;
+}
+
+// A window still on the 3.x build (opened before this fix and never
+// reloaded) saves one field at a time. Saved into a list the cloud holds
+// whole, that one field REPLACES the whole list. The sign: this device saw
+// the list whole, and now it comes back as a map with the same whole-list
+// save time, so nothing but a one-field save has touched it since. Keep this
+// device's copy and save it whole again. Lists this device never saw whole
+// (damaged before the fix) are left for the instructor to check.
+function pbListsCutByOldWindows(server, digest) {
+  const local = loadPreProData();
+  const localTimes = local._fieldUpdatedAt || {};
+  const serverTimes = server._fieldUpdatedAt || {};
+  const seenKey = `${preProKey()}__wholeLists`;
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}') || {}; } catch {}
+  const seenBefore = JSON.stringify(seen);
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const putBack = {};
+  for (const key of ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows', 'productionSchedule']) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist : server[key];
+    const savedAt = Number(serverTimes[key]) || 0;
+    if (Array.isArray(list)) { seen[key] = savedAt; continue; }
+    if (!isMap(list) || !savedAt || seen[key] !== savedAt || Number(localTimes[key]) !== savedAt || local[key] === undefined) continue;
+    digest[key] = local[key];
+    putBack[key] = local[key];
+  }
+  if (JSON.stringify(seen) !== seenBefore) { try { localStorage.setItem(seenKey, JSON.stringify(seen)); } catch {} }
+  return putBack;
+}
+
   const remoteLate = splitLateContact(sheet.late, sheet.lateName, sheet.latePhone);
   pbSetFieldIfIdle('pp-late-name', remoteLate.name);
   pbSetFieldIfIdle('pp-late-phone', remoteLate.phone);
