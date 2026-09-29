@@ -136,6 +136,16 @@ struct PercentSlider: View {
     }
 }
 
+/// Shown on top of an inspector while editing is locked.
+struct LockedNote: View {
+    var body: some View {
+        Label("Editing is locked for the show. Unlock with the lock in the toolbar.", systemImage: "lock.fill")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(.top, 12)
+    }
+}
+
 /// An empty inspector: Apple's standard "nothing here" layout.
 struct InspectorEmpty: View {
     let title: String

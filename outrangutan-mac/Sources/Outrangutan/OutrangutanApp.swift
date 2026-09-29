@@ -46,8 +46,10 @@ struct FileCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Show") { files.newShow() }
                 .keyboardShortcut("n")
+                .disabled(files.engine.locked)
             Button("Open Show\u{2026}") { files.chooseAndOpen() }
                 .keyboardShortcut("o")
+                .disabled(files.engine.locked)
             Divider()
             Button("Connect to a Show\u{2026}") {
                 NotificationCenter.default.post(name: .showConnect, object: nil)
@@ -89,14 +91,18 @@ struct OpenLogButton: View {
 /// text boxes.
 struct PlaybackCommands: Commands {
     @ObservedObject var engine: Engine
+    @ObservedObject var keys = KeyMap.shared
 
     var body: some Commands {
         CommandMenu("Playback") {
-            Button("GO (Space)") { engine.go() }
-            Button(engine.status == .paused ? "Resume (P)" : "Pause (P)") { engine.togglePause() }
-            Button("Stop (S)") { engine.stop() }
-            Button("Fade and Stop All (F)") { engine.fadeStopAll() }
-            Button("All Stop (Esc)") { engine.allStop() }
+            Button("GO (\(keys.name(.go)))") { engine.go() }
+            Button(engine.status == .paused ? "Resume (\(keys.name(.pause)))" : "Pause (\(keys.name(.pause)))") { engine.togglePause() }
+            Button("Stop (\(keys.name(.stop)))") { engine.stop() }
+            Button("Fade and Stop All (\(keys.name(.fade)))") { engine.fadeStopAll() }
+            Button("All Stop (\(keys.name(.allStop)))") { engine.allStop() }
+            Divider()
+            Toggle("Lock Editing", isOn: $engine.locked)
+                .keyboardShortcut("l", modifiers: [.command, .shift])
             Divider()
             Button(engine.openOutputs.isEmpty ? "Open All Outputs" : "Close All Outputs") { engine.toggleOutput() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -124,6 +130,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (Appearance(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system).apply()
         // Test mode stays in the background so it never catches keys someone
         // is typing in another app.
+        // Show keys work anywhere in the app, except while typing in a box.
+        // (Test mode has them too: it stays in the background, so only the
+        // test's own pretend key presses reach it.)
+        keyWatcher = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            if NSApp.keyWindow?.firstResponder is NSText { return event }
+            if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return event }
+            // Settings is waiting for a new key: let it have this one.
+            if KeyMap.shared.recording != nil { return event }
+            // Holding a key down never fires it twice.
+            if let action = KeyMap.shared.action(for: event) {
+                if !event.isARepeat { self.engine.perform(action) }
+                return nil
+            }
+            // A pad's hotkey hits it.
+            let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            if let pad = self.engine.pads.pad(forKey: key) {
+                if !event.isARepeat { self.engine.pads.fire(pad.id) }
+                return nil
+            }
+            return event
+        }
         _ = link
         if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files) }
         NSApp.activate(ignoringOtherApps: true)
@@ -135,30 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: "Outrangutan is running a show"
         )
 
-        // Show keys work anywhere in the app, except while typing in a box.
-        keyWatcher = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            if NSApp.keyWindow?.firstResponder is NSText { return event }
-            if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return event }
-            switch event.keyCode {
-            case 49: self.engine.go(); return nil          // Space
-            case 53: self.engine.allStop(); return nil     // Esc
-            default: break
-            }
-            let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
-            switch key {
-            case "s": self.engine.stop(); return nil
-            case "p": self.engine.togglePause(); return nil
-            case "f": self.engine.fadeStopAll(); return nil
-            default:
-                // A pad's hotkey hits it. Holding the key down does not repeat.
-                if let pad = self.engine.pads.pad(forKey: key) {
-                    if !event.isARepeat { self.engine.pads.fire(pad.id) }
-                    return nil
-                }
-                return event
-            }
-        }
     }
 
     /// A show file double-clicked in Finder, or dropped on the Dock icon.

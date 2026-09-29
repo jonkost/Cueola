@@ -72,7 +72,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | KeyWi Bird playback keys and strip | Built (step 5, through the cloud). Step 6: direct, same Mac | |
 | Show file save and open (.ogshow, opens in the web app too), crash recovery | Built (step 6) | Opened media is copied to Movies, Outrangutan. |
 | Show log, print cue sheet | Built (step 6) | Each day's log is also a text file. |
-| Keyboard shortcuts you can change, lock, wall clock | Step 6 | |
+| Keyboard shortcuts you can change, lock, wall clock | Built (step 6) | |
 | MIDI | Step 6 | Uses the Mac's own MIDI system. |
 | Waveform and vectorscope | Step 7 | Reads every frame, not a sample. |
 | Keying: chroma, luma, alpha | Step 7 | Keys on the graphics card, full resolution. |

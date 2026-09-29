@@ -14,6 +14,8 @@ struct SettingsView: View {
                 .tabItem { Label("Outputs", systemImage: "rectangle.on.rectangle") }
             SoundSettings(engine: engine)
                 .tabItem { Label("Sound", systemImage: "speaker.wave.2") }
+            KeySettings(board: engine.pads)
+                .tabItem { Label("Keys", systemImage: "keyboard") }
         }
         .frame(width: 560, height: 470)
     }

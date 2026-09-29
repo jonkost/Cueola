@@ -25,7 +25,7 @@ struct PadBoardView: View {
                                 EmptyPadTile(board: board, slot: slot)
                             }
                         }
-                        if bank.padCount < PadBoard.padCountMax {
+                        if bank.padCount < PadBoard.padCountMax && !board.locked {
                             // Shaped like an empty pad, so the grid stays even.
                             Button { board.addSlot() } label: {
                                 VStack(spacing: 6) {
@@ -73,8 +73,10 @@ struct PadBoardView: View {
                         .background(on ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.12), in: Capsule())
                         .contextMenu {
                             Button("Rename…") { newName = bank.name; renaming = bank }
+                                .disabled(board.locked)
                             if board.banks.count > 1 {
                                 Button("Remove bank and its pads", role: .destructive) { board.removeBank(bank.id) }
+                                    .disabled(board.locked)
                             }
                         }
                     }
@@ -83,6 +85,7 @@ struct PadBoardView: View {
                         .buttonStyle(.borderless)
                         .padding(.horizontal, 4)
                         .help("Add a bank")
+                        .disabled(board.locked)
                 }
             }
             Spacer()
@@ -160,9 +163,10 @@ struct PadTile: View {
             Button("Stop") { board.stop(pad.id) }
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([pad.url]) }
             Button("Clear pad", role: .destructive) { board.clear(pad.id) }
+                .disabled(board.locked)
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: PadBoard.isSound) else { return false }
+            guard !board.locked, let url = urls.first(where: PadBoard.isSound) else { return false }
             board.assign(url: url, slot: pad.slot)
             return true
         } isTargeted: { dropTargeted = $0 }
@@ -186,9 +190,10 @@ struct EmptyPadTile: View {
         .background(RoundedRectangle(cornerRadius: 12).strokeBorder(dropTargeted ? Color.accentColor : Color.secondary.opacity(0.35),
                                                                      style: StrokeStyle(lineWidth: dropTargeted ? 2 : 1, dash: [5, 4])))
         .contentShape(RoundedRectangle(cornerRadius: 12))
-        .onTapGesture { choose() }
+        .opacity(board.locked ? 0.4 : 1)
+        .onTapGesture { if !board.locked { choose() } }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: PadBoard.isSound) else { return false }
+            guard !board.locked, let url = urls.first(where: PadBoard.isSound) else { return false }
             board.assign(url: url, slot: slot)
             return true
         } isTargeted: { dropTargeted = $0 }
@@ -220,12 +225,16 @@ struct PadInspectorView: View {
                 InspectorTabs(tabs: tabs, selection: $tab)
                 Divider()
                 InspectorPage {
-                    switch tab {
-                    case "playing": playing(pad)
-                    case "sound": sound(pad)
-                    case "file": file(pad)
-                    default: general(pad)
+                    if board.locked { LockedNote() }
+                    Group {
+                        switch tab {
+                        case "playing": playing(pad)
+                        case "sound": sound(pad)
+                        case "file": file(pad)
+                        default: general(pad)
+                        }
                     }
+                    .disabled(board.locked)
                 }
             }
         } else {

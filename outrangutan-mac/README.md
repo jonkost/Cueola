@@ -51,6 +51,14 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 | F | Fade: picture and sound fade out over one second, then stop |
 | Esc | All Stop: everything off, output to black |
 
+- Change any show key in **Settings, Keys**: click the key, press the new
+  one. Holding a key down never fires it twice.
+- **Lock Editing** (the lock in the toolbar, or Shift-Command-L) keeps a
+  stray click from changing the show: nothing can be added, removed, moved
+  or edited. GO, the show keys, pads, the rundown and the deck still work.
+- The time of day sits under the big clock. Click it for a 12-hour or
+  24-hour clock.
+
 Sounds play on their own lane, so a sound effect never knocks the picture
 off air. A still holds until the next picture cue, or counts down when it has
 a time. While paused, GO carries on, like the web app.
@@ -167,6 +175,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
+- `keys`: moved show keys, a held key, two keys swapping, the lock, and the
+  time of day. Its key presses are pretend ones, sent to the app only.
 - `log`: a short show from this Mac and from the rundown, then a picture of
   the Show Log and the cue sheet and log printed to PDF.
 - `files`: saves a show file, opens it again and checks every cue and pad
@@ -190,6 +200,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `Keys.swift` | The show keys and Settings, Keys |
 | `ShowLog.swift` | The show log and its window |
 | `Printer.swift` | Printing the cue sheet and the log |
 | `ShowFiles.swift` | New, Open and Save: show files the web app shares |

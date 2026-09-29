@@ -10,6 +10,8 @@ struct ControlView: View {
     @ObservedObject var engine: Engine
     @ObservedObject var link: ShowLink
     @ObservedObject var files: ShowFiles
+    @ObservedObject private var keys = KeyMap.shared
+    @AppStorage("clock.24hour") private var clock24 = true
     @State private var dropTargeted = false
     @State private var showConnect = false
     @AppStorage("ui.inspector") private var showInspector = true
@@ -36,6 +38,7 @@ struct ControlView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
         .dropDestination(for: URL.self) { urls, _ in
+            guard !engine.locked else { return false }
             if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
             return true
         } isTargeted: { dropTargeted = $0 }
@@ -75,6 +78,7 @@ struct ControlView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { chooseFiles() } label: { Label("Add Media", systemImage: "plus") }
                 .help(tab == "pads" ? "Add sounds to the pads" : "Add videos, sounds or stills to the cue list")
+                .disabled(engine.locked)
             if tab == "cues" {
                 Menu {
                     Button("Black") { engine.addMatte(color: "#000000", name: "Black") }
@@ -86,6 +90,7 @@ struct ControlView: View {
                     Label("Add Matte", systemImage: "square.fill")
                 }
                 .help("Add a solid color picture. Change its color in the Inspector.")
+                .disabled(engine.locked)
             }
             Menu {
                 Button(engine.openOutputs.isEmpty ? "Open All Outputs" : "Close All Outputs") { engine.toggleOutput() }
@@ -107,6 +112,12 @@ struct ControlView: View {
             .help(engine.openOutputs.isEmpty ? "Open the outputs" : "Close the outputs")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            Toggle(isOn: $engine.locked) {
+                Label(engine.locked ? "Unlock Editing" : "Lock Editing", systemImage: engine.locked ? "lock.fill" : "lock.open")
+            }
+            .toggleStyle(.button)
+            .help(engine.locked ? "Editing is locked. The show still runs. Click to unlock (Shift-Command-L)."
+                  : "Lock editing for the show, so a stray click changes nothing (Shift-Command-L)")
             LinkBadge(link: link) { showConnect = true }
         }
         // The Inspector button sits last, at the window's right edge, over
@@ -123,12 +134,23 @@ struct ControlView: View {
         VStack(spacing: 14) {
             HStack(alignment: .center, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(engine.status.rawValue)
-                        .font(.subheadline.weight(.bold))
-                        .fixedSize()
-                        .padding(.horizontal, 10).padding(.vertical, 3)
-                        .background(statusColor.opacity(0.22), in: Capsule())
-                        .foregroundStyle(statusColor)
+                    HStack(spacing: 6) {
+                        Text(engine.status.rawValue)
+                            .font(.subheadline.weight(.bold))
+                            .fixedSize()
+                            .padding(.horizontal, 10).padding(.vertical, 3)
+                            .background(statusColor.opacity(0.22), in: Capsule())
+                            .foregroundStyle(statusColor)
+                        if engine.locked {
+                            Label("LOCKED", systemImage: "lock.fill")
+                                .font(.subheadline.weight(.bold))
+                                .fixedSize()
+                                .padding(.horizontal, 10).padding(.vertical, 3)
+                                .background(Color.secondary.opacity(0.18), in: Capsule())
+                                .foregroundStyle(.secondary)
+                                .help("Editing is locked. The show still runs.")
+                        }
+                    }
                     Text(onAirText)
                         .font(.title3.weight(.medium))
                         .lineLimit(1)
@@ -146,24 +168,27 @@ struct ControlView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // SF Pro with fixed-width digits, so the clock never jiggles.
-                Text(clockText)
-                    .font(.system(size: 60, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(engine.remaining == nil && engine.status != .pre ? Color.secondary : clockColor)
-                    .fixedSize()
-                    .accessibilityLabel("Time left")
+                VStack(alignment: .trailing, spacing: 0) {
+                    // SF Pro with fixed-width digits, so the clock never jiggles.
+                    Text(clockText)
+                        .font(.system(size: 60, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(engine.remaining == nil && engine.status != .pre ? Color.secondary : clockColor)
+                        .fixedSize()
+                        .accessibilityLabel("Time left")
+                    timeOfDay
+                }
             }
 
             // The transport gets its own row, so every button stays a big
             // target however narrow the window is.
             HStack(spacing: 10) {
-                transport("GO", symbol: "play.fill", key: "Space", color: .green, prominent: true) { engine.go() }
+                transport("GO", symbol: "play.fill", key: keys.name(.go), color: .green, prominent: true) { engine.go() }
                 transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
-                          key: "P", color: .yellow, action: engine.togglePause)
-                transport("Stop", symbol: "stop.fill", key: "S", color: .orange, action: engine.stop)
-                transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: "F", color: .purple, action: engine.fadeStopAll)
-                transport("All Stop", symbol: "exclamationmark.octagon.fill", key: "Esc", color: .red, prominent: true, action: engine.allStop)
+                          key: keys.name(.pause), color: .yellow, action: engine.togglePause)
+                transport("Stop", symbol: "stop.fill", key: keys.name(.stop), color: .orange, action: engine.stop)
+                transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
+                transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
             }
         }
         .padding(16)
@@ -194,6 +219,30 @@ struct ControlView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.1))
+    }
+
+    /// The time of day, under the big clock. Click it to switch between a
+    /// 24-hour and a 12-hour clock.
+    private var timeOfDay: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Button {
+                clock24.toggle()
+            } label: {
+                Label(Self.timeText(context.date, twentyFour: clock24), systemImage: "clock")
+                    .font(.title3.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(clock24 ? "Time of day. Click for a 12-hour clock." : "Time of day. Click for a 24-hour clock.")
+            .accessibilityLabel("Time of day")
+        }
+    }
+
+    static func timeText(_ date: Date, twentyFour: Bool) -> String {
+        let f = DateFormatter()
+        f.dateFormat = twentyFour ? "HH:mm:ss" : "h:mm:ss a"
+        return f.string(from: date)
     }
 
     /// A native Mac button, extra large for show use. GO and All Stop are
@@ -243,11 +292,11 @@ struct ControlView: View {
                     ForEach(Array(engine.cues.enumerated()), id: \.element.id) { index, cue in
                         row(cue, number: index + 1).tag(cue.id)
                     }
-                    .onMove { engine.cues.move(fromOffsets: $0, toOffset: $1) }
+                    .onMove(perform: engine.locked ? nil : { engine.cues.move(fromOffsets: $0, toOffset: $1) })
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
                 .onDeleteCommand {
-                    if let id = engine.standbyID { engine.remove(ids: [id]) }
+                    if !engine.locked, let id = engine.standbyID { engine.remove(ids: [id]) }
                 }
             }
         }
@@ -303,8 +352,10 @@ struct ControlView: View {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cue.url]) }
             }
             Button(cue.armed ? "Skip on GO" : "Fire on GO") { engine.update(cue.id) { $0.armed.toggle() } }
+                .disabled(engine.locked)
             Divider()
             Button("Remove", role: .destructive) { engine.remove(ids: [cue.id]) }
+                .disabled(engine.locked)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")

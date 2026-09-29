@@ -15,13 +15,17 @@ struct InspectorView: View {
                 InspectorTabs(tabs: tabs(for: cue), selection: $tab)
                 Divider()
                 InspectorPage {
-                    switch tab {
-                    case "timing": timing(cue)
-                    case "sound": sound(cue)
-                    case "fades": fades(cue)
-                    case "picture": picture(cue)
-                    default: general(cue)
+                    if engine.locked { LockedNote() }
+                    Group {
+                        switch tab {
+                        case "timing": timing(cue)
+                        case "sound": sound(cue)
+                        case "fades": fades(cue)
+                        case "picture": picture(cue)
+                        default: general(cue)
+                        }
                     }
+                    .disabled(engine.locked)
                 }
             }
             .id(cue.kind)   // re-check the tab list when the kind changes

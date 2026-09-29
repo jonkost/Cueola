@@ -15,6 +15,7 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "keys": changed show keys, a held key, the lock, and the time of day.
 /// - "log": a short show from this Mac and from the rundown, then pictures
 ///   of the Show Log, and the cue sheet and log printed to PDF.
 enum TestSnapshot {
@@ -57,6 +58,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "keys": steps = keySteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
         case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
         case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
         case "connect": steps = [
@@ -153,6 +155,70 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
+        ]
+    }
+
+    /// Show keys, the lock and the time of day. Key presses are pretend
+    /// ones, sent to this app only.
+    @MainActor private static func keySteps(engine: Engine, dir: URL, note: @escaping (String) -> Void,
+                                            state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let keys = KeyMap.shared
+        func press(_ code: UInt16, _ chars: String, repeating: Bool = false) {
+            guard let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: 0, context: nil, characters: chars, charactersIgnoringModifiers: chars,
+                                           isARepeat: repeating, keyCode: code) else { return }
+            NSApp.postEvent(e, atStart: false)
+        }
+        func gos() -> Int { engine.log.entries.filter { $0.kind == .cue }.count }
+        func keyList() -> String { KeyMap.Action.allCases.map { "\($0.label)=\(keys.name($0))" }.joined(separator: " ") }
+        return [
+            (1.0, {
+                let a = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                let b = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                let c = Cue(name: "Bars 4x3", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
+                engine.replaceShow(cues: [a, b, c], pads: [], banks: [], multiTrigger: nil)
+                note("a standard keys: \(keyList())")
+                keys.set(.go, to: KeyMap.Key(code: 36, name: "Return"))
+                note("b GO moved to Return: \(keyList())")
+            }),
+            (0.2, { press(49, " ") }),
+            (0.3, { note("c Space no longer fires: GOs=\(gos())"); press(36, "\r") }),
+            (0.3, { press(36, "\r", repeating: true); press(36, "\r", repeating: true) }),
+            (0.4, { note("d Return fired once, holding it did not repeat: GOs=\(gos())"); state("d") }),
+            (0.1, {
+                keys.set(.go, to: KeyMap.Key(code: 1, name: "S"))
+                note("e GO set to S, which Stop had: they swap: \(keyList())")
+                engine.locked = true
+            }),
+            (0.4, {
+                note("f locked: \(engine.locked), pads locked: \(engine.pads.locked)")
+                press(1, "s")
+            }),
+            (0.4, { note("g S fires GO while locked (show keys still work): GOs=\(gos())"); state("g"); snap("k-locked") }),
+            (0.3, {
+                let root = KeySettings(board: engine.pads)
+                    .frame(width: 560, height: 470)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 470), styleMask: [.titled], backing: .buffered, defer: false)
+                win.appearance = NSAppearance(named: .darkAqua)
+                win.contentView = NSHostingView(rootView: root)
+                win.orderBack(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("k-settings-keys.png"))
+                    }
+                    win.orderOut(nil)
+                }
+            }),
+            (1.0, {
+                note("h time of day: \(ControlView.timeText(Date(), twentyFour: true)) / \(ControlView.timeText(Date(), twentyFour: false))")
+                keys.resetAll()
+                note("i back to standard: \(keyList())")
+                engine.allStop()
+            }),
         ]
     }
 

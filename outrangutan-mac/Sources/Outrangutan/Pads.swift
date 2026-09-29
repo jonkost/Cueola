@@ -124,6 +124,8 @@ final class PadBoard: ObservableObject {
     @Published var multiTrigger: Bool { didSet { changed() } }
     @Published var currentBankID: String
     @Published var selectedPadID: String?
+    /// Editing is locked for the show: pads still play.
+    @Published var locked = false
     /// Pads sounding now: when each started and how long it runs (nil loops).
     @Published private(set) var sounding: [String: (start: Date, length: Double?)] = [:]
 
@@ -453,7 +455,8 @@ final class PadBoard: ObservableObject {
     // MARK: Inside
 
     private func nextFreeKey() -> String {
-        let used = Set(pads.map(\.key))
+        // Never hand out a show key.
+        let used = Set(pads.map(\.key)).union(KeyMap.Action.allCases.map { KeyMap.shared.key($0).padName })
         return PadBoard.keys.first { !used.contains($0) } ?? ""
     }
 

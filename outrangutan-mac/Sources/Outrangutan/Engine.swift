@@ -131,6 +131,16 @@ final class Engine: ObservableObject {
     /// Master volume, 0 to 1.2, like the web fader. The Mac plays 1.0 at most.
     @Published private(set) var masterGain: Double = 1
     @Published var notice: String?
+    /// Locked: the show runs, but nothing can be added, removed, moved or
+    /// changed. Keeps a stray click from editing the show on air.
+    @Published var locked = !TestSnapshot.isOn && UserDefaults.standard.bool(forKey: "showLock") {
+        didSet {
+            guard locked != oldValue else { return }
+            pads.locked = locked
+            if !TestSnapshot.isOn { UserDefaults.standard.set(locked, forKey: "showLock") }
+            log.add(.file, locked ? "Editing locked" : "Editing unlocked")
+        }
+    }
     /// What was on air when Outrangutan last closed without quitting, if
     /// anything (a crash, a force quit, a pulled plug).
     @Published var recovered: RecoveryPoint?
@@ -205,6 +215,7 @@ final class Engine: ObservableObject {
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
+        pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
         log.add(.file, "Outrangutan opened: \(ShowFiles.count(cues.count, "cue")), \(ShowFiles.count(pads.pads.count, "pad"))")
         save()
@@ -259,6 +270,17 @@ final class Engine: ObservableObject {
         // past the cue it fired).
         if result.ok, standbyID == cue.id, let next { standbyID = next.id }
         return result
+    }
+
+    /// Runs a show key.
+    func perform(_ action: KeyMap.Action) {
+        switch action {
+        case .go: go()
+        case .pause: togglePause()
+        case .stop: stop()
+        case .fade: fadeStopAll()
+        case .allStop: allStop()
+        }
     }
 
     /// Pause holds everything where it is: players, still timers and a
