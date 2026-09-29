@@ -112,7 +112,11 @@ struct InspectorView: View {
     @ViewBuilder
     private func sound(_ cue: Cue) -> some View {
         InspectorSection(title: "Trim",
-                         note: "Stop at 0 plays to the end. Length after trim: \(Timecode.short(engine.playLength(live(cue)))).") {
+                         note: "Drag the yellow handles, or type the times. Stop at 0 plays to the end. Length after trim: \(Timecode.short(engine.playLength(live(cue)))).") {
+            if let length = engine.durations[cue.id], length > 0 {
+                TrimBar(url: cue.url, length: length, trimIn: bind(cue, \.trimIn),
+                        trimOut: Binding(get: { live(cue).trimOut }, set: { v in engine.update(cue.id) { $0.trimOut = v } }))
+            }
             NumberField(label: "Start at", value: bind(cue, \.trimIn), step: 0.1)
             NumberField(label: "Stop at", value: Binding(
                 get: { live(cue).trimOut ?? 0 },

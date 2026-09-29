@@ -41,10 +41,11 @@ final class Thumbnails: ObservableObject {
                     image = NSImage(cgImage: cg, size: .zero)
                 }
             }
+            let made = image
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.making.remove(key)
-                if let image { self.images[key] = image }
+                if let made { self.images[key] = made }
             }
         }
     }

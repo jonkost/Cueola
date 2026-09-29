@@ -452,6 +452,17 @@ final class PadBoard: ObservableObject {
         if currentBankID == id { currentBankID = banks[0].id }
     }
 
+    /// How long a pad's whole sound file is, before trim.
+    func fileLength(_ id: String) -> Double? {
+        guard let pad = pad(id: id) else { return nil }
+        if let known = fileLengths[pad.path] { return known }
+        guard let file = try? AVAudioFile(forReading: pad.url) else { return nil }
+        let seconds = Double(file.length) / file.processingFormat.sampleRate
+        fileLengths[pad.path] = seconds
+        return seconds
+    }
+    private var fileLengths: [String: Double] = [:]
+
     func renameBank(_ id: String, to name: String) {
         guard let i = banks.firstIndex(where: { $0.id == id }), !name.isEmpty, banks[i].name != name else { return }
         willChange?("Rename Bank", nil)

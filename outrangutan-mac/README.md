@@ -35,7 +35,9 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
   - **Cue:** name, notes, Fire on GO, and a pad that comes with the cue.
   - **Timing:** pre-wait, what happens after it starts (Manual, Continue,
     Follow), how long a still stays up, and what happens at the end.
-  - **Trim and Sound:** start at, stop at, loop, volume.
+  - **Trim and Sound:** a picture of the clip (frames and its sound wave)
+    with yellow In and Out handles to drag, or type start at and stop at;
+    loop; volume. Pads have the same trim bar.
   - **Fades:** fade in, fade out, dissolve in, and the fade's curve.
   - **Picture:** which output it shows on, framing, size and position, or a
     matte's color. Videos also get a **Key**: Chroma (take out a color, like
@@ -238,6 +240,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `trim`: pictures of the trim bar for a video cue and a pad.
 - `undo`: Undo and Redo for adding, a slider drag, removing, moving,
   duplicating and a pad change, the lock holding an undo back, and opening a
   show clearing the history.
@@ -285,6 +288,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `WatchFolder.swift` | Watching a folder (Dropbox, Google Drive) for new media |
 | `Obs.swift` | OBS Studio control and Settings, OBS |
 | `SoundTap.swift` | Listens to cue sound for the meter, without changing it |
+| `Thumbnails.swift` | The small pictures in the cue list |
+| `TrimView.swift` | The trim bar: frames, sound wave, In and Out handles |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |

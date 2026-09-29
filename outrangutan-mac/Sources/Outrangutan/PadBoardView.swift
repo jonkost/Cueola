@@ -319,7 +319,11 @@ struct PadInspectorView: View {
             NumberField(label: "Fade in", value: bind(pad, \.fadeIn), step: 0.1)
             NumberField(label: "Fade out", value: bind(pad, \.fadeOut), step: 0.1)
         }
-        InspectorSection(title: "Trim", note: "Stop at 0 plays to the end.") {
+        InspectorSection(title: "Trim", note: "Drag the yellow handles, or type the times. Stop at 0 plays to the end.") {
+            if let length = board.fileLength(pad.id), length > 0 {
+                TrimBar(url: pad.url, length: length, trimIn: bind(pad, \.trimIn),
+                        trimOut: Binding(get: { live(pad).trimOut }, set: { v in board.update(pad.id) { $0.trimOut = v } }))
+            }
             NumberField(label: "Start at", value: bind(pad, \.trimIn), step: 0.1)
             NumberField(label: "Stop at", value: Binding(get: { live(pad).trimOut ?? 0 }, set: { v in board.update(pad.id) { $0.trimOut = v > 0 ? v : nil } }), step: 0.1)
         }

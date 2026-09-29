@@ -75,6 +75,29 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "trim": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                var bars = Cue(name: "Bars, 10 to 60 s", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                bars.trimIn = 10; bars.trimOut = 60
+                let bank = PadBank(id: "bk_t", name: "Bank 1")
+                var clap = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, key: "1")
+                clap.trimIn = 0.4
+                engine.replaceShow(cues: [bars], pads: [clap], banks: [bank], multiTrigger: nil)
+                engine.standbyID = engine.cues[0].id
+                engine.pads.selectedPadID = clap.id
+                _ = MediaStrips.shared.strip(bars.url)
+                _ = MediaStrips.shared.wave(clap.url)
+            }),
+            (2.5, {
+                let store = UserDefaults(suiteName: "live.cueola.outrangutan.test")!
+                store.set("sound", forKey: "inspector.cueTab")
+                store.set("playing", forKey: "inspector.padTab")
+                picture(InspectorView(engine: engine), size: CGSize(width: 340, height: 520), to: dir.appendingPathComponent("trim-cue.png"), store: store)
+                picture(PadInspectorView(board: engine.pads), size: CGSize(width: 340, height: 620), to: dir.appendingPathComponent("trim-pad.png"), store: store)
+            }),
+            (1.0, {}),
+        ]
         case "undo": steps = undoSteps(engine: engine, note: note)
         case "meter": steps = [
             (0.5, {
