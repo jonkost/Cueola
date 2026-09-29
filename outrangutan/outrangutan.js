@@ -63,9 +63,9 @@
     0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, stateOffset: 3, imageProductId: 0x006c, reset: [0x03, 0x02], bright: [0x03, 0x08] },
   };
   // actions a Stream Deck key / control surface can fire
-  const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade·Stop', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…',
+  const SD_ACTIONS = { go: 'GO', stop: 'Stop', pause: 'Pause', fadeStop: 'Fade out', panic: 'PANIC', cue: 'Cue…', pad: 'SFX Pad…',
     // v2.1 D11.7: cross-surface actions — one deck drives the whole rig.
-    rundown_go: 'Rundown GO', rundown_back: 'Rundown Back', rtrt_take: 'TAKE call', rtrt_abort: 'ABORT call',
+    rundown_go: 'TAKE (next row)', rundown_back: 'Back one row', rtrt_take: 'Roll now (during pre-roll)', rtrt_abort: 'Cancel pre-roll',
     prompter_toggle: 'Prompter ▶⏸', prompter_top: 'Prompter Top', prompter_cue: 'Prompter Cue Row' };
 
   const DEFAULT_SHORTCUTS = { go: ' ', stop: 's', pause: 'p', panic: 'Escape', fadeStop: 'f' };
@@ -175,7 +175,7 @@
     const p = n => String(n).padStart(2, '0');
     return p(h) + ':' + p(m) + ':' + p(s) + ';' + p(f);
   }
-  function keyLabel(k) { return !k ? '—' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
+  function keyLabel(k) { return !k ? 'None' : (k === ' ' ? 'Space' : (k === 'Escape' ? 'Esc' : k.toUpperCase())); }
   function sym(name, cls) { try { if (typeof window.sfIcon === 'function') return window.sfIcon(name, cls || ''); } catch (e) {} return '<span class="sf-symbol ' + (cls || '') + '" data-symbol="' + name + '" aria-hidden="true"></span>'; }
   function assetIcon(name, cls) { var symName = { clock: 'time.clock', 'document-plus': 'og.document.plus', scope: 'og.scope' }[name] || name; return '<span class="sf-symbol' + (cls ? ' ' + cls : '') + '" data-symbol="' + symName + '" aria-hidden="true"></span>'; }
   function currentCueolaTheme() {
@@ -533,10 +533,7 @@
     return 'this browser can’t decode ' + (/webm|weba/.test(t + ' ' + n) ? 'WebM' : 'Ogg/Opus') + ': use MP4 (H.264) or MP3/AAC/WAV, or import in Chrome/Edge';
   }
   async function storeFile(file) {       // import one file → MEDIA_STORE, return { mediaId, kind, duration, thumb, name }
-    // Phase 5: transcode-on-upload — normalize non-web-playable video to H.264 MP4.
-    if (settings.transcode && !webPlayable(file) && ((file.type || '').startsWith('video') || /\.(mov|mkv|avi|mxf|m2ts|ts)$/i.test(file.name || ''))) {
-      file = await transcodeFile(file);
-    }
+    // Transcode on import left with the Integrations sheet in 3.0. An old saved transcode:true is ignored.
     const t = file.type || '';
     let kind = t.startsWith('video') ? 'video' : t.startsWith('audio') ? 'audio' : t.startsWith('image') ? 'image' : null;
     // Extension fallback: macOS hands over .opus/.weba/.ogv (and friends) with
@@ -799,7 +796,7 @@
       lastReadyMessageAt: 0,
       painting: true, identify: false, pendingIntents: [], ackPending: new Map(),
       handshakeAt: 0, resumeAfterSync: false, recoverability: 'none',
-      error: '', detail: win ? 'Waiting for renderer handshake' : 'Output window closed',
+      error: '', detail: win ? 'Waiting for the output window to answer' : 'Output window closed',
       announcedStatus: ''
     };
   }
@@ -858,20 +855,21 @@
     rec.recoverability = state.recoverability || 'none';
     rec.error = state.error || '';
     if (state.rendererStatus === 'stalled') {
-      rec.status = 'stalled'; rec.detail = 'Renderer heartbeat is alive but frames are not painting';
+      rec.status = 'stalled'; rec.detail = 'The output window is open, but its picture froze';
     } else if (state.rendererStatus === 'error' || state.mediaLoadStatus === 'error' || state.playbackStatus === 'error') {
-      rec.status = 'error'; rec.detail = state.error || 'Renderer reported a playback error';
+      rec.status = 'error'; rec.detail = state.error || 'The output window hit a playback error';
     } else if (state.heartbeatStatus === 'dead') {
-      rec.status = 'disconnected'; rec.detail = state.error || 'Renderer heartbeat was lost';
+      rec.status = 'disconnected'; rec.detail = state.error || 'The output window stopped answering';
     } else if (state.communicationStatus === 'syncing') {
-      rec.status = 'connecting'; rec.detail = 'Applying a safe paused program snapshot';
+      rec.status = 'connecting'; rec.detail = 'Loading the program, paused';
     } else if (state.communicationStatus === 'recovering') {
-      rec.status = 'recovering'; rec.detail = state.error || 'Renderer needs recovery';
+      // name the button the Outputs sheet shows for this state
+      rec.status = 'recovering'; rec.detail = state.error || ('The output window needs help. Press ' + (state.recoverability === 'operator' ? 'Resume' : 'Recover paused') + ' in Outputs');
     } else if (state.communicationStatus === 'ready') {
       rec.status = 'ready';
-      rec.detail = state.recoverability === 'operator' ? 'Program restored paused. Operator resume required' : 'Renderer ready and acknowledging commands';
+      rec.detail = state.recoverability === 'operator' ? 'Program is back, paused. Press Resume' : 'Connected';
     } else {
-      rec.status = 'connecting'; rec.detail = 'Renderer connected; waiting for state sync';
+      rec.status = 'connecting'; rec.detail = 'Connected. Loading the program';
     }
   }
   function outputProgramSnapshot(id) {
@@ -926,10 +924,10 @@
         rec.ackPending.delete(envelope.commandId);
         if (isPreload) return;
         const controller = outputControllers.get(rec.id);
-        if (controller) controller.updateOutput(String(rec.id), { communicationStatus: 'recovering', recoverability: 'operator', error: 'No acknowledgement for ' + envelope.commandType });
-        rec.status = 'recovering'; rec.recoverability = 'operator'; rec.error = 'No acknowledgement for ' + envelope.commandType;
-        rec.detail = rec.error + ' within ' + (OUTPUT_ACK_MS / 1000) + ' seconds';
-        announceOutput(rec, 'ack-' + envelope.commandId, (outputById(rec.id)?.label || ('Output ' + rec.id)) + ' did not acknowledge ' + envelope.commandType + '.');
+        if (controller) controller.updateOutput(String(rec.id), { communicationStatus: 'recovering', recoverability: 'operator', error: 'No answer from the output window' });
+        rec.status = 'recovering'; rec.recoverability = 'operator'; rec.error = 'No answer from the output window';
+        rec.detail = rec.error + ' for ' + (OUTPUT_ACK_MS / 1000) + ' seconds';
+        announceOutput(rec, 'ack-' + envelope.commandId, (outputById(rec.id)?.label || ('Output ' + rec.id)) + ' did not answer. Check that window, or open Outputs to recover it.');
         updateOutputUI();
       }, ackMs);
       rec.ackPending.set(envelope.commandId, { command: envelope, timer });
@@ -978,7 +976,7 @@
   function syncOutput(id, reason) {
     const rec = outputRecord(id, true), controller = controllerFor(id);
     if (!controller || !rec.outputInstanceId) return false;
-    rec.handshakeAt = Date.now(); rec.status = 'connecting'; rec.detail = 'Applying a safe paused program snapshot';
+    rec.handshakeAt = Date.now(); rec.status = 'connecting'; rec.detail = 'Loading the program, paused';
     const desired = desiredOutputState(id);
     const sync = controller.buildSyncState(String(id), desired, { reason: reason || 'renderer-sync' });
     if (!sync) return false;
@@ -1066,7 +1064,7 @@
       // preload is both prefetch and the honest availability probe preflight
       // reads. Idempotent, non-destructive — a GO supersedes it instantly.
       if (outputById(id)?.kiosk) dispatchKioskPreload(id);
-      if (rec.status === 'error') announceOutput(rec, 'sync-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'the synchronized program could not be rendered.'));
+      if (rec.status === 'error') announceOutput(rec, 'sync-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'the program could not play in this window.'));
       else announceOutput(rec, 'ready', (outputById(id)?.label || ('Output ' + id)) + (rec.recoverability === 'operator' ? ' recovered paused. Resume when ready.' : ' is ready.'));
       updateOutputUI();
       return;
@@ -1083,7 +1081,7 @@
       if (audioLocked && !rec.audioLocked) announceOutput(rec, 'audio-locked', (outputById(id)?.label || ('Output ' + id)) + ' is playing without sound until you tap or press a key on this page.');
       rec.audioLocked = audioLocked;
       if (rec.status === 'stalled' && previousStatus !== 'stalled') announceOutput(rec, 'stalled', (outputById(id)?.label || ('Output ' + id)) + ' stopped painting frames.');
-      if (rec.status === 'error' && previousStatus !== 'error') announceOutput(rec, 'heartbeat-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'renderer error.'));
+      if (rec.status === 'error' && previousStatus !== 'error') announceOutput(rec, 'heartbeat-error', (outputById(id)?.label || ('Output ' + id)) + ': ' + (rec.error || 'the output window hit an error.'));
       const rendererRecovered = wasUnavailable && state.heartbeatStatus === 'healthy' && !['stalled', 'error'].includes(state.rendererStatus);
       if (rendererRecovered) { syncOutput(id, 'heartbeat-recovery'); return; }
       updateOutputUI();
@@ -1105,13 +1103,13 @@
         rec.mediaMissing = result && Array.isArray(result.missing) ? result.missing : [];
         rec.mediaCheckedAt = Date.now();
         if (rec.mediaMissing.length) {
-          announceOutput(rec, 'media-missing-' + rec.mediaMissing.length, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.mediaMissing.length + ' media file' + (rec.mediaMissing.length === 1 ? '' : 's') + ' not cached — run Sync media.');
+          announceOutput(rec, 'media-missing-' + rec.mediaMissing.length, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.mediaMissing.length + ' media file' + (rec.mediaMissing.length === 1 ? '' : 's') + ' not cached. Press Sync media.');
         }
         updateOutputUI();
         return;
       }
       if (result && result.ok === false) {
-        rec.status = 'error'; rec.error = result.error || 'Renderer rejected a command'; rec.detail = rec.error;
+        rec.status = 'error'; rec.error = result.error || 'The output window refused a command'; rec.detail = rec.error;
         announceOutput(rec, 'command-' + normalized.commandId, (outputById(id)?.label || ('Output ' + id)) + ': ' + rec.error);
       }
       updateOutputUI();
@@ -1352,9 +1350,9 @@
         if (!windowClosed && !heartbeatLost) return;
         if (['closed', 'disconnected'].includes(rec.status)) return;
         const controller = outputControllers.get(id);
-        if (controller) controller.markDisconnected(String(id), windowClosed ? 'Output window closed' : 'Renderer heartbeat timed out');
+        if (controller) controller.markDisconnected(String(id), windowClosed ? 'Output window closed' : 'The output window stopped answering');
         rec.status = windowClosed ? 'closed' : 'disconnected'; rec.recoverability = windowClosed ? 'reload' : 'automatic';
-        rec.error = windowClosed ? 'Output window closed' : 'No renderer heartbeat for 5 seconds'; rec.detail = rec.error;
+        rec.error = windowClosed ? 'Output window closed' : 'No answer from the output window for 5 seconds'; rec.detail = rec.error;
         clearAckTimers(rec); changed = true;
         announceOutput(rec, rec.status, (outputById(id)?.label || ('Output ' + id)) + (windowClosed ? ' closed.' : ' stopped responding.'));
       });
@@ -1388,7 +1386,7 @@
     const controller = controllerFor(o.id);
     if (controller) controller.markDisconnected(String(o.id), 'Opening a replacement renderer');
     rec.win = win; rec.status = 'opening'; rec.outputInstanceId = ''; rec.lastBeat = Date.now();
-    rec.painting = true; rec.error = ''; rec.detail = 'Waiting for renderer handshake'; rec.announcedStatus = '';
+    rec.painting = true; rec.error = ''; rec.detail = 'Waiting for the output window to answer'; rec.announcedStatus = '';
     ensureWatchdog();
     if (scr) tryFullscreen(win);
     toast(scr ? ('Opened ' + o.label + ' on ' + scr.label + '.') : ('Opened ' + o.label + '. Drag it to a display, then fullscreen it.'));
@@ -1741,7 +1739,7 @@
           return;
         }
         if (!rec || !rec.ackPending.has(commandId) || Date.now() >= deadline) {
-          resolve({ acknowledged: false, status: 'timeout', error: 'Renderer did not acknowledge STOP.' });
+          resolve({ acknowledged: false, status: 'timeout', error: 'The output window did not answer Stop.' });
           return;
         }
         setTimeout(inspect, 40);
@@ -2141,6 +2139,8 @@
     if (!cmd) return;
     // Same-tab fast path (<30 ms), mirroring the rundown→playout local path.
     try { if (typeof window.cueolaControlBus === 'function' && window.cueolaControlBus(cmd.target, cmd.action, 'local-deck')) return; } catch (e) {}
+    // Cueola in this tab is in the same show: it already ran this, refused it, or was not allowed to send it. Never go around it.
+    if (window.cueolaActiveSessionCode && window.cueolaActiveSessionCode === sessionCode) return;
     if (mode !== 'session' || !sessionCode || !fbReady()) { toast('Cross-surface keys need a linked session.'); return; }
     try {
       window._updateDoc(sessionRef(), { controlBus: { target: cmd.target, action: cmd.action, id: rid('cb_'), ts: Date.now(), sender: OG_SENDER } });
@@ -2418,7 +2418,7 @@
         const state = stateForOutput(o.id);
         const status = rec ? rec.status : 'closed';
         const dead = open && !live;
-        const ack = state && state.lastAck ? ('Last reply ' + state.lastAck.commandType + (state.lastAck.ok ? ' ✓' : ' ⚠')) : 'No reply yet';
+        const ack = state && state.lastAck ? (state.lastAck.ok ? 'Answering' : 'Refused the last command') : 'No answer yet';
         const statusDetail = status.toUpperCase() + ' · ' + (rec ? rec.detail : 'Output window closed') + ' · ' + ack;
         const note = $('og-out-status-' + o.id);
         if (note && note.textContent !== statusDetail) note.textContent = statusDetail;
@@ -2443,7 +2443,7 @@
         const dead = open && !live;
         const needsRecovery = !!(rec && (['stalled', 'disconnected', 'recovering', 'error'].includes(status) || rec.recoverability === 'operator'));
         const recoveryLabel = rec && rec.recoverability === 'operator' ? 'Resume' : 'Recover paused';
-        const ack = state && state.lastAck ? ('Last reply ' + state.lastAck.commandType + (state.lastAck.ok ? ' ✓' : ' ⚠')) : 'No reply yet';
+        const ack = state && state.lastAck ? (state.lastAck.ok ? 'Answering' : 'Refused the last command') : 'No answer yet';
         const statusDetail = status.toUpperCase() + ' · ' + (rec ? rec.detail : 'Output window closed') + ' · ' + ack;
         const screenSel = screensCache
           ? '<select class="og-out-screen" data-o="' + o.id + '"><option value="">No display set</option>' + screensCache.map(s => '<option value="' + s.id + '"' + (o.screenId === s.id ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select>'
@@ -2454,7 +2454,7 @@
             + '<button class="og-bar-btn og-capsule og-out-open" data-o="' + o.id + '">' + (o.kiosk ? (open ? 'Relaunch kiosk' : 'Launch kiosk') : (open ? 'Focus' : 'Open')) + '</button>'
             + '<button class="og-bar-btn og-capsule og-out-id" data-o="' + o.id + '">Identify</button>'
             + (needsRecovery ? '<button class="og-bar-btn og-capsule og-out-recover" data-o="' + o.id + '" data-resume="' + (rec.recoverability === 'operator' ? '1' : '0') + '">' + recoveryLabel + '</button>' : '')
-            + (outputs.length > 1 ? '<button class="og-bar-btn og-capsule danger og-out-del" data-o="' + o.id + '">' + sym('action.delete') + '</button>' : '')
+            + (outputs.length > 1 ? '<button class="og-bar-btn og-capsule danger og-out-del" data-o="' + o.id + '" aria-label="Remove this output" data-tip="Remove this output">' + sym('action.delete') + '</button>' : '')
           + '</div>'
           + '<div class="og-out-note" role="status" id="og-out-status-' + o.id + '">' + esc(statusDetail) + '</div>'
           + '<div class="og-out-cfg">'
@@ -3602,6 +3602,14 @@
   function deckOpacity(deck, v) { if (deck.kind === 'video' || deck.kind === 'image') deck.el.style.opacity = v; }
   function showDeck(deck) { if (deck.kind !== 'video') return; decks.a.el.classList.toggle('front', deck === decks.a); decks.b.el.classList.toggle('front', deck === decks.b); }
   function applyFit(deck, cue) { const el = deck.el; if (deck.kind !== 'video' && deck.kind !== 'image') return; el.style.objectFit = cue.fit || 'contain'; el.style.transform = 'translate(' + (cue.posX || 0) + '%,' + (cue.posY || 0) + '%) scale(' + (cue.scale || 1) + ')'; }
+  function sendFitOut(cue) { sendOut({ t: 'fit', fit: cue.fit || 'contain', scale: cue.scale || 1, posX: cue.posX || 0, posY: cue.posY || 0 }, cue.output || 1); }
+  // A Scale drag fires many times a second: send the output at most 10 times a second, always ending on the last value.
+  let fitSendTimer = null, fitSendCue = null;
+  function sendFitOutSoon(cue) {
+    fitSendCue = cue;
+    if (fitSendTimer) return;
+    fitSendTimer = setTimeout(() => { fitSendTimer = null; const c = fitSendCue; if (c && active && active.cue.id === c.id) sendFitOut(c); }, 100);
+  }
   function aspectLabel(w, h) { const g = (a, b) => b ? g(b, a % b) : a; const d = g(w, h) || 1; const rw = w / d, rh = h / d; return (rw > 40 || rh > 40) ? (w / h).toFixed(2) + ':1' : rw + ':' + rh; }
 
   function clearPre() { if (preTimer) { clearTimeout(preTimer); preTimer = null; } preInfo = null; }
@@ -3958,8 +3966,8 @@
   function handleEnded(cue) {
     clearImageTimer();
     disarmCueSfxTie(true);        // clip finished → a still-sounding tied pad fades out
-    const m = cue.continueMode;
-    if (m === 'auto_follow') { autoFrom(cue); return; }
+    let m = cue.continueMode;
+    if (m === 'auto_follow') { if (nextArmedAfter(cue.id)) { autoFrom(cue); return; } m = 'manual'; }   // last cue: nothing to follow, so it ends like a manual cue
     // end action for the picture/audio (output messages only for picture cues — audio never touches one)
     const deck = active ? deckOf(active) : null;
     const hasPicture = cue.type === 'video' || cue.type === 'image', out = cue.output || 1;
@@ -3977,7 +3985,8 @@
   }
 
   // Cue the standby cursor back to the first armed cue, so the next GO restarts the show.
-  function cueToTop() { const first = cues.find(c => c.armed !== false) || cues[0]; if (first) selectedId = first.id; }
+  // The rundown's standby outranks the top of the list: after a Stop, GO rolls the clip the rundown is waiting on.
+  function cueToTop() { const first = cueById(rundownArmId) || cues.find(c => c.armed !== false) || cues[0]; if (first) selectedId = first.id; }
   function stopAll(opts) {
     clearPre(); disarmCueSfxTie(true); stopAllDecks(); stopKeyLoop(); setStatus('idle'); sendOut({ t: 'stop' });
     if (!opts || !opts.silent) { cueToTop(); renderInspector(); renderEditArea(); slog('media', 'Stop'); toast('Stopped.'); }
@@ -4123,7 +4132,7 @@
     if (preInfo) {
       const remain = Math.max(0, (preInfo.until - performance.now()) / 1000);
       setDuration(cuePlayoutDuration(preInfo.cue));
-      timeEl.textContent = fmtSmpte(remain); labelEl.textContent = 'PRE-WAIT · ' + esc(preInfo.cue.name);
+      timeEl.textContent = fmtSmpte(remain); labelEl.textContent = 'PRE-WAIT · ' + (preInfo.cue.name || '');
       setClock('warn', 'down'); return;
     }
     if (active && active.kind === 'image') {
@@ -4232,7 +4241,7 @@
 
   function renderCueList() {
     const wrap = $('og-cuelist'); if (!wrap) return;
-    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty"><div class="og-cue-empty-title">No cues yet</div><div class="og-cue-empty-sub">Drop a video, audio, or still-image file below, or click “Add media”.</div></div>'; return; }
+    if (!cues.length) { wrap.innerHTML = '<div class="og-cue-empty"><div class="og-cue-empty-title">No cues yet</div><div class="og-cue-empty-sub">Drop a video, audio or still file on the box below, or click it to pick one.</div></div>'; return; }
     const playingId = active ? active.cue.id : (preInfo ? preInfo.cue.id : null);
     wrap.innerHTML = cues.map(c => {
       const cls = ['og-cue']; if (c.id === selectedId) cls.push('selected'); if (c.id === playingId) cls.push('playing'); if (c.armed === false) cls.push('armed-off'); if (c.broken) cls.push('broken');
@@ -4360,7 +4369,7 @@
       (c.type === 'video' ? (function () { const k = c.key || (c.key = { mode: 'off', color: '#00b140', sim: 0.3, smooth: 0.1, bg: '#000000' });
         return sec('Key',
           field('Mode', '<select id="og-i-keymode">' + opt('off', 'Off', k.mode) + opt('chroma', 'Chroma', k.mode) + opt('luma', 'Luma', k.mode) + opt('alpha', 'Alpha', k.mode) + '</select>') +
-          field('Key colour', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
+          field('Key color', '<input id="og-i-keycolor" type="color" value="' + (k.color || '#00b140') + '">') +
           '<div class="og-field-row">' +
             field('Similarity', '<input id="og-i-keysim" type="range" min="0" max="1" step="0.01" value="' + (k.sim == null ? 0.3 : k.sim) + '">') +
             field('Smoothness', '<input id="og-i-keysmooth" type="range" min="0" max="0.5" step="0.01" value="' + (k.smooth == null ? 0.1 : k.smooth) + '">') +
@@ -4377,7 +4386,7 @@
       ) +
       (function () {   // Clip→SFX tie: pick a pad, optionally delay its fire
         if (!pads.length) return sec('SFX', '<div class="og-insp-meta">No SFX pads yet. Build one on the SFX Board, then tie it here.</div>');
-        const padOpts = opt('', '—', c.sfxPadId || '') + pads.map(p => {
+        const padOpts = opt('', 'None', c.sfxPadId || '') + pads.map(p => {
           const bank = banks.find(b => b.id === p.bank);
           return opt(p.id, (p.name || 'Pad') + (bank && banks.length > 1 ? ' · ' + bank.name : ''), c.sfxPadId || '');
         }).join('');
@@ -4450,10 +4459,11 @@
       refreshStillBadge(c, 'duration');
       renderCueList(); scheduleSave();
     });
-    bind('og-i-fit', 'onchange', e => { c.fit = e.target.value; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); sendOut({ t: 'fit', fit: c.fit }, c.output || 1); scheduleSave(); });
-    bind('og-i-scale', 'oninput', e => { c.scale = parseFloat(e.target.value) || 1; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
-    bind('og-i-posx', 'onchange', e => { c.posX = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
-    bind('og-i-posy', 'onchange', e => { c.posY = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) applyFit(deckOf(active), c); scheduleSave(); });
+    // Fit, Scale and Position reach the output only when this cue is on air.
+    bind('og-i-fit', 'onchange', e => { c.fit = e.target.value; if (active && active.cue.id === c.id) { applyFit(deckOf(active), c); sendFitOut(c); } scheduleSave(); });
+    bind('og-i-scale', 'oninput', e => { c.scale = parseFloat(e.target.value) || 1; if (active && active.cue.id === c.id) { applyFit(deckOf(active), c); sendFitOutSoon(c); } scheduleSave(); });
+    bind('og-i-posx', 'onchange', e => { c.posX = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) { applyFit(deckOf(active), c); sendFitOut(c); } scheduleSave(); });
+    bind('og-i-posy', 'onchange', e => { c.posY = parseFloat(e.target.value) || 0; if (active && active.cue.id === c.id) { applyFit(deckOf(active), c); sendFitOut(c); } scheduleSave(); });
     bind('og-i-output', 'onchange', e => { c.output = parseInt(e.target.value, 10) || 1; scheduleSave(); });
     // keying (live: the key loop reads c.key each frame; mode change starts/stops it; output mirrors)
     const keyOut = () => { if (active && active.cue.id === c.id && active.kind === 'video') sendOut({ t: 'key', key: c.key }, c.output || 1); };
@@ -4678,7 +4688,7 @@
     const pct = (t) => dur > 0 ? clamp(t, 0, dur) / dur * 100 : 0;
     body.innerHTML =
       '<div class="og-trk-meta"><span class="og-trk-name" style="color:' + p.color + '">' + esc(p.name) + '</span>'
-        + '<span class="og-trk-times">IN ' + fmtClock(tin) + ' · OUT ' + fmtClock(tout) + ' · ' + (dur ? fmtClock(dur) : '—') + '</span></div>'
+        + '<span class="og-trk-times">IN ' + fmtClock(tin) + ' · OUT ' + fmtClock(tout) + ' · ' + (dur ? fmtClock(dur) : '--:--') + '</span></div>'
       + '<div class="og-track" id="og-sfx-track">'
         + '<div class="og-track-thumb og-track-audio"></div>'
         + '<div class="og-track-region" style="left:' + pct(tin) + '%;right:' + (100 - pct(tout)) + '%"></div>'
@@ -4867,7 +4877,7 @@
       b.onclick = (e) => { if (e.target.closest('.og-pad-edit')) { selectedPadId = id; renderPads(); renderPadInspector(); renderPadEditArea(); return; } firePad(p); };
       ['dragenter', 'dragover'].forEach(ev => b.addEventListener(ev, e => { e.preventDefault(); b.classList.add('drag'); }));
       ['dragleave', 'drop'].forEach(ev => b.addEventListener(ev, e => { e.preventDefault(); b.classList.remove('drag'); }));
-      b.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files[0]) assignPad(p.slot, e.dataTransfer.files[0]); });
+      b.addEventListener('drop', e => { if (settings.showLock) return; if (e.dataTransfer && e.dataTransfer.files[0]) assignPad(p.slot, e.dataTransfer.files[0]); });
     });
   }
   function renderPadLive(id) { const b = document.querySelector('.og-pad[data-pad="' + id + '"]'); const rt = padRT.get(id); if (b) b.classList.toggle('live', !!(rt && rt.voices.length)); scheduleStreamDeckRefresh(); }
@@ -4883,13 +4893,13 @@
   let recState = null;   // { rec, stream, chunks, startedAt, timer, slot }
   function firstFreePadSlot() {
     const count = bankPadCount();
-    for (let s = 1; s <= count; s++) { const p = padBySlot(s); if (!p || !p.mediaId) return s; }
-    return 0;
+    for (let s = 0; s < count; s++) { const p = padBySlot(s); if (!p || !p.mediaId) return s; }
+    return -1;
   }
   async function toggleSfxRecord() {
     if (recState) { try { if (recState.rec.state !== 'inactive') recState.rec.stop(); } catch (e) {} return; }
     const slot = firstFreePadSlot();
-    if (!slot) { toast('This bank is full. Clear a pad or add a bank, then record.'); return; }
+    if (slot < 0) { toast('This bank is full. Clear a pad or add a bank, then record.'); return; }
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
@@ -4920,8 +4930,8 @@
         if (!p.emoji) p.emoji = '🎙️';
         selectedPadId = p.id;
         renderPads(); renderPadInspector(); renderPadEditArea(); scheduleSave();
-        slog('sfx', 'Live SFX recorded onto pad ' + st.slot + ' (' + p.name + ')');
-        toast('Live SFX on pad ' + st.slot + '. Tap to fire; trim it in the pad editor.');
+        slog('sfx', 'Live SFX recorded onto pad ' + (st.slot + 1) + ' (' + p.name + ')');
+        toast('Live SFX on pad ' + (st.slot + 1) + '. Tap to fire; trim it in the pad editor.');
       }
     };
     recState = { rec, stream, chunks, startedAt: Date.now(), slot, timer: setInterval(renderSfxRecButton, 500) };
@@ -4930,7 +4940,7 @@
       if (recState.timer) clearInterval(recState.timer);
       recState = null; toast('Recording could not start.'); return;
     }
-    slog('sfx', 'Live SFX recording started (pad ' + slot + ' on stop)');
+    slog('sfx', 'Live SFX recording started (pad ' + (slot + 1) + ' on stop)');
     renderSfxRecButton();
   }
   function renderSfxRecButton() {
@@ -4940,7 +4950,7 @@
     if (on) {
       const secs = Math.floor((Date.now() - recState.startedAt) / 1000);
       b.textContent = '■ ' + Math.floor(secs / 60) + ':' + ((secs % 60) < 10 ? '0' : '') + (secs % 60);
-      b.setAttribute('data-tip', 'Stop: the take lands on pad ' + recState.slot + ' of this bank');
+      b.setAttribute('data-tip', 'Stop: the take lands on pad ' + (recState.slot + 1) + ' of this bank');
     } else {
       b.textContent = '● REC';
       b.setAttribute('data-tip', 'Record a sound effect live from the mic, straight onto the next free pad');
@@ -5064,8 +5074,15 @@
     b('og-p-key', 'onclick', () => {
       const btn = $('og-p-key'); btn.textContent = 'press a key…'; listeningPadKey = true;
       const onk = (ev) => {
-        ev.preventDefault(); document.removeEventListener('keydown', onk, true); listeningPadKey = false;
-        if (ev.key === 'Escape') { p.key = ''; } else { const v = ev.key === ' ' ? ' ' : ev.key; pads.forEach(x => { if (x !== p && x.key === v) x.key = ''; }); p.key = v; }
+        ev.preventDefault(); ev.stopPropagation();   // this press only sets the key: it must not also stop the show or fire a pad
+        document.removeEventListener('keydown', onk, true); listeningPadKey = false;
+        if (ev.key === 'Escape') { p.key = ''; } else {
+          const v = ev.key === ' ' ? ' ' : ev.key;
+          // a playback key (Space, S, P, F...) or a list key would stop the show instead of firing the pad
+          const taken = Object.values(settings.shortcuts).some(k => k && String(k).toLowerCase() === String(v).toLowerCase()) || ['Tab', 'ArrowUp', 'ArrowDown'].includes(v);
+          if (taken) toast('That key is already taken by playback or the cue list. Pick another.');
+          else { pads.forEach(x => { if (x !== p && x.key === v) x.key = ''; }); p.key = v; }
+        }
         renderPads(); renderPadInspector(); scheduleSave();
       };
       document.addEventListener('keydown', onk, true);
@@ -5093,6 +5110,7 @@
   }
   async function saveShow() {
     saveTimer = null;
+    if (!showLoaded) return;   // nothing loaded for this key yet: an empty save would overwrite the saved show
     const transport = active
       ? { cueId: active.cue.id, offset: Math.round(activeOffset() * 10) / 10, paused: isActivePaused() }
       : null;
@@ -5269,7 +5287,7 @@
         <td>${trimLabel(c)}</td><td>${contLabel(c)}</td><td>${c.loop ? 'Loop' : ''}</td>
       </tr>`).join('');
     const cueSheet = snapshot.cues.length ? `
-      <h2>Cue Sheet - ${snapshot.cues.length} cue${snapshot.cues.length === 1 ? '' : 's'}</h2>
+      <h2>Cue sheet: ${snapshot.cues.length} cue${snapshot.cues.length === 1 ? '' : 's'}</h2>
       <table><thead><tr><th>#</th><th>Cue</th><th>Type</th><th>Duration</th><th>Trim</th><th>Continue</th><th></th></tr></thead>
       <tbody>${cueRows}</tbody></table>` : '';
     const padSections = snapshot.banks.map(bank => {
@@ -5283,7 +5301,7 @@
       return `<h3>${esc(bank.name || 'Bank')}</h3>
         <table><thead><tr><th>Pad</th><th>Sound</th><th>Hotkey</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
     }).join('');
-    const padMap = snapshot.pads.length ? `<h2>SFX Pad Map - ${snapshot.pads.length} pad${snapshot.pads.length === 1 ? '' : 's'}</h2>${padSections}` : '';
+    const padMap = snapshot.pads.length ? `<h2>SFX pad map: ${snapshot.pads.length} pad${snapshot.pads.length === 1 ? '' : 's'}</h2>${padSections}` : '';
     const productionCode = snapshot.mode === 'session' && snapshot.sessionCode ? snapshot.sessionCode : 'STANDALONE';
     const html = `
       <h1>Outrangutan Show Pack</h1>
@@ -5311,7 +5329,7 @@
       try {
         if (typeof window.printPaperHTML !== 'function') throw error;
         const result = await window.printPaperHTML(html, options);
-        toast('PDF renderer unavailable. Print preview opened - ' + result.pageCount + ' pages. Safari tip: pick Letter + orientation in the dialog.', 4200);
+        toast('Could not make the PDF, so the print preview opened (' + result.pageCount + ' pages). In Safari, pick Letter and the page direction in the dialog.', 4200);
       } catch (printError) {
         console.error('[Outrangutan] Show pack print fallback failed.', printError);
         toast('Could not build the show pack PDF.');
@@ -5485,6 +5503,12 @@
     if ($('og-help').classList.contains('on')) { if (e.key === 'Escape') closeHelp(); return; }
     if ($('og-outputs').classList.contains('on')) { if (e.key === 'Escape') closeOutputsPanel(); return; }
     if ($('og-sd').classList.contains('on')) { if (e.key === 'Escape') closeSdPanel(); return; }
+    if ($('og-midi').classList.contains('on')) { if (e.key === 'Escape') closeMidiPanel(); return; }
+    if ($('og-matte').classList.contains('on')) { if (e.key === 'Escape') $('og-matte').classList.remove('on'); return; }
+    if (e.key === 'Escape') {
+      if (e.defaultPrevented) return;   // Cueola already closed a popover or dialog with this Esc
+      const menu = $('og-theme-menu'); if (menu && menu.open) { menu.open = false; return; }
+    }
     if ($('og-pbsfx') && $('og-pbsfx').classList.contains('on')) { if (e.key === 'Escape') closePbSfxPicker(); return; }
     if ($('og-chrome') && $('og-chrome').classList.contains('on')) { if (e.key === 'Escape') closeChromePrompt(); return; }
     if ($('og-join') && $('og-join').classList.contains('on')) { if (e.key === 'Escape' && !typingTarget(e)) exitOutrangutan(); return; }
@@ -5513,7 +5537,7 @@
   // ── help / shortcut editor ───────────────────────────────────────────────
   function openHelp() {
     const body = $('og-help-rows');
-    const rows = [['go', 'GO (fire standby)'], ['stop', 'Stop'], ['pause', 'Pause / Resume'], ['panic', 'PANIC / All-Stop'], ['fadeStop', 'Fade & Stop All']];
+    const rows = [['go', 'Play / Pause'], ['stop', 'Stop'], ['pause', 'Pause / Resume'], ['panic', 'PANIC (stop everything)'], ['fadeStop', 'Fade out']];
     body.innerHTML = rows.map(([key, label]) =>
       '<div class="og-help-row"><span>' + label + '</span><input data-sc="' + key + '" value="' + esc(keyLabel(settings.shortcuts[key])) + '" readonly></div>'
     ).join('')
@@ -5534,10 +5558,10 @@
   function renderFoot() {
     const f = $('og-foot-keys'); if (!f) return;
     const sc = settings.shortcuts;
-    f.innerHTML = '<span class="og-kbd">' + keyLabel(sc.go) + '</span> GO · '
+    f.innerHTML = '<span class="og-kbd">' + keyLabel(sc.go) + '</span> Play/Pause · '
       + '<span class="og-kbd">' + keyLabel(sc.stop) + '</span> Stop · '
       + '<span class="og-kbd">' + keyLabel(sc.pause) + '</span> Pause · '
-      + '<span class="og-kbd">' + keyLabel(sc.fadeStop) + '</span> Fade·Stop · '
+      + '<span class="og-kbd">' + keyLabel(sc.fadeStop) + '</span> Fade out · '
       + '<span class="og-kbd">' + keyLabel(sc.panic) + '</span> PANIC · '
       + '<span class="og-kbd">Tab</span> SFX';
   }
@@ -5673,18 +5697,18 @@
       + '<div class="og-foot"><span id="og-foot-keys"></span><div class="og-foot-spacer"></div></div>'
       + '<audio id="og-audio-deck"></audio>'
       + '<div class="og-help" id="og-help"><div class="og-help-card"><h3>Keyboard shortcuts</h3><div id="og-help-rows"></div>'
-        + '<p class="og-sheet-hint">Click a field and press a key to rebind. GO and PANIC are always reachable by keyboard.</p>'
-        + '<button class="btn-primary og-help-close" id="og-help-close">Done</button></div></div>'
-      + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="btn-primary og-sheet-x" id="og-outputs-x">Done</button></div><div id="og-outputs-body"></div></div></div>'
-      + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="btn-primary og-sheet-x" id="og-sd-x">Done</button></div><div id="og-sd-body"></div></div></div>'
-      + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="btn-primary og-sheet-x" id="og-midi-x">Done</button></div><div id="og-midi-body"></div></div></div>'
+        + '<p class="og-sheet-hint">Click a field and press a key to rebind. Play / Pause and PANIC are always reachable by keyboard.</p>'
+        + '<button class="btn-primary og-help-close" id="og-help-close">Close</button></div></div>'
+      + '<div class="og-sheet" id="og-outputs"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.display') + ' Outputs &amp; displays</h3><button class="btn-primary og-sheet-x" id="og-outputs-x">Close</button></div><div id="og-outputs-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-sd"><div class="og-sheet-card og-sd-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' Stream Deck</h3><button class="btn-primary og-sheet-x" id="og-sd-x">Close</button></div><div id="og-sd-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-midi"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('action.grid') + ' MIDI Control</h3><button class="btn-primary og-sheet-x" id="og-midi-x">Close</button></div><div id="og-midi-body"></div></div></div>'
       // Phase 9 (D10.1): one-time capability sheet for non-Chromium browsers —
       // shown once (localStorage-gated), only when the hardware trio is missing.
-      + '<div class="og-sheet" id="og-chrome"><div class="og-sheet-card og-chrome-card"><div class="og-sheet-head"><h3>' + sym('action.guide') + ' About this browser</h3><button class="btn-primary og-sheet-x" id="og-chrome-x">Done</button></div>'
+      + '<div class="og-sheet" id="og-chrome"><div class="og-sheet-card og-chrome-card"><div class="og-sheet-head"><h3>' + sym('action.guide') + ' About this browser</h3><button class="btn-primary og-sheet-x" id="og-chrome-x">Close</button></div>'
         + '<div class="og-chrome-body" id="og-chrome-body">MIDI controllers, Stream Deck, and automatic multi-display placement need <strong>a desktop Chromium browser (Chrome or Edge)</strong>; playback, cues, outputs, and show files all work here.</div>'
         + '<p class="og-sheet-note">You won’t see this again on this machine.</p>'
       + '</div></div>'
-      + '<div class="og-sheet" id="og-matte"><div class="og-sheet-card og-matte-card"><div class="og-sheet-head"><h3>' + sym('content.image') + ' New Matte</h3><button class="btn-primary og-sheet-x" id="og-matte-x">Done</button></div>'
+      + '<div class="og-sheet" id="og-matte"><div class="og-sheet-card og-matte-card"><div class="og-sheet-head"><h3>' + sym('content.image') + ' New Matte</h3><button class="btn-primary og-sheet-x" id="og-matte-x">Close</button></div>'
         + '<div class="og-matte-swatches" id="og-matte-swatches">'
           + [['#000000', 'Black'], ['#ffffff', 'White'], ['#808080', 'Gray 50%'], ['#00b140', 'Chroma Green'], ['#0047bb', 'Chroma Blue'], ['#e50914', 'Red'], ['#f5c518', 'Yellow']].map(function (m) { return '<button class="og-matte-swatch" data-matte="' + m[0] + '" data-tip="' + m[1] + '"><span class="og-matte-chip" style="background:' + m[0] + '"></span><span>' + m[1] + '</span></button>'; }).join('')
           + '<label class="og-matte-swatch og-matte-custom" data-tip="Custom color"><input type="color" id="og-matte-color" value="#1e3a8a"><span>Custom…</span></label>'
@@ -5693,7 +5717,7 @@
       + '</div></div>'
       // 3.3: audio uploads on this session's Production Notes board → SFX pads
       // (same-tab hand-off via window.CueolaPBSfx; body renders on open)
-      + '<div class="og-sheet" id="og-pbsfx"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.note') + ' Import from Production Notes</h3><button class="btn-primary og-sheet-x" id="og-pbsfx-x">Done</button></div><div id="og-pbsfx-body"></div></div></div>'
+      + '<div class="og-sheet" id="og-pbsfx"><div class="og-sheet-card"><div class="og-sheet-head"><h3>' + sym('content.note') + ' Import from Production Notes</h3><button class="btn-primary og-sheet-x" id="og-pbsfx-x">Close</button></div><div id="og-pbsfx-body"></div></div></div>'
       + '<div class="og-join" id="og-join"><div class="modal">'
         + '<div class="modal-title">Open Outrangutan</div>'
         + '<div class="modal-sub">Enter the show code to run playback for this show.</div>'
@@ -5825,7 +5849,7 @@
     const dropZone = $('og-cue-add'), listPane = root.querySelector('.og-cuelist-pane');
     ['dragenter', 'dragover'].forEach(ev => listPane.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drag'); }));
     ['dragleave', 'drop'].forEach(ev => listPane.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === listPane) dropZone.classList.remove('drag'); }));
-    listPane.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
+    listPane.addEventListener('drop', e => { if (settings.showLock) return; if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
 
     // P7: contained — a throwing shortcut handler must never kill live keys.
     document.addEventListener('keydown', e => { try { onKey(e); } catch (err) { slog('error', 'Keyboard handler: ' + ((err && err.message) || err)); } });
@@ -5871,7 +5895,7 @@
   function renderTransportKeys() {
     const sc = settings.shortcuts;
     const set = (id, k) => { const el = $(id); if (el) el.textContent = keyLabel(k); };
-    set('og-k-go', sc.go); set('og-k-stop', sc.stop); set('og-k-pause', sc.pause); set('og-k-fade', sc.fadeStop); set('og-k-panic', sc.panic);
+    set('og-k-go', sc.go); set('og-k-fade', sc.fadeStop); set('og-k-panic', sc.panic);
     renderFoot();
   }
 
@@ -6180,7 +6204,7 @@
     // v2.1 Phase 5: the Outrangutan side door honors the class-key gate — the
     // shared helper routes key-holders through the front-door join + wizard.
     if (window.cueolaEntryGateAllows && !(await window.cueolaEntryGateAllows(code, 'Outrangutan'))) {
-      closeSessionJoin();
+      exitOutrangutan();
       return;
     }
     // 2026-08-11: joining a SHARED session writes playback cues and the control
@@ -6188,7 +6212,7 @@
     // Outrangutan (its own front-page card) never touches Firestore and stays
     // open to everyone, which is where a guest should land.
     if (window.requireProfileForCloud && !window.requireProfileForCloud('join a session for playback')) {
-      closeSessionJoin();
+      exitOutrangutan();
       return;
     }
     // INC-3: stamp the join with the shared profile identity, the same shape
