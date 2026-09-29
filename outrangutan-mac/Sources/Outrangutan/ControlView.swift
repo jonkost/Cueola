@@ -10,6 +10,8 @@ struct ControlView: View {
     @ObservedObject var engine: Engine
     @ObservedObject var link: ShowLink
     @ObservedObject var files: ShowFiles
+    let scopes: Scopes
+    @AppStorage("ui.monitor") private var showMonitor = true
     @ObservedObject private var keys = KeyMap.shared
     @AppStorage("clock.24hour") private var clock24 = true
     @State private var dropTargeted = false
@@ -21,6 +23,7 @@ struct ControlView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if showMonitor { MonitorStrip(engine: engine, scopes: scopes); Divider() }
             if let point = engine.recovered { recoveryBar(point); Divider() }
             if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
         }

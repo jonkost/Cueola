@@ -54,7 +54,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Pre-wait, continue modes, end actions, still timers | Built (step 2) | Same rules as the web version, including its still rules. Pause also holds a pre-wait and a still's timer. |
 | Trim in and out, loop, volume, fit, scale, position | Built (step 2) | Trim stops on the exact frame. |
 | Solid color mattes | Built (step 2) | |
-| Program preview in the control window | Later | |
+| Program preview in the control window | Built (step 7) | The same layers as the output. |
 | Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop | Built (step 3) | Sounds load into memory before the show, so a pad fires with no delay. Four copies per pad for Layer. |
 | A pad tied to a cue | Built (step 3) | |
 | Pads from the rundown and the deck | Built (step 3) | |
@@ -74,7 +74,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Show log, print cue sheet | Built (step 6) | Each day's log is also a text file. |
 | Keyboard shortcuts you can change, lock, wall clock | Built (step 6) | |
 | MIDI | Built (step 6) | Uses the Mac's own MIDI system. |
-| Waveform and vectorscope | Step 7 | Reads every frame, not a sample. |
+| Waveform and vectorscope | Built (step 7) | Rec. 709, 15 times a second, only while showing. |
 | Keying: chroma, luma, alpha | Step 7 | Keys on the graphics card, full resolution. |
 | OBS control | Step 7 | Same connection as the web version. |
 | Dropbox folder sync | Step 7 | |

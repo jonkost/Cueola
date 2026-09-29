@@ -150,6 +150,16 @@ Run only one Outrangutan on a show at a time: this app or the web one.
 Pads work from the rundown and the deck too: a pad key, a TAKE-linked sound
 effect, or a rundown row's sound effect hits the pad on this Mac.
 
+## Program preview and scopes
+
+Under the transport sits a strip with the **program preview** (a live copy
+of Output 1, or pick another output), the **waveform** (how bright each part
+of the picture is, 0 to 100) and the **vectorscope** (its colors: a boxed
+target for each color bar). Hide the strip with View, Program Preview
+(Option-Command-P), or just the scopes with the button under the preview
+(Option-Command-S). The scopes read the picture 15 times a second only
+while they show.
+
 ## The direct link (same Mac)
 
 When Cueola runs in Chrome on the same Mac as this app, turn on **Outrangutan
@@ -193,6 +203,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `scopes`: color bars, a still and a red matte through the preview and the
+  scopes; saves each scope and the frame it read.
 - `listen`: joins show WEBTEST and waits a minute, for trying the direct
   link from a real browser.
 - `midi`: learning a button and a fader and using them, then a message from
@@ -222,6 +234,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |
 | `Midi.swift` | MIDI boxes and Settings, MIDI |
 | `Keys.swift` | The show keys and Settings, Keys |
@@ -244,4 +257,5 @@ so `swift test` can check each one:
 | `FadeCurve.swift` | The three fade shapes, the same as the web app |
 | `Timecode.swift` | 29.97 drop-frame clock text, the same as the web clock |
 | `MidiRouter.swift` | What a MIDI message does, the same rules as the web app |
+| `ScopeMath.swift` | The waveform and vectorscope math (Rec. 709) |
 | `ShowArchive.swift` | The show file's zip: writing and reading it in slices, and its checksum |

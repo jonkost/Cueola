@@ -16,6 +16,8 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "scopes": the program preview, waveform and vectorscope on color bars,
+///   a still and a red matte; saves each scope and the frame it read.
 /// - "listen": joins show WEBTEST with two cues and waits 60 seconds, for
 ///   trying the direct link from a real browser; writes the log at the end.
 /// - "direct": a pretend Cueola page on this Mac using the direct link, a
@@ -35,7 +37,7 @@ enum TestSnapshot {
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
-    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles, midi: MidiInput) {
+    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles, midi: MidiInput, scopes: Scopes) {
         guard let folder = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] else { return }
         let dir = URL(fileURLWithPath: folder, isDirectory: true)
         var log: [String] = []
@@ -66,6 +68,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "scopes": steps = scopeSteps(engine: engine, scopes: scopes, dir: dir, note: note, state: state, snap: snap)
         case "listen": steps = listenSteps(engine: engine, link: link, note: note)
         case "direct": steps = directSteps(engine: engine, link: link, note: note, state: state)
         case "midi": steps = midiSteps(engine: engine, midi: midi, dir: dir, note: note, state: state)
@@ -171,6 +174,49 @@ enum TestSnapshot {
 
     private static var virtualBox = MIDIEndpointRef()
     private static var sockets: [URLSessionWebSocketTask] = []
+
+    @MainActor private static func scopeSteps(engine: Engine, scopes: Scopes, dir: URL, note: @escaping (String) -> Void,
+                                              state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func save(_ image: CGImage?, _ name: String) {
+            guard let image else { return note("   \(name): no picture") }
+            let rep = NSBitmapImageRep(cgImage: image)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(name + ".png"))
+        }
+        func frame(_ name: String) {
+            guard let f = engine.programFrame() else { return note("   \(name): no program frame (black)") }
+            let ctx = CIContext()
+            if let cg = ctx.createCGImage(f, from: f.extent) { save(cg, name) }
+            note("   \(name): program frame \(Int(f.extent.width))x\(Int(f.extent.height))")
+        }
+        func read(_ name: String, then: @escaping () -> Void = {}) {
+            scopes.tick {
+                save(scopes.waveform, name + "-waveform")
+                save(scopes.vectorscope, name + "-vectorscope")
+                then()
+            }
+        }
+        return [
+            (1.0, {
+                var bars = Cue(name: "Color bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                bars.trimIn = 5
+                let still = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                let red = Cue.matte(named: "Red matte", color: "#BF0000")
+                engine.replaceShow(cues: [bars, still, red], pads: [], banks: [], multiTrigger: nil)
+                scopes.isOn = true
+                engine.openOutput()
+                engine.go()
+            }),
+            (1.5, { frame("s1-frame-bars"); read("s1-bars") }),
+            (0.8, { snap("s1-control"); engine.go() }),
+            (1.0, { frame("s2-frame-still"); read("s2-still") }),
+            (0.8, { engine.go() }),
+            (1.0, { frame("s3-frame-matte"); read("s3-matte") }),
+            (0.8, { snap("s3-control"); note("   preview shows: \(engine.monitor.showing)"); engine.allStop() }),
+            (0.8, { frame("s4-frame-black"); note("   after All Stop, preview shows: \(engine.monitor.showing)"); scopes.isOn = false }),
+        ]
+    }
 
     @MainActor private static func listenSteps(engine: Engine, link: ShowLink, note: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

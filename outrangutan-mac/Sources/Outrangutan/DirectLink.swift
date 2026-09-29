@@ -17,7 +17,10 @@ import OutrangutanCore
 /// The browser side is cueola-mac-link.js.
 final class DirectLink {
     static var port: UInt16 {
-        ProcessInfo.processInfo.environment["OUTRANGUTAN_DIRECT_PORT"].flatMap(UInt16.init) ?? 47810
+        // Test mode uses its own port, so it never meets the real app or a
+        // real browser tab.
+        ProcessInfo.processInfo.environment["OUTRANGUTAN_DIRECT_PORT"].flatMap(UInt16.init)
+            ?? (TestSnapshot.isOn && TestSnapshot.scenario != "listen" ? 47819 : 47810)
     }
 
     private let link: ShowLink

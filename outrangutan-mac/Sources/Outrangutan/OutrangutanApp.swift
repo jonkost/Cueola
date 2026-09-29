@@ -8,7 +8,7 @@ struct OutrangutanApp: App {
     var body: some Scene {
         // One show, one control window.
         Window("Outrangutan", id: "main") {
-            ControlView(engine: appDelegate.engine, link: appDelegate.link, files: appDelegate.files)
+            ControlView(engine: appDelegate.engine, link: appDelegate.link, files: appDelegate.files, scopes: appDelegate.scopes)
                 .frame(minWidth: 960, minHeight: 600)
         }
         .commands {
@@ -18,6 +18,7 @@ struct OutrangutanApp: App {
                     NotificationCenter.default.post(name: .toggleInspector, object: nil)
                 }
                 .keyboardShortcut("i")
+                MonitorToggles()
             }
             PlaybackCommands(engine: appDelegate.engine)
             CommandGroup(before: .windowList) {
@@ -73,6 +74,20 @@ struct FileCommands: Commands {
     }
 }
 
+/// View menu: the program preview strip and its scopes.
+struct MonitorToggles: View {
+    @AppStorage("ui.monitor") private var showMonitor = true
+    @AppStorage("ui.scopes") private var showScopes = true
+
+    var body: some View {
+        Toggle("Program Preview", isOn: $showMonitor)
+            .keyboardShortcut("p", modifiers: [.command, .option])
+        Toggle("Scopes", isOn: $showScopes)
+            .keyboardShortcut("s", modifiers: [.command, .option])
+            .disabled(!showMonitor)
+    }
+}
+
 /// Window menu: opens the show log.
 struct OpenLogButton: View {
     @Environment(\.openWindow) private var openWindow
@@ -121,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var files = ShowFiles(engine: engine)
     lazy var midi = MidiInput(engine: engine)
     lazy var direct = DirectLink(link: link)
+    lazy var scopes = Scopes(engine: engine)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -157,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = link
         _ = midi
         _ = direct
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi) }
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes) }
         NSApp.activate(ignoringOtherApps: true)
 
         // Tell macOS a show is running: never nap this app, never slow its

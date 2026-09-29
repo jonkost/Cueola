@@ -14,6 +14,9 @@ final class Deck {
     var held = false                // parked on its last frame: finished
     var fadingOut = false
     var views: [OutputView] = []    // the outputs this deck's picture is on
+    /// Hands over frames for the scopes; only there while the scopes are on.
+    var frames: AVPlayerItemVideoOutput?
+    var lastFrame: CIImage?
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
 
@@ -49,6 +52,8 @@ final class Deck {
         // Which sound output this player uses. nil is the Mac's default.
         player.audioOutputDeviceUniqueID = device
         let item = AVPlayerItem(url: cue.url)
+        frames = nil
+        lastFrame = nil
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
@@ -153,6 +158,19 @@ final class Engine: ObservableObject {
     var onCuesChanged: (() -> Void)?
     /// Called on every clock tick while something is counting.
     var onTick: (() -> Void)?
+
+    /// The program preview in the control window: a copy of one output,
+    /// drawn by the same layers.
+    let monitor = OutputView()
+    /// Which output the preview shows.
+    @Published var monitorOutput = 1 {
+        didSet { if monitorOutput != oldValue { monitor.black() } }
+    }
+    /// True while the scopes want frames.
+    var wantsFrames = false {
+        didSet { if wantsFrames { videoDecks.forEach(attachFrames) } }
+    }
+    private var stillFrame: (id: UUID, image: CIImage)?
 
     /// The sound effect board.
     let pads: PadBoard
@@ -919,6 +937,7 @@ final class Engine: ObservableObject {
         if let leaving = stillCue { pads.cueLeftAir(leaving.id) }
         stillCue = nil
         for w in windows.values { w.pictureView.hide(.s1); w.pictureView.hide(.s2) }
+        monitor.hide(.s1); monitor.hide(.s2)
         stillViews = []
     }
 
@@ -1031,9 +1050,39 @@ final class Engine: ObservableObject {
     /// The outputs a cue shows on: its own, or every one for "every output".
     /// A cue pointed at an output that was removed uses the first output.
     private func views(for cue: Cue) -> [OutputView] {
-        if cue.output == 0 { return outputs.map { window($0.id).pictureView } }
+        let preview = outputs.contains { $0.id == monitorOutput } ? monitorOutput : outputs[0].id
+        if cue.output == 0 { return outputs.map { window($0.id).pictureView } + [monitor] }
         let id = outputs.contains { $0.id == cue.output } ? cue.output : outputs[0].id
-        return [window(id).pictureView]
+        return [window(id).pictureView] + (id == preview ? [monitor] : [])
+    }
+
+    /// What is on the program picture now, for the scopes: the newest video
+    /// frame, the still, or the matte. nil when the picture is black.
+    func programFrame() -> CIImage? {
+        if let d = pictureDeck, let item = d.player.currentItem {
+            attachFrames(d)
+            if let out = d.frames, out.hasNewPixelBuffer(forItemTime: item.currentTime()),
+               let buffer = out.copyPixelBuffer(forItemTime: item.currentTime(), itemTimeForDisplay: nil) {
+                d.lastFrame = CIImage(cvPixelBuffer: buffer)
+            }
+            return d.lastFrame
+        }
+        guard let still = stillCue else { return nil }
+        if still.kind == .matte {
+            return CIImage(color: CIColor(color: NSColor(hex: still.color) ?? .black) ?? .black)
+                .cropped(to: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        }
+        if stillFrame?.id != still.id {
+            stillFrame = CIImage(contentsOf: still.url).map { (still.id, $0) }
+        }
+        return stillFrame?.image
+    }
+
+    private func attachFrames(_ d: Deck) {
+        guard wantsFrames, d.frames == nil, let item = d.player.currentItem else { return }
+        let out = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        item.add(out)
+        d.frames = out
     }
 
     /// A video's sound goes to its output's sound device if it has one,
