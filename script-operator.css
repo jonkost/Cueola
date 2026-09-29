@@ -543,7 +543,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   position: fixed;
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
   /* Every elevation token in this file is a deliberate no-op, so a floating
      toast has no drop shadow to separate it from whatever it covers. It gets the
      opaque top surface plus an inset rim: it can land over the page, the --s3
@@ -559,7 +559,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   -webkit-backdrop-filter: blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   z-index: 999;
   display: none;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   animation: rise .2s ease both;
 }
 

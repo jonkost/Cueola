@@ -54,6 +54,14 @@
 #outrangutan.locked .og-pad.empty, #outrangutan.locked .og-pad-add-slot, #outrangutan.locked .og-pad-edit,
 #outrangutan.locked .og-pad-inspector input, #outrangutan.locked .og-pad-inspector select,
 #outrangutan.locked .og-p-clear { opacity: .4; pointer-events: none; }
+/* the kit swaps selects and number boxes for buttons, so lock those too (SFX Fire stays live) */
+#outrangutan.locked .og-insp-body button, #outrangutan.locked .og-matte-inline,
+#outrangutan.locked #og-edit-actions, #outrangutan.locked #og-sfx-edit-reset,
+#outrangutan.locked .og-trk-fields, #outrangutan.locked .og-track-h,
+#outrangutan.locked .og-pad-inspector .og-emoji-pick, #outrangutan.locked .og-pad-inspector .og-swatch, #outrangutan.locked #og-p-key,
+#outrangutan.locked .og-bank-add, #outrangutan.locked .og-bank-x, #outrangutan.locked .og-bank-edit { opacity: .4; pointer-events: none; }
+/* no stray scrubs on air, but the playhead stays easy to read */
+#outrangutan.locked .og-track { pointer-events: none; }
 
 /* ════════════════════════════════════════════════════════════════════════════
  * 1 · TOP BAR — one glass strip: back · brand · mode · tabs · clock · actions

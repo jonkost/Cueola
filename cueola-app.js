@@ -275,17 +275,17 @@ function liveSyncStatusRecord() {
   if (reconnecting || navigator.onLine === false) {
     return {
       status:navigator.onLine === false ? 'disconnected' : 'recovering',
-      detail:navigator.onLine === false ? 'Network offline. Saved state is retained locally' : 'Reconnecting. Showing the last confirmed state',
+      detail:navigator.onLine === false ? 'Offline. Your changes are kept on this computer' : 'Reconnecting. Showing the last saved version',
     };
   }
-  if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'Local workspace' };
+  if (session.isDemo || session.isExpert || !session.code) return { status:'ready', detail:'On this computer only' };
+  // Fixed glossary words: the caller's detail can name code parts.
   const state = cloudSyncProjection.state;
-  const detail = cloudSyncProjection.detail;
-  if (state === 'synced') return { status:'ready', detail:detail || 'Cloud synchronized' };
-  if (state === 'saving') return { status:'connecting', detail:detail || 'Cloud sync saving changes...' };
-  if (state === 'error') return { status:'error', detail:detail || 'Cloud sync failed' };
-  if (state === 'local') return { status:'disconnected', detail:detail || 'Cloud sync unavailable; saved locally' };
-  return { status:'disconnected', detail:detail || 'Cloud sync is not connected' };
+  if (state === 'synced') return { status:'ready', detail:'Everyone has your latest change' };
+  if (state === 'saving') return { status:'connecting', detail:'Saving…' };
+  if (state === 'error') return { status:'error', detail:'Not saved. Check the connection' };
+  if (state === 'local') return { status:'disconnected', detail:'Saved on this computer only' };
+  return { status:'disconnected', detail:'Not connected to the show' };
 }
 
 function renderLiveStatusRail(state=liveSessionController?.getState?.()) {
@@ -499,14 +499,14 @@ function _applyControlGrantHeldTransition() {
     // resolver treats an active follow as "not calling") and the grant looks
     // dead on their machine until they manually switch to Myself.
     browsingSelf = false; followTarget = ''; followTargetId = '';
-    toast('You have rundown control. GO advances the show for everyone.');
-    logShow('cue', `Rundown control granted to ${sessionControlGrant.displayName || sessionControlGrant.username}`);
+    toast('You are the director. TAKE moves everyone to the next cue.');
+    logShow('cue', `${sessionControlGrant.displayName || sessionControlGrant.username} is the director`);
   } else if (!held && _heldControlGrantBefore) {
     // Say where it actually went: a regrant moves it to another student, a
     // revoke returns it to the instructors.
     toast(sessionControlGrant
-      ? `Rundown control moved to ${sessionControlGrant.displayName || sessionControlGrant.username}.`
-      : 'Rundown control went back to the instructor.');
+      ? `${sessionControlGrant.displayName || sessionControlGrant.username} is the director now.`
+      : 'The instructor is the director again.');
   }
   _heldControlGrantBefore = held;
   // A window that just stopped calling the show (grant moved away, or a
@@ -520,7 +520,7 @@ function _applyControlGrantHeldTransition() {
 }
 
 function grantRundownControl(username, displayName, position='') {
-  if (!adminSession) { toast('Only a signed-in admin can hand out rundown control.'); return; }
+  if (!adminSession) { toast('Only a signed-in instructor can choose the director.'); return; }
   if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
   const grant = {
     username: String(username || '').toLowerCase(),
@@ -536,7 +536,7 @@ function grantRundownControl(username, displayName, position='') {
   // The grant rides with a claim release: the holder's live window claims
   // on its next tick instead of waiting out the 15 s stale window.
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: grant, busExecutor: null })
-    .then(() => toast(`${grant.displayName} now has rundown control.`))
+    .then(() => toast(`${grant.displayName} is the director now.`))
     .catch(err => toast(firebaseConnectionLabel(err, 'Handing control failed')));
   hideOverlay('lsGrantOv');
 }
@@ -545,7 +545,7 @@ function revokeRundownControl() {
   if (!adminSession) return;
   if (!(window._firebaseReady && session.code && !session.isDemo && window._updateDoc)) return;
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: null })
-    .then(() => toast('Rundown control is back with the instructors.'))
+    .then(() => toast('The instructor is the director again.'))
     .catch(err => toast(firebaseConnectionLabel(err, 'Taking control back failed')));
   hideOverlay('lsGrantOv');
 }
@@ -617,7 +617,7 @@ function renderControlGrantPickerBody() {
   const director = rows.find(row => suggested(row) && row.username !== holderKey);
   const grantCall = row => `grantRundownControl('${esc(row.username)}', ${esc(JSON.stringify(String(row.name || row.username)))}, ${esc(JSON.stringify(String(row.position || '')))})`;
   body.innerHTML = `
-    ${holder ? `<div class="ls-grant-current">${sfIcon('marker.ready')} <b>${esc(holder.displayName || holder.username)}</b> has control${grantHolderPresent() ? '' : ' (not connected yet)'}
+    ${holder ? `<div class="ls-grant-current">${sfIcon('marker.ready')} <b>${esc(holder.displayName || holder.username)}</b> is the director${grantHolderPresent() ? '' : ' (not connected yet)'}
       <button class="admin-add-btn" onclick="revokeRundownControl()">Take back</button></div>` : ''}
     ${director ? `<button class="btn-primary u-mt8" style="width:100%" onclick="${grantCall(director)}">Give control to the ${esc(director.position)}: ${esc(director.name)}</button>` : ''}
     ${rows.length ? rows.map(row => `
@@ -627,8 +627,8 @@ function renderControlGrantPickerBody() {
         ${row.connected ? '' : '<span class="ls-grant-pos">not connected</span>'}
         <span class="ls-grant-user">@${esc(row.username)}</span>
       </button>`).join('')
-      : '<div class="u-note">No one with a signed-in profile is in this session yet. Assign positions in Planda Bear or have students sign in and join.</div>'}
-    <div class="u-note u-mt8">While a student holds control, your GO is off. Take back to drive.</div>
+      : '<div class="u-note">No one with a signed-in profile is in this show yet. Assign positions in Planda Bear or have students sign in and join.</div>'}
+    <div class="u-note u-mt8">While a student director is connected, your TAKE is off. Press Take back to be director again.</div>
   `;
 }
 
@@ -646,7 +646,9 @@ function liveBeatKey(beat, index) {
 
 function ensureLiveRunLedger() {
   const state = liveSessionState();
-  if (state.lifecycle === 'builder') return state.runLedger || {};
+  // Off Live a ledger only exists if Live ran earlier; rebuild it when the rows
+  // changed since, or adopting the room's cue throws on a new row.
+  if (state.lifecycle === 'builder' && !(state.runOrder || []).length) return state.runLedger || {};
   const expected = beats.map(liveBeatKey);
   const configured = state.runOrder || [];
   const changed = expected.length !== configured.length || expected.some((key, index) => key !== configured[index]);
@@ -774,10 +776,11 @@ function projectTalentLinkTransition(link, previousStatus) {
     // Same recovery point as the old watchdog: reset the handshake so the
     // returning talent re-applies state, and say so without flapping.
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
-    projectPrompterSessionStatus('recovering', 'Talent unresponsive · missed heartbeats');
+    projectPrompterSessionStatus('recovering', 'The talent screen is not answering');
   } else if (link.status === 'lost') {
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
-    setLiveSubsystemStatus('prompter', 'disconnected', link.detail || 'Talent lost: no heartbeat');
+    // The model keeps the last ack detail ("Talent connected") when it demotes.
+    setLiveSubsystemStatus('prompter', 'disconnected', link.detail && !/^Talent connected/.test(link.detail) ? link.detail : 'The talent screen stopped answering');
     // D11.8: a same-device talent window that is OPEN but silent gets
     // automatic reconnect nudges (hello → READY → full state resync), now on
     // a backoff instead of exactly once: one missed nudge used to strand the
@@ -896,6 +899,7 @@ const liveShared = window.CueolaLiveState.createLiveState({ clientId: CLIENT_ID 
 const liveTakeGate = window.CueolaLiveState.createTakeGate({ debounceMs: 300 });
 let _liveRecordSeen = false;   // the doc carries a `live` record (legacy activeIdx is ignored from then on)
 let _liveTakeWrite = null;     // { seq, sentAt, ackAt } of this director's in-flight take
+let _takeLockToken = 0;        // which TAKE currently holds the in-flight lock
 let _presenceClockWrite = null; // { sentAt, ackAt } of this window's last presence write
 let _presenceClockSeen = 0;    // server ms of the last presence stamp sampled
 
@@ -951,6 +955,7 @@ function adoptLiveRecordFromDoc(d, snap) {
 function applyRoomLiveCue(state, reason) {
   let idx = Number(state?.idx);
   if (!Number.isFinite(idx) || idx < 0 || idx >= beats.length) return;
+  try { ensureLiveRunLedger(); } catch (error) { containError('Live cue adoption', error); return; }
   if (liveCueIsDisabled(idx)) idx = liveNextPlayableCueIndex(idx);
   if (idx < 0) return;
   const follower = !isShowCaller();
@@ -967,6 +972,9 @@ function takeCue(index, reason, opts = {}) {
   const gate = liveTakeGate.tryAcquire(Date.now());
   if (!gate.ok) return false;
   blurLiveControl();
+  // A newer TAKE, Back or Cue to cancels a pre-roll that is still counting,
+  // so a clip never rolls under a cue that is no longer ON AIR.
+  if (_rtrtCall) abortPlayoutCall('superseded');
   const fromIdx = liveActiveCueIndex();
   const beat = beats[index];
   let take = null;
@@ -993,6 +1001,15 @@ function takeCue(index, reason, opts = {}) {
   updateLiveGoControl();
   markResumeState();
   publishLiveTake(take.patch).finally(() => { liveTakeGate.release(); updateLiveGoControl(); });
+  // Slow or dropped Wi-Fi can hold the write for seconds, or until the network
+  // is back. The sequence number already keeps the room in order, so the lock
+  // gives way after 1.5 s instead of freezing TAKE for the whole outage.
+  const lockToken = ++_takeLockToken;
+  steadyTimeout(() => {
+    if (lockToken !== _takeLockToken || !liveTakeGate.isBusy()) return;
+    liveTakeGate.release();
+    updateLiveGoControl();
+  }, 1500);
   return true;
 }
 
@@ -1152,7 +1169,7 @@ function normalizeCueolaTheme(t) { return CUEOLA_THEMES.includes(t) ? t : 'cool'
 const PLANDABEAR_THEMES = ['glacier','honey','polar-bear','eucalyptus','koala','panda','flamingo','outrangutan','prepbear'];
 function normalizePlandaBearTheme(t) { return PLANDABEAR_THEMES.includes(t) ? t : 'glacier'; }
 function cueolaThemeToPlandaBearTheme(t) {
-  const map = { cool: 'glacier', warm: 'honey', white: 'polar-bear' };
+  const map = { cool: 'glacier', warm: 'honey', white: 'polar-bear', green: 'eucalyptus' };
   return normalizePlandaBearTheme(map[normalizeCueolaTheme(t)] || normalizeCueolaTheme(t));
 }
 function hasPlandaBearThemeOverride() {
@@ -1945,7 +1962,13 @@ async function importRundownFile(file) {
   try {
     show = { name: payload.show?.name || 'Untitled Show', start: normalizeTimeValue(payload.show?.start) };
     beats = payload.beats.map(migrateBeat);
-    sessionCustomSources = payload.customSources || {};
+    // Only a file that names sources replaces this show's list: a file saved
+    // from a show with no saved names carries {} and must not wipe them for everyone.
+    const hasNames = v => Array.isArray(v) ? v.length > 0 : Boolean(v) && typeof v === 'object' && Object.values(v).some(hasNames);
+    if (payload.customSources && typeof payload.customSources === 'object' && !Array.isArray(payload.customSources) && hasNames(payload.customSources)) {
+      sessionCustomSources = payload.customSources;
+      syncSessionSources();   // the file's sources become this show's, for everyone
+    }
     freeTextMode = Boolean(payload.freeTextMode);
     renderRundown();
     syncToFirestore();
@@ -1978,10 +2001,22 @@ function showLogKey() {
 function loadShowLog() {
   const key = showLogKey();
   if (key === _showLogLoadedKey) return;
+  const previousKey = _showLogLoadedKey;
   _showLogLoadedKey = key;
+  // Moving from one show to another: file the buffer under the show it came
+  // from and start this show's own log, so no show collects another's entries.
+  if (previousKey && previousKey !== 'cueola_showlog_local') {
+    clearTimeout(_showLogSaveTimer);
+    try { localStorage.setItem(previousKey, JSON.stringify(showLogEntries)); } catch {}
+    showLogEntries = [];
+  }
   try {
     const prior = JSON.parse(localStorage.getItem(key) || '[]');
-    if (Array.isArray(prior) && prior.length) showLogEntries = prior.concat(showLogEntries).slice(-SHOWLOG_MAX);
+    if (Array.isArray(prior) && prior.length) {
+      // Front-page entries filed here on an earlier visit merge only once.
+      const seen = new Set(prior.map(e => e.t + '|' + e.cat + '|' + e.msg));
+      showLogEntries = prior.concat(showLogEntries.filter(e => !seen.has(e.t + '|' + e.cat + '|' + e.msg))).slice(-SHOWLOG_MAX);
+    }
   } catch {}
 }
 function logShow(cat, msg, data) {
@@ -1993,7 +2028,9 @@ function logShow(cat, msg, data) {
     if (showLogEntries.length > SHOWLOG_MAX) showLogEntries.splice(0, showLogEntries.length - SHOWLOG_MAX);
     clearTimeout(_showLogSaveTimer);
     _showLogSaveTimer = setTimeout(() => {
-      try { localStorage.setItem(showLogKey(), JSON.stringify(showLogEntries)); } catch {}
+      // Always file under the key the buffer was loaded for: after leaving a
+      // show, showLogKey() is already the front-page key.
+      try { localStorage.setItem(_showLogLoadedKey || showLogKey(), JSON.stringify(showLogEntries)); } catch {}
     }, 800);
     // Live-append when the viewer is open.
     const wrap = document.getElementById('modal-showlog');
@@ -2086,6 +2123,9 @@ const RESUME_KEY = 'cueola_resume';
 const RESUME_MAX_AGE = 12 * 3600 * 1000;
 function markResumeState() {
   if (!session?.code || session.isDemo || session.isExpert) return;
+  // Signed out while still in a profile's show: do not write a record that
+  // the next person on this computer could pick up.
+  if (session.username && !window.CueolaIdentity?.identity?.()) return;
   try {
     localStorage.setItem(RESUME_KEY, JSON.stringify({
       code: session.code, name: session.userName || '', role: session.role || 'instructor',
@@ -2093,7 +2133,8 @@ function markResumeState() {
       profileAliases: Array.isArray(session.profileAliases) ? session.profileAliases : [],
       showName: show?.name || '',
       screen: sessionStorage.getItem('cueola_screen') || 'build',
-      scriptOp: !!livePrompterOpen, lsIdx, ts: Date.now(),
+      scriptOp: !!livePrompterOpen, lsIdx, lsRow: lsIdx >= 0 ? rowDisplayNumber(lsIdx) : 0,
+      ts: Date.now(),
     }));
   } catch {}
 }
@@ -2114,9 +2155,10 @@ function initResumeBanner() {
   const banner = document.getElementById('resumeBanner');
   if (!r || !banner) return;
   if (!document.getElementById('entry')?.classList.contains('on')) return;  // a deep link already routed elsewhere
-  const where = r.screen === 'live' ? 'live on row ' + ((r.lsIdx ?? 0) + 1) : 'building';
+  // lsRow is the crew's row number (segments do not count); old records lack it.
+  const where = r.screen === 'live' ? 'live on row ' + (r.lsRow || ((r.lsIdx ?? 0) + 1)) : 'building';
   const text = document.getElementById('resumeBannerText');
-  if (text) text.innerHTML = `You were ${where} in session <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
+  if (text) text.innerHTML = `You were ${where} in show <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
   banner.hidden = false;
 }
 function dismissResumeBanner() {
@@ -2172,7 +2214,7 @@ async function resumeLastSession() {
   };
   if (ready) { enterRundown(); setTimeout(after, 400); }
   else { try { openLocalSession(r.code, r.name || 'Operator', r.role || 'instructor'); } catch {} setTimeout(after, 400); }
-  logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + ((r.lsIdx ?? 0) + 1) + ')' : ''));
+  logShow('session', 'Resumed after unclean exit → ' + r.code + (r.screen === 'live' ? ' (live, row ' + (r.lsRow || ((r.lsIdx ?? 0) + 1)) + ')' : ''));
 }
 // Refresh the record every 20 s while in a session — the ts doubles as the
 // "was recently in use" signal for the banner's freshness window. Gated on a
@@ -2227,6 +2269,7 @@ let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise,
 let liveClockRunning = false;
 let paperworkDirty = false;
 let flowmingoRemoteOverrideUntil = 0;
+let _flowOpDocControlSeenId = null;   // last prompter.control id seen on the doc (null until the first snapshot of a show)
 // How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
 // Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
 // clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
@@ -2258,7 +2301,13 @@ function setSessionCodeInUrl(code) {
 
 function leaveSessionForFrontPage() {
   resetLiveShared();
+  // Save typed paperwork now, while it still goes to this group's copy.
+  if (_pbFieldSaveTimer) { try { flushPaperworkDraftForExport(); } catch {} }
   if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
+  // A rejoin must attach a fresh group listener, and the next show picks its
+  // own group (each show remembers its group on this device).
+  _pbGroupSubKey = '';
+  activeGroupId = '';
   captureSessionSnapshot('leave', true);
   logShow('session', 'Left session' + (session?.code ? ' ' + session.code : ''));
   try { liveSessionController.leave({ reason:'session-leave' }); }
@@ -2278,6 +2327,7 @@ function leaveSessionForFrontPage() {
   sessionStorage.removeItem('cueola_screen');
   setSessionCodeInUrl('');   // a reload after leaving must not rejoin
   sessionQuestionCards = [];   // prepared question cards belong to the session just left
+  sessionCustomSources = {};   // so do its saved source buttons
   // The roster belongs to the session just left too; a stale copy would let
   // the Admin People pane list the wrong show's people until the next snapshot.
   sessionParticipantRecords = [];
@@ -2287,6 +2337,14 @@ function leaveSessionForFrontPage() {
   // live entry of the next one, and the grant (with its banner and CALLER
   // tag) belongs to the session just left.
   _remoteClockState = null;
+  // The show clock belongs to the show just left: the next show starts at 0.
+  // Forget which clock write we saw last, so a rejoin (same show) picks the
+  // room's clock back up instead of staying at 0.
+  elapsedSecs = 0;
+  liveTimerStartMs = null;
+  _clockRanThisLoad = false;
+  _lastAppliedClockSig = '';
+  _lastAppliedClockTs = 0;
   sessionControlGrant = null;
   _heldControlGrantBefore = false;
   _lastCallerTruth = null;
@@ -2704,6 +2762,14 @@ function closeDialog(id) {
 }
 
 function initDialogAttrs() {
+  // Tie each field's label to its box: a tap on the words focuses the box,
+  // and a screen reader reads the label. Only when the field has one box,
+  // never a checkbox or radio (a tap on the words would flip it).
+  document.querySelectorAll('.field > label.field-lbl:not([for])').forEach(label => {
+    const boxes = label.parentElement.querySelectorAll('input:not([type=hidden]),select,textarea');
+    const box = boxes.length === 1 ? boxes[0] : null;
+    if (box && box.id && box.type !== 'checkbox' && box.type !== 'radio') label.htmlFor = box.id;
+  });
   document.querySelectorAll('.modal-wrap,.overlay').forEach(el => {
     ensureDialogAttrs(el);
     if (!el.classList.contains('on')) el.setAttribute('aria-hidden', 'true');
@@ -2791,11 +2857,12 @@ function reportCloudWriteFailure(context='Cloud save', err=null) {
   }
   console.warn(`${context} failed.`, err);
   logShow('sync', context + ' failed. Local draft kept' + (code ? ' (' + code + ')' : ''));
-  setCloudSyncState('error', `${context} failed. Local draft kept; retrying when possible.`);
+  setCloudSyncState('error', 'Not saved. Your copy is kept on this computer and will try again.');
   const now = Date.now();
   if (now - _lastCloudErrorToastAt > 8000) {
     _lastCloudErrorToastAt = now;
-    toast(`${context} failed. Local copy kept.`);
+    // Not every caller is a save (Force live, snapshot restore), so stay neutral.
+    toast('That did not reach the cloud. Your copy is kept on this computer. Check the connection.');
   }
 }
 
@@ -3136,7 +3203,7 @@ async function loadLocalNarrationManifest() {
   if (cueolaTTS.localManifestLoaded) return cueolaTTS.localAssetRefs;
   cueolaTTS.localManifestPromise = (async () => {
     cueolaTTS.localManifestLoaded = true;
-    setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Checking Heart voice files...');
+    setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Loading the voice over.');
     setTTSDot(cueolaTTS.muted ? null : 'tts-system-loading');
     try {
       const response = await fetch(LOCAL_NARRATION_MANIFEST, { cache:'no-store' });
@@ -3144,24 +3211,24 @@ async function loadLocalNarrationManifest() {
       const manifest = await response.json();
       if (!browserCanPlayMp3()) {
         cueolaTTS.localAssetRefs = new Set();
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro MP3 playback unavailable in this browser.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'This browser cannot play the voice over.');
         setTTSDot(null);
         return cueolaTTS.localAssetRefs;
       }
       const files = Array.isArray(manifest.files) ? manifest.files : [];
       cueolaTTS.localAssetRefs = new Set(files.map(item => String(item).replace(/\.mp3$/i, '')));
       if (cueolaTTS.localAssetRefs.size) {
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Heart voice ready.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Voice over ready.');
         setTTSDot(cueolaTTS.muted ? null : 'tts-system-ready');
       } else {
-        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Kokoro files pending.');
+        setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : 'Voice over is not ready yet.');
         setTTSDot(null);
       }
     } catch {
       cueolaTTS.localAssetRefs = new Set();
       setTTSAssetStatus(cueolaTTS.muted ? 'Voice over off.' : (window.location.protocol === 'file:'
-        ? 'Use the preview URL for Kokoro voice over.'
-        : 'Kokoro files pending.'));
+        ? 'Open Cueola from its web address to hear the voice over.'
+        : 'Voice over is not ready yet.'));
       setTTSDot(null);
     }
     return cueolaTTS.localAssetRefs;
@@ -3172,7 +3239,7 @@ async function loadLocalNarrationManifest() {
 function playLocalNarration(refId) {
   if (!refId) return Promise.resolve(false);
   if (cueolaTTS.localMissingRefs.has(refId) || !cueolaTTS.localAssetRefs.has(refId)) {
-    setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+    setTTSAssetStatus('No voice over for this lesson yet.');
     return Promise.resolve(false);
   }
   const url = getLocalNarrationUrl(refId);
@@ -3190,17 +3257,17 @@ function playLocalNarration(refId) {
     audio.playbackRate = cueolaTTS.rate;
     audio.onended = () => {
       if (cueolaTTS._audio === audio) cueolaTTS._audio = null;
-      setTTSAssetStatus('Heart voice ready.');
+      setTTSAssetStatus('Voice over ready.');
     };
     audio.onerror = () => {
       cueolaTTS.localMissingRefs.add(refId);
-      setTTSAssetStatus(`Kokoro file pending: ${refId}`);
+      setTTSAssetStatus('No voice over for this lesson yet.');
       finish(false);
     };
     audio.play()
       .then(() => {
         cueolaTTS._audio = audio;
-        setTTSAssetStatus('Playing Heart voice.');
+        setTTSAssetStatus('Playing the lesson.');
         finish(true);
       })
       .catch(() => {
@@ -3220,7 +3287,8 @@ async function ttsSpeak(text, priority=true, refId='') {
   if (priority) ttsStop();
   await initTTS();
   if (refId && await playLocalNarration(refId)) return true;
-  setTTSAssetStatus(refId ? `Kokoro file pending: ${refId}` : 'Kokoro narration file pending.');
+  // playLocalNarration already said why it could not play (like "Tap once").
+  if (!refId) setTTSAssetStatus('No voice over for this lesson yet.');
   return false;
 }
 
@@ -3472,7 +3540,7 @@ function openGuideAction(action) {
   else if (action === 'profile') window.CueolaIdentity?.openHub?.();
   else if (action === 'plandabear') openPaperworkHub();
   else if (action === 'talent') openPrompterApp();
-  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || session.code || '');
+  else if (action === 'remote') openFlowmingoOperator(ptLinkedCueolaCode || (session.isDemo || session.isExpert ? '' : session.code) || '');
   else if (action === 'outrangutan') enterOutrangutan(session.code && !session.isDemo && !session.isExpert ? 'session' : 'standalone');
   else if (action === 'keywi') openControlSurface();
 }
@@ -3585,12 +3653,15 @@ function updateAdminUI() {
   try { renderShowCallerBadge(); renderCallerBanner(); } catch (error) { containError('Caller chip', error); }
   const btn = document.getElementById('adminBtn');
   if (!btn) return;
+  // The rundown bar hides Admin in CSS; the inline display shows it to a signed-in instructor only.
   if (adminSession) {
     btn.textContent = adminSession.name.split(' ')[0];
     btn.className = 'tbtn tbtn-admin';
+    btn.style.display = 'inline-flex';
   } else {
     btn.textContent = 'Admin';
     btn.className = 'tbtn tbtn-ghost';
+    btn.style.display = '';
   }
 }
 
@@ -3748,14 +3819,10 @@ function renderAdminPaneSession() {
   }
   if (session.code) {
     const presenceNames = getActivePresencePeople().map(p=>p.name);
-    const nameOpts = presenceNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     html += `<div class="admin-section">
       <div class="admin-section-label">Live control</div>
-      <div class="u-note u-mb8">Send every connected device to the live screen, all following one operator.</div>
+      <div class="u-note u-mb8">${presenceNames.length ? 'Opens Live on every connected device, on the director\'s cue.' : 'Nobody shows as connected right now, not even this computer.'}</div>
       <div class="u-row-wrap">
-        <select id="adminFollowSelect" class="field-in admin-follow-in">
-          ${presenceNames.length ? nameOpts : '<option>No users online</option>'}
-        </select>
         <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive()">Move everyone to Live</button>
       </div>
     </div>`;
@@ -3833,12 +3900,12 @@ function renderAdminPanePeople() {
 
 function renderAdminPaneSources() {
   return `<div class="admin-section">
-    <div class="admin-section-label">Session sources <span class="admin-section-tag">(this session only)</span></div>
+    <div class="admin-section-label">Sources <span class="admin-section-tag">(this show only)</span></div>
+    <div class="u-note u-mb8">Each name is a button on every Video, Audio or Script cue card in this show.</div>
     <div class="admin-sources-grid">
       ${renderSourcesRow('video','Video')}
       ${renderSourcesRow('audio','Audio')}
-      ${renderSourcesRow('gfx','GFX')}
-      ${renderSourcesRow('scriptWho','Script / Who')}
+      ${renderSourcesRow('scriptWho','Speaker')}
     </div>
   </div>`;
 }
@@ -3921,7 +3988,7 @@ async function adminAssignProfileToSession(usernameRaw) {
     adminNoteMembershipChange({ ...data, username }, [...sessions, session.code]);
     toast(`${data.fullName || '@' + username} assigned to ${session.code}.`);
   } catch (err) {
-    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not assign. Check the connection and try again.');
+    toast(err?.code === 'permission-denied' ? 'Saving was refused. Sign in as an instructor and try again.' : 'Could not assign. Check the connection and try again.');
   }
 }
 
@@ -3943,7 +4010,7 @@ async function adminUnassignProfileFromSession(username) {
     adminNoteMembershipChange({ ...data, username:u }, sessions);
     toast(`${session.code} removed from @${u}.`);
   } catch (err) {
-    toast(err?.code === 'permission-denied' ? 'Firestore denied the profile update.' : 'Could not unassign. Check the connection and try again.');
+    toast(err?.code === 'permission-denied' ? 'Saving was refused. Sign in as an instructor and try again.' : 'Could not unassign. Check the connection and try again.');
   }
 }
 
@@ -4077,7 +4144,7 @@ function assignmentProfileOptions(selectedId='', legacyName='') {
     return `<option value="${esc(id)}" ${selected ? 'selected' : ''}>${esc(profile.fullName || profile.username || id)}${esc(suffix)}</option>`;
   }).join('');
   const unresolved = legacyName && !selectedId
-    ? `<option value="" selected>Unlinked legacy name: ${esc(legacyName)}</option>`
+    ? `<option value="" selected>Old name, pick a profile: ${esc(legacyName)}</option>`
     : '<option value="">Select saved profile</option>';
   return unresolved + options;
 }
@@ -4408,7 +4475,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
     });
     const profile = assignmentProfileById(row.profileId);
     const profileMeta = row.profileId
-      ? `${profile?.username ? '@' + profile.username + ' · ' : ''}${row.profileId}`
+      ? (profile?.username ? '@' + profile.username : 'Profile chosen')
       : 'Choose a saved profile.';
     const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved yet';
     const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
@@ -4431,7 +4498,7 @@ function renderRoleAssignmentRows(rows=getRoleAssignments()) {
         <div class="aa-paperwork-list">
           ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
         </div>
-        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Student portal linked' : 'Profile is not attached to this session'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
+        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Show is on their profile' : 'Show is not on their profile yet'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
       </details>
     </div>`;
   };
@@ -4500,7 +4567,7 @@ function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
       assignmentId:rowEl.dataset.assignmentId || '', profileId,
       username:profile?.username || '',
       // No profile picked yet: keep the row's legacy name so migration rows
-      // survive a DOM round-trip with their 'Unlinked legacy name' label.
+      // survive a DOM round-trip with their 'Old name, pick a profile' label.
       person:profile?.fullName || (!profileId && rowEl.dataset.person) || '',
       positionId, position, paperworkIds, paperwork,
       status:rowEl.dataset.status || 'assigned',
@@ -4663,7 +4730,7 @@ async function hydrateRoleAssignments({ force=false }={}) {
   if (assignmentHydratePromise && !force) return assignmentHydratePromise;
   _assignmentFailureOrigin = 'load';
   if (!window._firebaseReady || !session.code || session.code === 'LOCAL' || session.isDemo || session.isExpert || !assignmentModel()) {
-    setAssignmentSaveState('failed', 'Canonical assignments need a shared session, Firebase, and the assignment model.');
+    setAssignmentSaveState('failed', 'Positions need a show code and a working connection.');
     return null;
   }
   setAssignmentSaveState('loading', 'Loading saved profiles and assignments…');
@@ -4711,22 +4778,22 @@ async function hydrateRoleAssignments({ force=false }={}) {
         rows = records.map(record => normalizeRoleAssignment(record));
         confirmedRoleAssignmentRows = rows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
-          ? `${records.length} cached assignment record${records.length === 1 ? '' : 's'} shown. Reconnect before saving; cached data is not a Firestore confirmation.`
-          : `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+          ? `Showing the copy on this computer (${records.length} position${records.length === 1 ? '' : 's'}). Reconnect before you save.`
+          : `${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
       } else if (legacyRows.length) {
         rows = legacyRows.map(row => normalizeRoleAssignment(row));
         confirmedRoleAssignmentRows = [];
         const unresolved = rows.filter(row => !row.profileId || !row.positionId).length;
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
-          ? 'Cached legacy assignments are shown, but cloud availability was not confirmed. Reconnect before migration.'
+          ? 'Showing older positions saved on this computer. Reconnect before you save.'
           : unresolved
-            ? `${unresolved} legacy row${unresolved === 1 ? '' : 's'} cannot be linked uniquely to a saved profile and position.`
-            : `${rows.length} legacy assignment${rows.length === 1 ? '' : 's'} linked. Review and save once to update them.`);
+            ? `${unresolved} older row${unresolved === 1 ? ' needs' : 's need'} a profile and a position picked again.`
+            : `${rows.length} older assignment${rows.length === 1 ? '' : 's'} found. Check them, then press Save assignments.`);
       } else {
         rows = defaultRoleAssignments();
         confirmedRoleAssignmentRows = [];
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : 'saved', fromCache
-          ? 'The cached assignment set is empty, but Firestore could not confirm that it is current.'
+          ? 'No positions on this computer yet. Reconnect to check the saved list.'
           : 'No assignments saved yet.');
       }
       if (!draftMaterialized) {
@@ -4788,7 +4855,7 @@ function projectAssignmentFieldsToBaseMirror(sessionData={}) {
 
 function markRoleAssignmentsUnsaved() {
   if (assignmentSaveState === 'saving') return;
-  setAssignmentSaveState('unsaved', 'Draft changed. Save Assignments to confirm it in Firestore.');
+  setAssignmentSaveState('unsaved', 'Press Save assignments when you are done.');
 }
 
 function localizeConfirmedAssignmentProjection(rows, updatedAt) {
@@ -4805,11 +4872,11 @@ async function saveRoleAssignmentsFromAdmin() {
   _assignmentFailureOrigin = 'save';   // any 'failed' below holds the draft
   const model = assignmentModel();
   if (!model || !window._runTransaction || !window._getDocs || !session.code || session.isDemo || session.isExpert) {
-    setAssignmentSaveState('failed', 'Canonical cloud saving is unavailable in this workspace.');
+    setAssignmentSaveState('failed', 'Positions cannot save right now. Reload the page and try again.');
     return false;
   }
   if (assignmentFromCache) {
-    setAssignmentSaveState('failed', 'Assignments were loaded from offline cache. Reconnect and reload the server copy before saving; the draft remains unchanged.');
+    setAssignmentSaveState('failed', 'These positions came from this computer, not the cloud. Reconnect and press Retry connection before you save. Your changes are kept.');
     return false;
   }
   const draft = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
@@ -4833,7 +4900,7 @@ async function saveRoleAssignmentsFromAdmin() {
     pairs.add(key);
   }
 
-  setAssignmentSaveState('saving', 'Saving the canonical records and compatibility projection atomically…');
+  setAssignmentSaveState('saving', 'Sending your changes…');
   const actor = assignmentActor();
   const now = Date.now();
   try {
@@ -4885,7 +4952,7 @@ async function saveRoleAssignmentsFromAdmin() {
       if (!sessionSnap.exists()) throw new Error('Production session no longer exists.');
       const actualRevision = Math.max(0, Number(sessionSnap.data().assignmentRevision) || 0);
       if (model.hasRevisionConflict(expectedRevision, actualRevision)) {
-        const conflict = new Error(`Assignments changed on another device (server revision ${actualRevision}, editor revision ${expectedRevision}).`);
+        const conflict = new Error('Someone saved positions on another computer.');
         conflict.code = 'assignment-conflict';
         throw conflict;
       }
@@ -4914,7 +4981,7 @@ async function saveRoleAssignmentsFromAdmin() {
     localizeConfirmedAssignmentProjection(compatibility, now);
     rerenderRoleAssignments(confirmedRoleAssignmentRows);
     renderPlandaBearAssignmentsCard();
-    setAssignmentSaveState('saved', `${records.length} assignment record${records.length === 1 ? '' : 's'} confirmed in Firestore · revision ${assignmentRevision}.`);
+    setAssignmentSaveState('saved', `${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
     toast('Assignments saved.');
     return true;
   } catch (error) {
@@ -4922,11 +4989,11 @@ async function saveRoleAssignmentsFromAdmin() {
     // card), stash the draft we just tried so "the draft remains" stays true.
     if (!document.getElementById('adminRoleAssignments')) assignmentDraftStash = draft;
     if (error?.code === 'assignment-conflict') {
-      setAssignmentSaveState('conflict', `${error.message} Your draft is still here; load the server copy before deciding what to reapply.`);
+      setAssignmentSaveState('conflict', `${error.message} Your changes are still here. Tap Load the saved version, then redo them.`);
     } else if (error?.code === 'permission-denied') {
-      setAssignmentSaveState('failed', 'Firestore denied the assignment write. Nothing was labeled Saved; the draft remains for retry or revert.');
+      setAssignmentSaveState('failed', 'Saving was refused. Your changes are still here. Check that you are signed in as an instructor, then try again.');
     } else {
-      setAssignmentSaveState('failed', `${firebaseConnectionLabel(error, 'Assignment save failed')}. Nothing was labeled Saved; the draft remains for retry or revert.`);
+      setAssignmentSaveState('failed', `${firebaseConnectionLabel(error, 'Could not save')}. Nothing was saved. Your changes are still here, so you can try again.`);
     }
     console.warn('Assignment save failed.', error);
     return false;
@@ -4938,10 +5005,10 @@ function revertRoleAssignments() {
   _assignmentFailureOrigin = 'load';   // the only 'failed' below is the cache copy
   rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
   setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
-    ? 'Reverted to the cached assignment copy. Reconnect before treating it as confirmed.'
+    ? 'Back to the copy on this computer. Reconnect before you save.'
     : confirmedRoleAssignmentRows.length
-      ? `Reverted to ${confirmedRoleAssignmentRows.length} server-confirmed assignment record${confirmedRoleAssignmentRows.length === 1 ? '' : 's'}.`
-      : 'Reverted to the confirmed empty assignment set.');
+      ? `Back to the ${confirmedRoleAssignmentRows.length} saved position${confirmedRoleAssignmentRows.length === 1 ? '' : 's'}.`
+      : 'Back to the saved version: no positions yet.');
 }
 
 async function retryRoleAssignmentLoad() {
@@ -4957,7 +5024,7 @@ function onAssignmentRevisionSnapshot(data={}) {
   const incoming = Math.max(0, Number(data.assignmentRevision) || 0);
   if (incoming === assignmentRevision || assignmentSaveState === 'loading' || assignmentSaveState === 'saving') return;
   if (['unsaved','failed','conflict'].includes(assignmentSaveState)) {
-    setAssignmentSaveState('conflict', `Another device saved assignment revision ${incoming} while this draft was open. Load the server copy before saving.`);
+    setAssignmentSaveState('conflict', 'Someone saved positions on another computer while you were editing. Your changes are still here. Tap Load the saved version before you save.');
     return;
   }
   hydrateRoleAssignments({ force:true });
@@ -5109,7 +5176,8 @@ function followSessionMove(newCode, isMover = false) {
 }
 
 function addCustomSource(key) {
-  const val = prompt(`Add custom source for ${key}:`);
+  const what = { video:'a video source', audio:'an audio source', gfx:'a graphics source', scriptWho:'a speaker' }[key] || 'a source';
+  const val = prompt(`Add ${what} to this show:`);
   if (!val||!val.trim()) return;
   saveSessionSource(key, val);
 }
@@ -5130,7 +5198,15 @@ function saveSessionSource(key, val) {
   if (!sessionCustomSources[key]) sessionCustomSources[key]=[];
   if (sessionCustomSources[key].includes(clean)) return;
   sessionCustomSources[key].push(clean);
-  syncSessionSources();
+  // Add just this one name, so two people saving names at the same moment
+  // both keep theirs (the whole-list write let the later one drop the other).
+  if (window._firebaseReady && session.code && !session.isDemo && window._arrayUnion) {
+    window._updateDoc(window._doc(window._db,'sessions',session.code), { [`customSources.${key}`]: window._arrayUnion(clean) })
+      .catch(err => reportCloudWriteFailure('Source list cloud save', err));
+    try { localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources)); } catch {}
+  } else {
+    syncSessionSources();
+  }
   renderAdminBody();
 }
 
@@ -5152,7 +5228,7 @@ function syncSessionSources() {
     window._updateDoc(window._doc(window._db,'sessions',session.code),{ customSources: sessionCustomSources })
       .catch(err => reportCloudWriteFailure('Source list cloud save', err));
   }
-  localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources));
+  try { localStorage.setItem('cueola_customSources_'+session.code, JSON.stringify(sessionCustomSources)); } catch {}
 }
 
 function getSources(key) {
@@ -5281,8 +5357,8 @@ function firebaseConnectionLabel(err, fallback='Connection error') {
 
 function firebaseConnectionHint(err) {
   const code = err?.code || '';
-  if (code === 'permission-denied') return 'Firebase denied access. Check Firestore rules for shared sessions.';
-  if (code === 'unavailable') return 'Could not reach Firebase. Check the network and try again.';
+  if (code === 'permission-denied') return 'This computer is not allowed to open that show. Sign in here, then try again.';
+  if (code === 'unavailable') return 'Could not reach Cueola. Check the Wi-Fi and try again.';
   return 'Connection error. Try again, or use a local script if this is just one browser.';
 }
 
@@ -5296,7 +5372,15 @@ function openLocalSession(code='', name='You', role='instructor', showName='Unti
   beats = [];
   freeTextMode = true;
   rememberLastSession(session.code, session.userName);
-  restoreLocalDraftAsRundownBaseline();
+  if (!restoreLocalDraftAsRundownBaseline()) {
+    // No saved draft: start from this empty show, not the last one.
+    rundownShadowBeats = [];
+    rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+  }
+  // Undo starts fresh for this copy: the last show's steps must never land here.
+  rundownUndoStack = [];
+  rundownRedoStack = [];
+  rundownHistorySessionCode = session.code;   // so the next real show starts with a clean undo list too
   enterRundown();
   toast('Opened local copy. Shared sync is unavailable while offline.');
 }
@@ -5400,7 +5484,7 @@ function requireProfileForCloud(what, returnTo) {
 }
 
 function openJoinSession() {
-  if (!requireProfileForCloud('join a session')) return;
+  if (!requireProfileForCloud('join a show', 'stud')) return;
   prefillJoinFields('stud-code', 'stud-name');
   window.CueolaIdentity?.decorateJoin('stud');
   populateJoinSessionChoices('stud', 'pickAssignedStudSession');
@@ -5417,7 +5501,7 @@ function openJoinSession() {
 let preProJoinTarget = 'hub';
 
 function openPreProJoinModal(target) {
-  if (!requireProfileForCloud('open shared paperwork')) return;
+  if (!requireProfileForCloud('open shared paperwork', target === 'notes' ? 'pp-notes' : 'pp')) return;
   preProJoinTarget = target === 'notes' ? 'notes' : 'hub';
   const notes = preProJoinTarget === 'notes';
   const modal = document.getElementById('modal-prepro-join');
@@ -5425,10 +5509,12 @@ function openPreProJoinModal(target) {
     const title = modal.querySelector('.modal-title');
     const sub = modal.querySelector('.modal-sub');
     const go = modal.querySelector('.btn-primary');
-    if (title) title.innerHTML = notes ? `${sfIcon('content.note')} Production Notes` : 'Open Planda Bear';
+    // Keep the title's ⓘ button when the words change.
+    const infoBtn = title?.querySelector('.info-btn')?.outerHTML || '';
+    if (title) title.innerHTML = (notes ? `${sfIcon('content.note')} Production Notes` : 'Open Planda Bear') + infoBtn;
     if (sub) sub.textContent = notes
       ? 'Enter the show code to open your crew’s notes board.'
-      : 'Enter the show code to work on the Planda Bear package.';
+      : 'Enter the show code to work on your show’s paperwork.';
     if (go) go.textContent = notes ? 'Open Production Notes' : 'Open Planda Bear';
   }
   prefillJoinFields('pp-join-code', 'pp-join-name');
@@ -5448,7 +5534,7 @@ function openPlandaBearJoin() {
 async function joinSession() {
   // The real chokepoint: deep links and the resume banner call this directly,
   // so the gate lives here and not only on the modal opener.
-  if (!requireProfileForCloud('join a session')) return;
+  if (!requireProfileForCloud('join a show')) return;
   const code = document.getElementById('stud-code').value.trim().toUpperCase();
   const typedName = document.getElementById('stud-name').value.trim();
   const signedProfile = window.CueolaIdentity?.profile?.();
@@ -5462,14 +5548,14 @@ async function joinSession() {
   if (!ready) {
     errEl.textContent = 'Cueola cloud did not finish loading. Check the connection, then try again.';
     errEl.classList.add('on');
-    if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
+    if (btn) { btn.disabled=false; btn.textContent='Join show'; }
     return;
   }
   try {
       const snap = await window._getDoc(window._doc(window._db,'sessions',code));
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
-        errEl.textContent = 'Session not found. Check the code and try again.';
+        errEl.textContent = 'No show has that code. Check it and try again.';
         errEl.classList.add('on');
         return;
       }
@@ -5480,7 +5566,7 @@ async function joinSession() {
       const gate = (window.CueolaIdentity && !adminSession) ? await CueolaIdentity.entrySatisfied(d, 'stud-entry-code') : { pass: true };
       if (!gate.pass) {
         if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('stud-entrycode-row');
-        errEl.textContent = gate.msg || 'This session requires a class login code.';
+        errEl.textContent = gate.msg || 'This show needs a class key.';
         errEl.classList.add('on');
         return;
       }
@@ -5510,7 +5596,7 @@ async function joinSession() {
     errEl.textContent = joinFailureMessage(joinErr);
     errEl.classList.add('on');
   } finally {
-    if (btn) { btn.disabled=false; btn.textContent='Join Session'; }
+    if (btn) { btn.disabled=false; btn.textContent='Join show'; }
   }
 }
 
@@ -5519,9 +5605,9 @@ async function joinSession() {
 // The console always gets the real error; the screen says which kind it was.
 function joinFailureMessage(err) {
   console.error('Join failed', err);
-  if (err?.code) return `${firebaseConnectionLabel(err, 'Could not load session')}. Check the connection and try again.`;
+  if (err?.code) return `${firebaseConnectionLabel(err, 'Could not load the show')}. Check the connection and try again.`;
   const detail = String(err?.message || err || '').slice(0, 120);
-  return `Could not open this session${detail ? ` (${detail})` : ''}. Reload the page and try again.`;
+  return `Could not open this show${detail ? ` (${detail})` : ''}. Reload the page and try again.`;
 }
 
 async function joinPreProSession() {
@@ -5580,7 +5666,7 @@ async function joinPreProSession() {
       const snap = await window._getDoc(window._doc(window._db,'sessions',code));
       // A soft-deleted session (dashboard Recently Deleted) reads as gone.
       if (!snap.exists() || snap.data()?.deletedAt) {
-        errEl.textContent = 'Session not found. Check the code and try again.';
+        errEl.textContent = 'No show has that code. Check it and try again.';
         errEl.classList.add('on');
         return;
       }
@@ -5589,7 +5675,7 @@ async function joinPreProSession() {
       const gate = (window.CueolaIdentity && !adminSession) ? await CueolaIdentity.entrySatisfied(snap.data() || {}, 'pp-entry-code') : { pass: true };
       if (!gate.pass) {
         if (gate.needsInput) CueolaIdentity.revealEntryCodeRow('pp-entrycode-row');
-        errEl.textContent = gate.msg || 'This session requires a class login code.';
+        errEl.textContent = gate.msg || 'This show needs a class key.';
         errEl.classList.add('on');
         return;
       }
@@ -5688,6 +5774,12 @@ function loadDemo() {
   show = { name:'Campus News: Demo Show', start:'19:00' };
   beats = DEMO_BEATS.map((b,i)=>({...b, id:i+1})).map(migrateBeat);
   freeTextMode = false;
+  // The demo rows are the undo baseline, not something the first edit added.
+  rundownShadowBeats = cloneRundownValue(beats);
+  rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
+  rundownUndoStack = [];
+  rundownRedoStack = [];
+  rundownHistorySessionCode = session.code;   // so the next real show starts with a clean undo list
   enterRundown();
 }
 
@@ -5710,7 +5802,7 @@ function maybeStageTestShowDeckLayouts(docData) {
 
 function goHome() {
   if (!confirmSaveUnsavedPaperwork()) return;
-  if (!confirm('Go back to the home screen? You can rejoin or reload your session.')) return;
+  if (!confirm(session.code && !session.isDemo && !session.isExpert && !session.local ? 'Go back to the home screen? You can join this show again with its code.' : 'Go back to the home screen?')) return;
   leaveSessionForFrontPage();
 }
 
@@ -5890,7 +5982,7 @@ async function probeSharedSessionAuthority() {
   missingSessionNoticeCode = '';
   rundownSyncBlockedMissing = false;
   setSyncReconnecting(false);
-  setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
+  setCloudSyncState('synced', `Saved · show ${session.code}`);
   if (rundownPendingBatches.length) flushRundownSyncQueue();
   return snap;
 }
@@ -6048,7 +6140,12 @@ function redoRundownEdit() {
 function applyBeatPatch(beat, patch) {
   const next = { ...beat };
   Object.entries(patch || {}).forEach(([key, value]) => {
-    if (key !== 'cues') next[key] = cloneRundownValue(value);
+    if (key === 'cues') return;
+    // A cleared field (a row highlight set back to None, or undone) comes
+    // through as undefined. Drop the key: Firestore refuses to save an
+    // undefined value anywhere in the beats list.
+    if (value === undefined) delete next[key];
+    else next[key] = cloneRundownValue(value);
   });
   if (patch?.cues) {
     next.cues = { ...(beat?.cues || {}) };
@@ -6169,12 +6266,35 @@ async function flushRundownSyncQueue() {
     if (session.code === targetSessionCode && !rundownPendingBatches.length) {
       rundownShadowBeats = cloneRundownValue(beats);
       rundownShadowShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
-      setCloudSyncState('synced', `Cloud sync saved · ${targetSessionCode}`);
+      setCloudSyncState('synced', `Saved · show ${targetSessionCode}`);
     }
   } catch (err) {
     const unavailableKind = err?.cueolaSessionAvailability || (err?.code === 'not-found' ? 'missing' : '');
     if (unavailableKind) {
       markSharedSessionUnavailable(unavailableKind);
+      return;
+    }
+    // Only a change with a value the server can never store (an empty
+    // field). A show that grew past the cloud's size limit also says
+    // invalid-argument, and those changes must stay queued, not be dropped.
+    if (err?.code === 'invalid-argument' && /unsupported field value/i.test(String(err?.message || ''))) {
+      // The server will never take this change, so retrying it forever would
+      // hold back every change after it. Drop it and keep the queue moving.
+      const badIndex = rundownPendingBatches.findIndex(item => item.id === batch.id);
+      if (badIndex >= 0) rundownPendingBatches.splice(badIndex, 1);
+      // Put this screen back in step with the show. Without this the refused
+      // change stays here (and in the saved draft) and nobody else sees it.
+      if (session.code === targetSessionCode && _rundownBaselineSeen) {
+        beats = projectPendingRundownBatches(rundownCloudBeats);
+        rundownShadowBeats = cloneRundownValue(beats);
+        saveLocalDraft();
+        renderRundown();
+        if (document.getElementById('liveshow')?.classList.contains('on')) renderLive();
+        if (!rundownPendingBatches.length) setCloudSyncState('synced', `Saved · show ${targetSessionCode}`);
+      }
+      console.warn('Rundown cloud save dropped a change the server refused.', err);
+      logShow('sync', 'Rundown cloud save dropped one change the server refused (invalid-argument)');
+      toast('One rundown change could not be saved to the show. Your other changes still save.', 6000);
       return;
     }
     reportCloudWriteFailure('Rundown cloud save', err);
@@ -6212,6 +6332,7 @@ function setupFirestore() {
       _sessionActiveIdxAdopted = false;   // the legacy activeIdx mirror waits for the doc to be read
       resetLiveShared();
       _ogCommandQueue = []; _lastDocOgCommandQueue = []; _ogSeenAckKey = ''; _talentReportedBuild = '';   // proto 4 state is per show
+      _flowOpDocControlSeenId = null;   // the Remote Op hand-off starts fresh per show
     }
     if (firestoreUnsub) firestoreUnsub();
     pbStartNotesListener();   // per-note live push (resets itself on session change)
@@ -6239,8 +6360,8 @@ function setupFirestore() {
       // while offline keeps the reconnecting state (set by noteSnapshotArrived
       // below). Queued/in-flight local writes show as saving.
       const snapMeta = snap.metadata || {};
-      if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Cloud sync saving changes...');
-      else if (!snapMeta.fromCache) setCloudSyncState('synced', `Cloud sync connected · ${session.code}`);
+      if (rundownPendingBatches.length || snapMeta.hasPendingWrites) setCloudSyncState('saving', 'Saving…');
+      else if (!snapMeta.fromCache) setCloudSyncState('synced', `Saved · show ${session.code}`);
       try {
         // snap.data() returns a fresh object per call and nothing in this
         // handler mutates it, so adopt the reference: captureSessionSnapshot
@@ -6350,6 +6471,19 @@ function setupFirestore() {
       // them (two operator surfaces used to clobber each other's commands out
       // of the queue; a lagging talent then lost the survivor's seek).
       if (d.prompter && Array.isArray(d.prompter.controlQueue)) _lastDocPrompterControlQueue = d.prompter.controlQueue;
+      // Operator hand-off (Guide: Control ownership). Only the talent block
+      // below applies controls, so the Live window reads it from the doc: a
+      // NEW Remote Op transport command makes Script Op wait five seconds.
+      // A first or cached snapshot only records the id; stops never lock.
+      const lastCtl = d.prompter?.control;
+      const lastCtlId = String(lastCtl?.controlId || '');
+      if (_flowOpDocControlSeenId === null || snapMeta.fromCache) _flowOpDocControlSeenId = lastCtlId;
+      else if (lastCtlId && lastCtlId !== _flowOpDocControlSeenId) {
+        _flowOpDocControlSeenId = lastCtlId;
+        if (lastCtl.source === 'flowmingo-op' && !isPrompterSelfSender(lastCtl.sender) && !isCollaborativePrompterControl(lastCtl.action) && !String(lastCtl.action || '').endsWith('_stop')) {
+          flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
+        }
+      }
       if (d.prompter && typeof d.prompter.text === 'string') {
         const adopted = adoptPrompterSnapshot(d.prompter);
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
@@ -6603,7 +6737,7 @@ function setSyncReconnecting(on, restoredDetail='Cloud sync restored') {
     // scheduled during the previous recovery, or a stale timer hides the chip
     // mid-outage and logs a false "restored".
     if (_syncReconnClearTimer) { clearTimeout(_syncReconnClearTimer); _syncReconnClearTimer = null; }
-    setCloudSyncState('saving', 'Cloud sync reconnecting. Showing last known state…');
+    setCloudSyncState('saving', 'Reconnecting. Showing the last saved version…');
     liveLinkState.noteDegraded('cloud', 'Reconnecting. Showing the last confirmed state');
   }
   if (on !== _syncReconnState) {   // P7: log only the transitions, not every snapshot
@@ -6631,7 +6765,7 @@ function syncToFirestore() {
   rundownShadowBeats = cloneRundownValue(beats);
   rundownShadowShow = currentShow;
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) {
-    if (!session.isDemo) setCloudSyncState('local', session.isExpert ? 'Local-only workspace. Saved in this browser.' : 'Saved locally. Cloud sync unavailable.');
+    if (!session.isDemo) setCloudSyncState('local', session.isExpert ? 'Saved in this browser only.' : 'Saved on this computer only. Not connected to the show.');
     return;
   }
   rundownLocalBatchIds.add(batch.id);
@@ -6641,7 +6775,7 @@ function syncToFirestore() {
     markSharedSessionUnavailable('missing');
     return;
   }
-  setCloudSyncState('saving', 'Cloud sync saving changes...');
+  setCloudSyncState('saving', 'Saving…');
   flushRundownSyncQueue();
 }
 
@@ -6871,7 +7005,7 @@ async function openPersonInfo(name) {
   body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
   actions.innerHTML = `
     <button class="btn-secondary btn-danger-text" onclick="hideModal('personInfoModal');removePersonFromSession(${esc(JSON.stringify(name))})">Remove from Session</button>
-    <button class="btn-primary" onclick="hideModal('personInfoModal')">Done</button>`;
+    <button class="btn-primary" onclick="hideModal('personInfoModal')">Close</button>`;
   showModal('personInfoModal');
 
   // Notes board contributions
@@ -6958,8 +7092,8 @@ function consumeRemoteKey(e) {
 // playout, Shift+Esc is PANIC. Bindings can be overridden per action via
 // localStorage.cueola_keymap = {"playout.go":["G","F13"], …}.
 const KEYMAP = [
-  { id: 'rundown.next',        scope: 'live', group: 'Rundown',  keys: ['ArrowRight', 'ArrowDown'], label: 'Next row',                    run: () => lsNext() },
-  { id: 'rundown.back',        scope: 'live', group: 'Rundown',  keys: ['ArrowLeft', 'ArrowUp'],    label: 'Previous row',                run: () => lsPrev() },
+  { id: 'rundown.next',        scope: 'live', group: 'Rundown',  keys: ['ArrowRight', 'ArrowDown'], label: 'TAKE (next cue)',             run: () => lsNext() },
+  { id: 'rundown.back',        scope: 'live', group: 'Rundown',  keys: ['ArrowLeft', 'ArrowUp'],    label: 'Back',                        run: () => lsPrev() },
   // Pause vs resume resolves against TALENT truth (fresh heartbeat mirror),
   // not the local ptPlaying flag, which only moved once the handshake completed.
   { id: 'prompter.playpause',  scope: 'live', group: 'Prompter', keys: ['Space'],  label: 'Play / pause',                  run: () => sendPrompterControl(_sdPrompterPlayingTruth() ? 'pause' : 'resume') },
@@ -6975,7 +7109,7 @@ const KEYMAP = [
   { id: 'prompter.cue.current',scope: 'live', group: 'Prompter', keys: ['C'],      label: 'Cue prompter to current row',   run: () => sendPrompterControl('seek_row_' + rowDisplayNumber(Math.max(liveActiveCueIndex(), 0))) },
   { id: 'prompter.top',        scope: 'live', group: 'Prompter', keys: ['T'],      label: 'Prompter to top',               run: () => sendPrompterControl('reset') },
   { id: 'prompter.fullscreen', scope: 'live', group: 'Prompter', keys: ['F'],      label: 'Talent fullscreen',             run: () => sendPrompterControl('fullscreen') },
-  { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Reset talent screen',           run: () => sendPrompterControl('reset') },
+  { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Stop prompter, back to top',    run: () => sendPrompterControl('reset') },
   { id: 'prompter.hideui',     scope: 'live', group: 'Prompter', keys: ['H'],      label: 'Hide talent UI',                run: () => sendPrompterControl('hide_interface') },
   { id: 'prompter.mirror',     scope: 'live', group: 'Prompter', keys: ['M'],      label: 'Mirror talent screen',          run: () => sendPrompterControl('mirror') },
   // Punch-in targets the ON AIR row, matching the pop-out's edit-script path
@@ -7041,7 +7175,9 @@ function keymapDispatch(e, phase) {
   if (e.isComposing || e.keyCode === 229) return false;
   const scope = keymapScopeNow();
   if (!scope) return false;
-  if (scope === 'build' && phase === 'down' && !e.repeat && !isTextEditingTarget(e.target) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+  // Cmd+Z undoes the rundown only when nothing sits on top of it (Planda Bear,
+  // the stage plot and cue cards keep their own undo).
+  if (scope === 'build' && phase === 'down' && !e.repeat && !topDialog() && !isTextEditingTarget(e.target) && (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
     consumeRemoteKey(e);
     if (e.shiftKey) redoRundownEdit();
     else undoRundownEdit();
@@ -7235,9 +7371,20 @@ window.cueolaSurfaceBridge = {
   // can flash the dial press red instead of pretending it landed.
   liveSelect: (index, take) => {
     try {
-      const i = Number(index);
+      let i = Number(index);
       if (!Number.isFinite(i) || i < 0 || i >= beats.length) return false;
+      // A stray strip tap on the ON AIR cue must not take it again: that
+      // restarts its cue time and glides the talent back to its top.
+      if (take && liveRuntimeOn() && i === liveSessionState().activeCueIndex) { toast('That cue is already ON AIR. Turn the dial to pick another cue.'); return false; }
       if (take) return jumpToLsCue(i, { confirmed:true });
+      // Turning steps over segment headers and disabled cues, like the arrows.
+      if (beats[i]?.style === 'segment' || liveCueIsDisabled(i)) {
+        // Nothing selected: step from ON AIR, or from above the top row.
+        const sel = liveSelectedCueIndex();
+        const from = sel >= 0 ? sel : liveActiveCueIndex();
+        i = i > from ? liveNextPlayableCueIndex(from) : livePreviousPlayableCueIndex(from);
+        if (i < 0) return false;
+      }
       return setLiveSelectedCue(i, { reason:'deck' }) === i;
     } catch (e) { return false; }
   },
@@ -7379,6 +7526,8 @@ function toggleKeymapRef() {
   // surface's active scope, so the reference and the dispatch cannot drift.
   const scope = keymapScopeNow() === 'live' ? 'live' : 'build';
   const sections = window.CueolaKeymap.sectionsForScope(KEYMAP, scope).map(s => ({ ...s, rows: (s.rows || []).filter(r => r.keys && r.keys.length) })).filter(s => s.rows.length);
+  // Undo and redo are handled in keymapDispatch, not the table: list them here.
+  if (scope === 'build') sections.unshift({ title: 'Rundown', rows: [{ label: 'Undo', keys: ['Cmd+Z'] }, { label: 'Redo', keys: ['Shift+Cmd+Z'] }] });
   // Outrangutan's own screen — read its LIVE bindings so this stays truthful.
   const og = window.Outrangutan && window.Outrangutan._state ? window.Outrangutan._state() : null;
   const sc = og && og.settings && og.settings.shortcuts;
@@ -7386,13 +7535,13 @@ function toggleKeymapRef() {
     const nice = k => String(k) === ' ' ? 'Space' : (String(k).length === 1 ? String(k).toUpperCase() : String(k));
     sections.push({
       title: 'Outrangutan screen',
-      rows: [['GO', sc.go], ['Stop', sc.stop], ['Pause', sc.pause], ['Fade-stop', sc.fadeStop], ['PANIC', sc.panic], ['SFX board', 'Tab']]
+      rows: [['Play / Pause', sc.go], ['Stop', sc.stop], ['Pause', sc.pause], ['Fade out', sc.fadeStop], ['PANIC', sc.panic], ['SFX board', 'Tab']]
         .map(([label, k]) => ({ label, keys: [nice(k)] })),
-      note: 'Rebind inside Outrangutan (Tools ▸ Shortcuts); SFX pads carry per-pad hotkeys.',
+      note: 'Change these in Outrangutan: Settings ▸ Shortcuts. Each SFX pad has its own key.',
     });
   }
   ov.innerHTML = window.CueolaKeymap.referenceHTML({
-    title: scope === 'live' ? 'Keyboard shortcuts: live screen' : 'Keyboard shortcuts: rundown builder',
+    title: scope === 'live' ? 'Keyboard shortcuts: Live' : 'Keyboard shortcuts: rundown',
     sections,
     foot: 'Typing in any field pauses shortcuts.',
   });
@@ -7544,16 +7693,25 @@ document.addEventListener('keydown', e => {
     dismissPaperPreview();
     return;
   }
-  if (['preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal'].includes(top.id)) {
+  if (['preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal'].includes(top.id)) {
     // Esc on a paperwork editor must SAVE first (returnToPaperworkHub runs
     // saveOpenPaperworkSection while the modal is still 'on'), matching the
     // editors' back-button UX. A bare closeDialog dropped the last sub-650ms
     // of typing and every click-only edit since the previous autosave.
+    // Production Notes goes back to the hub too, like its back button.
     e.preventDefault();
     returnToPaperworkHub();
     return;
   }
+  if (top.id === 'paperworkHubModal') {
+    // Esc on the hub does what its back button does, including clearing my
+    // Planda Bear spot, so the crew stops seeing me "In Planda Bear".
+    e.preventDefault();
+    closePlandaBear();
+    return;
+  }
   e.preventDefault();
+  if (top.id === 'editOv') setRundownPresence(null);   // no ghost "Editing now" face
   closeDialog(top.id);
 });
 uiDismissRegister(() => document.getElementById('entryThemePanel'), () => closeEntryThemes(), { isOpen: el => !el.hasAttribute('hidden'), ignore: ['#entryThemeGear'] });
@@ -7573,7 +7731,7 @@ const INFO_POPS = {
   'export-package': {
     title: 'What’s in the export',
     lesson: 'plandabear', section: 'steps',
-    body: 'The PDF package bundles a call sheet for every included group plus the rundown. The checkboxes pick sheets, and the option below adds Production Notes. A preview that hasn’t been saved is stamped “UNVERIFIED PREVIEW”; a saved export carries the session and time it came from, so a printed sheet can always be traced.',
+    body: 'One PDF with the paperwork this show uses, in order: call sheets, schedule, safety plan, positions, rundown, patch sheets and stage plots. Production Notes go in only when <b>Include Production Notes</b> is ticked. If the show has more than one call sheet, tick the ones to print. Every page shows the show name, the date and a page number.',
   },
   // One entry per Planda Bear paperwork section: the ⓘ beside each
   // .prepro-section-title answers "what is this section for" in two breaths,
@@ -7586,7 +7744,7 @@ const INFO_POPS = {
   'plot-sheets': {
     title: 'How the stage plot works',
     lesson: 'plandabear', section: 'steps',
-    body: 'A plot is a birdseye map of one setup, built in layers: Room for the space itself, then Audio, Video, and Lighting for each system. Drag gear from the bank, then use Draw Flow to cable it up: click the source, then the destination, and the arrow shows the signal direction with its connector type. The eye on each layer chip shows or hides that layer for you only. Stage plot exports include exactly the layers you have showing; the full paperwork package always prints every layer. Keep a separate plot per space or show style and switch between them here.',
+    body: 'A plot is a bird’s-eye map of one setup, built in layers: Room for the space itself, then Audio, Video, and Lighting for each system. Drag gear onto the plot, then use Draw Flow to cable it up: click the source, then the destination, and the arrow shows the signal direction with its connector type. The eye on each layer chip shows or hides that layer for you only. Stage plot exports include exactly the layers you have showing; the full paperwork package always prints every layer. Keep a separate plot per space or show style and switch between them here.',
   },
   'cs-event-info': {
     title: 'What Event Info covers',
@@ -7596,7 +7754,7 @@ const INFO_POPS = {
   'cs-location-weather': {
     title: 'Location and weather',
     lesson: 'plandabear', section: 'steps',
-    body: 'Where the show happens, with the full street address so maps work. Venue type tells the crew how much the weather matters. Get forecast fills the card from the shoot date and location, and every value stays editable. The safety plan reuses this forecast for its weather note.',
+    body: 'Where the show happens, with the full street address so maps work. Venue type tells the crew how much the weather matters. Get forecast fills the forecast line from the shoot date and location, and you can edit the line. The safety plan reuses this forecast for its weather note.',
   },
   'cs-access': {
     title: 'Access and crew notes',
@@ -7606,7 +7764,7 @@ const INFO_POPS = {
   'cs-crew': {
     title: 'Crew and talent contacts',
     lesson: 'plandabear', section: 'steps',
-    body: 'Everyone working or appearing on the show, with a way to reach them and a personal call time. Fill from roster copies the saved role assignments so nobody retypes names and positions.',
+    body: 'Everyone working or appearing on the show, with a way to reach them and a personal call time. Fill from roster adds everyone who has a position, so nobody retypes names.',
   },
   'cs-notes': {
     title: 'General notes',
@@ -7621,7 +7779,7 @@ const INFO_POPS = {
   'ps-show-day': {
     title: 'Show day',
     lesson: 'plandabear', section: 'steps',
-    body: 'The show day timeline at a glance. Show day, doors, location, and address follow the call sheet until you type your own value. Crew call and show start never fill themselves in: enter the real times.',
+    body: 'The show day timeline at a glance. Show day, doors, location and address come from the call sheet, so change them there. Call time and show start never fill in on their own: type the real times.',
   },
   'ps-ready': {
     title: 'Ready Before Show',
@@ -7659,9 +7817,9 @@ const INFO_POPS = {
     body: 'Restore replaces the live rundown for everyone in this session with the snapshot you pick. The restore is re-stamped as the newest change, so a machine that was offline can’t undo it when it reconnects. Export a snapshot first if you want a file copy.',
   },
   'join-session': {
-    title: 'Joining a session',
+    title: 'Joining a show',
     lesson: 'start', section: 'steps',
-    body: 'The show code is the production you’re joining. Everyone in it shares the same rundown live. If your class uses login codes, the class code proves who you are; your name is how the crew sees you in presence and notes.',
+    body: 'The show code is the show you are joining. Everyone in it shares the same rundown and paperwork live. If your class uses a class key, it proves who you are. Your name is how the crew sees you on the page and in notes.',
   },
 };
 Object.assign(INFO_POPS, {
@@ -7669,11 +7827,11 @@ Object.assign(INFO_POPS, {
     body: 'Every cue is two beats the director says out loud, in order. The first line sets it up (READY a camera, STANDBY a mic or a look, ROLL a clip). The second line is the go (TAKE the camera, GO on the mic or the look, CUE the talent). Each department has its own words for the two beats, and the labels here use them. Pick from the buttons to fill both lines, or type them the way you would say them.' },
   'cue-cell-video': { title: 'Video cues', lesson: 'cueola-build', section: 'steps', body: 'Which source goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer. A Media wipe covers the change with an animated clip from the switcher.' },
   'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'STANDBY names the source that is next. GO is what happens to it: a mic opens or closes, music goes up to full or under the voices.' },
-  'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'ROLL is how the clip starts. OUT is the plan for getting out when it ends (back to a camera, roll the next clip). Link the clip under More and it rolls by itself when the director takes the row; pre-roll is a countdown before it is on air.' },
+  'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'ROLL is how the clip starts. OUT is the plan for getting out when it ends (back to a camera, roll the next clip). Open Link to playback, pick the clip and check Roll this clip on TAKE. Then it rolls by itself when the director takes the row. Pre-roll is a countdown before it is on air.' },
   'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. Type what it reads so the graphics operator can build it.' },
   'cue-cell-lighting': { title: 'Lighting cues', lesson: 'cueola-build', section: 'steps', body: 'A look is one lighting state, or a cue number on the board. STANDBY has it ready on the board; GO goes to it.' },
   'cue-cell-script': { title: 'Script cues', lesson: 'cueola-build', section: 'steps', body: 'Who reads, and the words they read. STANDBY warns the talent; CUE is their go. The words show big on the prompter.' },
-  'add-row': { title: 'Rows and cues', lesson: 'cueola-build', section: 'know', body: 'A row is one moment of the show, with a name and a length. Each row can hold one cue per department (camera, audio, playback, graphic, lighting, script). A segment is a section title that groups rows; it is never taken.' },
+  'add-row': { title: 'Rows and cues', lesson: 'cueola-build', section: 'know', body: 'A row is one moment of the show, with a name. A Timed row has a set length; a Flex row runs as long as it needs. Each row can hold one cue per department (camera, audio, playback, graphic, lighting, script). A segment is a heading that groups rows. It is never taken.' },
 });
 let _infoPopOpenId = '';
 let _infoPopTrigger = null;
@@ -7720,6 +7878,11 @@ function toggleInfoPop(ev, id) {
   el.querySelector('.info-pop-learn')?.focus({ preventScroll: true });
 }
 uiDismissRegister(() => document.getElementById('infoPop'), () => closeInfoPop(), { ignore: ['.info-btn'] });
+// Planda Bear's gear menu and the notes filter list are popovers too: Esc or a
+// tap outside closes only the popover, not the whole page. Only while their
+// own page is the top one, so a popover behind a preview never eats Esc.
+uiDismissRegister(() => document.querySelector('#paperworkHubModal .plandabear-theme-bar'), () => togglePlandaBearThemes(), { isOpen: el => el.classList.contains('on') && topDialog() === el.closest('.modal-wrap'), ignore: ['#plandabearThemeToggle'] });
+uiDismissRegister(() => document.getElementById('pbNotesFilters'), () => pbCloseFilterMenu(), { isOpen: el => !el.hidden && topDialog() === el.closest('.modal-wrap'), ignore: ['.pb-filter-wrap'] });
 // A fixed-position popover detaches from its anchor the moment the sheet under
 // it scrolls (wheel/trackpad fires no pointerdown) — standard popover behavior
 // is dismiss-on-scroll.
@@ -7765,6 +7928,7 @@ function toggleEditMode() {
   const btn = document.getElementById('editModeBtn');
   if (btn) {
     setSymbolButtonLabel(btn, editMode ? 'action.confirm' : 'action.edit', editMode ? 'Done Editing' : 'Edit');
+    btn.dataset.tip = editMode ? 'Done editing rows' : 'Move and edit rows';
     if (editMode) btn.dataset.state = 'editing';
     else delete btn.dataset.state;
   }
@@ -7855,6 +8019,7 @@ function renderRundown() {
     </td></tr>`;
     renderAddRowBtn(tbody);
     updateBotBar();
+    updateNowNext();
     return;
   }
 
@@ -8039,13 +8204,14 @@ function updateBotBar() {
 }
 
 function updateNowNext() {
+  // Nothing is on air before the first TAKE, and a segment heading never is.
+  // Before the show, STANDBY is the first row that can be taken.
   const active = liveActiveCueIndex();
-  const idx = beats.length ? Math.max(active >= 0 ? active : lsIdx, 0) : -1;
-  const now  = beats[idx];
-  const nextIdx = liveNextPlayableCueIndex(idx);
+  const now = active >= 0 && beats[active]?.style !== 'segment' ? beats[active] : null;
+  const nextIdx = liveNextPlayableCueIndex(active >= 0 ? active : -1);
   const next = nextIdx >= 0 ? beats[nextIdx] : null;
-  setLiveText('nn-now', 'ON AIR → '+(now?now.info:'—'));
-  setLiveText('nn-nxt', 'STANDBY → '+(next?next.info:'—'));
+  setLiveText('nn-now', 'ON AIR → '+(now ? (now.info || 'Untitled row') : 'None'));
+  setLiveText('nn-nxt', 'STANDBY → '+(next ? (next.info || 'Untitled row') : 'None'));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -8122,13 +8288,14 @@ function rowTintChipsHTML(current) {
 }
 
 function removeRow(id) {
-  if (!dangerConfirm(`Remove ${rowConfirmLabel(id)}?`, 'This removes the row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
+  const isSeg = beats.find(x => x.id === id)?.style === 'segment';
+  if (!dangerConfirm(`Delete ${rowConfirmLabel(id)}?`, isSeg ? 'Only the segment heading goes. The rows under it stay.' : 'The row and every cue on it are deleted for everyone in the show.')) return;
   // A parent playback row takes its generated PREP/OUT helper rows with it in
   // the same pass. Deleting a helper row alone removes only that row.
   const helperIds = beats.filter(b => String(b.helperFor || '') === String(id)).map(b => b.id);
   beats = beats.filter(b => b.id !== id && !helperIds.includes(b.id));
   renderRundown(); syncToFirestore();
-  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : 'Row removed.');
+  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : (isSeg ? 'Segment deleted.' : 'Row deleted.'));
 }
 
 function moveRowUp(id) {
@@ -8148,8 +8315,7 @@ function moveRowDown(id) {
 // insertIdx = index to insert at; position = 'before'|'after'
 let _insertIdx = null;
 function addRowAt(idx, position) {
-  _insertIdx = position === 'after' ? idx + 1 : idx;
-  openAddRow();
+  openAddRow(position === 'after' ? idx + 1 : idx);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -8164,13 +8330,16 @@ const AR_TYPE_DESC = {
   script:   'what the talent says',
 };
 
-function openAddRow() {
+function openAddRow(insertAt = null) {
+  // A plain Add Row always lands at the end, even after Esc closed a
+  // Before/After sheet and left its spot behind.
+  _insertIdx = insertAt;
   arCueType = null;
   ['ar-name-input', 'ar-notes-input', 'ar-min', 'ar-sec'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const suggestionGrid = document.getElementById('arNameChips');
   if (suggestionGrid) suggestionGrid.style.display = freeTextMode ? 'none' : '';
   const firstCue = document.getElementById('arFirstCue');
-  if (firstCue) firstCue.innerHTML = Object.keys(CT).map(type => `<button type="button" class="chip ar-cue-chip" id="arcue-${type}" style="--cue-clr:${CT[type].color}" aria-pressed="false" onclick="arSelectFirstCue('${type}',this)"><span class="ar-cue-top">${sfIcon(CT[type].symbol)} ${CT[type].label}</span><span class="ar-cue-desc">${AR_TYPE_DESC[type] || ''}</span></button>`).join('');
+  if (firstCue) firstCue.innerHTML = colOrder.map(type => `<button type="button" class="chip ar-cue-chip" id="arcue-${type}" style="--cue-clr:${CT[type].color}" aria-pressed="false" onclick="arSelectFirstCue('${type}',this)"><span class="ar-cue-top">${sfIcon(CT[type].symbol)} ${COL_META[type].label}</span><span class="ar-cue-desc">${AR_TYPE_DESC[type] || ''}</span></button>`).join('');
   // A new row starts as Flex (no set length); Timed shows the duration.
   arSelectStyle('flex');
   showOverlay('addRowOv');
@@ -8229,7 +8398,7 @@ function arAddRow() {
   hideOverlay('addRowOv');
   renderRundown();
   syncToFirestore();
-  if (arCueType && arStyle !== 'segment' && !freeTextMode) {
+  if (arCueType && arStyle !== 'segment') {
     toast('Row added.');
     setTimeout(() => openCueConfig(newBeat.id, arCueType), 80);
     return;
@@ -8297,9 +8466,9 @@ const CUE_EDITOR = {
     title: 'Video',
     lines: { ready: 'READY', readyHint: 'frame it', take: 'TAKE', takeHint: 'put it on air', readyEg: 'Ready CAM 1 · Wide', takeEg: 'Take CAM 1' },
     pickers: [
-      { key:'src',   label:'Source', chips: () => getSources('video'), custom:'Another source', saveTo:'video' },
-      { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','Close-up','2-shot','OTS'], optional:true },
-      { key:'trans', label:'Transition', chips: () => ['Take','Dissolve','Wipe','Media wipe'], optional:true },
+      { key:'src',   label:'Source', chips: () => getSources('video'), custom:'Another source', saveTo:'video', store:'source' },
+      { key:'shot',  label:'Shot', chips: () => ['Wide','Medium','Close-up','2-shot','OTS'], optional:true, store:'shot' },
+      { key:'trans', label:'Transition', chips: () => ['Take','Dissolve','Wipe','Media wipe'], optional:true, store:'transition' },
     ],
     ready: p => p.src ? `Ready ${p.src}${p.shot ? ` · ${p.shot}` : ''}` : '',
     take:  p => p.src ? `${p.trans || 'Take'} ${p.src}` : '',
@@ -8309,8 +8478,8 @@ const CUE_EDITOR = {
     title: 'Audio',
     lines: { ready: 'STANDBY', readyHint: 'what is next', take: 'GO', takeHint: 'what happens', readyEg: 'Standby Host mic', takeEg: 'Open Host mic' },
     pickers: [
-      { key:'src',    label:'Source', chips: () => getSources('audio'), custom:'Another source', saveTo:'audio' },
-      { key:'action', label:'Action', chips: () => ['Open','Close','Up','Under'] },
+      { key:'src',    label:'Source', chips: () => getSources('audio'), custom:'Another source', saveTo:'audio', store:'source' },
+      { key:'action', label:'Action', chips: () => ['Open','Close','Up','Under'], store:'action' },
     ],
     ready: p => p.src ? `Standby ${p.src}` : '',
     take:  p => p.src ? `${p.action || 'Open'} ${p.src}` : '',
@@ -8342,7 +8511,7 @@ const CUE_EDITOR = {
     title: 'Lighting',
     lines: { ready: 'STANDBY', readyHint: 'the next look', take: 'GO', takeHint: 'go to it', readyEg: 'Standby Warm wash', takeEg: 'Go Warm wash' },
     pickers: [
-      { key:'look', label:'Look', chips: () => ['Warm wash','Desk key','Interview','House up','Blackout'], custom:'Another look, or a board cue number' },
+      { key:'look', label:'Look', chips: () => ['Warm wash','Desk key','Interview','House up','Blackout'], custom:'Another look, or a board cue number', store:'look' },
     ],
     ready: p => p.look ? `Standby ${p.look}` : '',
     take:  p => p.look ? `Go ${p.look}` : '',
@@ -8483,6 +8652,12 @@ function ccPickChip(key, value, el) {
   if (custom && custom.classList.contains('cc-custom-in')) custom.value = '';
   ccRefreshSaveButton(key);
   ccCompose();
+  // A tap that cannot fill a line yet (Media wipe or Close with no source
+  // picked) says so, so the button never looks dead.
+  const ed = CUE_EDITOR[cueConfigType];
+  if (ed && !same && !_ccLinesTouched && !ed.ready(_ccPick) && !ed.take(_ccPick)) {
+    toast(`Pick the ${ed.pickers[0].label.toLowerCase()} first.`);
+  }
 }
 function ccPickInput(key, value, isCustom) {
   _ccPick[key] = String(value || '').trim();
@@ -8505,7 +8680,13 @@ function ccCompose() {
 }
 
 function saveCueConfig() {
-  const b = beats.find(x=>x.id===cueConfigBeatId); if (!b) return;
+  const b = beats.find(x=>x.id===cueConfigBeatId);
+  if (!b) {
+    // Someone else deleted this row while the card was open.
+    hideModal('cueConfigModal'); setRundownPresence(null);
+    toast('That row was deleted by someone else, so this cue was not saved.', 6000);
+    return;
+  }
   if (!b.cues) b.cues = {};
   // Keep whatever an older editor stored on the cell (links, legacy fields):
   // a save must never lose data the dialog no longer shows.
@@ -8553,12 +8734,12 @@ function saveCueConfig() {
 
 function removeCueCfg() {
   const b = beats.find(x=>x.id===cueConfigBeatId); if (!b||!b.cues) return;
-  const cueName = CT[cueConfigType]?.label || cueConfigType || 'cue';
-  if (!dangerConfirm(`Remove ${cueName} from ${rowConfirmLabel(cueConfigBeatId)}?`, 'Only this cue cell is removed. Other cues on the row stay in place.')) return;
+  const cueName = COL_META[cueConfigType]?.label || cueConfigType || 'cue';
+  if (!dangerConfirm(`Delete the ${cueName} cue on ${rowConfirmLabel(cueConfigBeatId)}?`, 'Only this cue goes. The other cues on the row stay.')) return;
   delete b.cues[cueConfigType];
   hideModal('cueConfigModal');
   setRundownPresence(null);
-  renderRundown(); syncToFirestore(); toast('Cue removed.');
+  renderRundown(); syncToFirestore(); toast('Cue deleted.');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -9189,7 +9370,7 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   // tab's own hidden instance echoing is not a listener.
   if (!sentDirect && !(_ogRemoteLiveSeenAt && Date.now() - _ogRemoteLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
     _ogNoListenerToastAt = Date.now();
-    toast('Sent, but no Outrangutan has checked in on this show. On the playout Mac: open Outrangutan, sign in, and Join Session with code ' + session.code + '.');
+    toast('Sent, but no Outrangutan has checked in on this show. On the playback Mac: sign in, press Session on the Outrangutan card, type code ' + session.code + ' and press Open Outrangutan.');
   }
   return true;
 }
@@ -9385,7 +9566,7 @@ function fireOutrangutanTransport(action) {
   }
   const local = window.Outrangutan && window.Outrangutan._local;
   if (local && local.transport && session.code && _ogLocalDesignated(local) && _ogLocalCanDeliver(local) && local.transport(action)) {
-    toast(`Playout: ${action === 'fadeStop' ? 'fade-stop' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
+    toast(`Playout: ${action === 'fadeStop' ? 'fade out' : action === 'panic' ? 'PANIC' : action.toUpperCase()}.`);
     return true;
   }
   return fireOutrangutanCommand(action, '');
@@ -9693,6 +9874,11 @@ function runControlBusAction(target, action, source='bus') {
     if (!isShowCaller()) return null;
     if (action === 'go' || action === 'next') return lsNext() !== false;
     if (action === 'back' || action === 'prev') return lsPrev() !== false;
+    if ((action === 'take' || action === 'abort') && !_rtrtCall) {
+      // No clip is counting down: say so instead of a silent red flash.
+      if (source !== 'control-bus') toast(action === 'take' ? 'No clip is counting down, so there is nothing to roll. To take the next cue, use TAKE in Live or NEXT on the deck.' : 'No clip is counting down, so there is nothing to cancel.');
+      return false;
+    }
     if (action === 'take') return takePlayoutCall(source);
     if (action === 'abort') return abortPlayoutCall(source);
     return false;
@@ -10077,11 +10263,13 @@ function openEdit(id) {
   editId = id;
   editStyle = b.style||'flex';
   editColor = rowTintDef(b) ? rowTintDef(b).id : '';
-  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit Segment Marker' : 'Edit Row';
+  document.getElementById('editTitle').textContent = b.style === 'segment' ? 'Edit segment' : 'Edit row';
+  const delBtn = document.querySelector('#editOv .del-btn');
+  if (delBtn) delBtn.textContent = b.style === 'segment' ? 'Delete this segment' : 'Delete this row';
   let h;
   if (b.style === 'segment') {
     h = `
-      <div class="field"><label class="field-lbl">Section Label</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
+      <div class="field"><label class="field-lbl">Segment name</label><input class="field-in" id="ed-info" value="${esc(b.info||'')}" maxlength="80" placeholder="e.g. Act 1, Opening Block, Break"></div>
       <div class="field"><label class="field-lbl">Notes <span style="color:var(--text3)">(optional)</span></label><input class="field-in" id="ed-notes" value="${esc(b.notes||'')}" maxlength="120"></div>
       ${rowTintChipsHTML(editColor)}`;
   } else {
@@ -10094,7 +10282,7 @@ function openEdit(id) {
           <div style="font-family:var(--mono);color:var(--text3);text-align:center">:</div>
           <input class="field-in" id="ed-sec" type="number" min="0" max="59" value="${b.sec||0}" style="text-align:center;font-family:var(--mono)">
         </div></div>
-      <div class="field"><label class="field-lbl">Style</label>
+      <div class="field"><label class="field-lbl">Kind</label>
         <div class="chip-grid">
           <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
           <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
@@ -10126,13 +10314,21 @@ function closeEdit(e) {
 }
 
 function saveEdit() {
-  const b = beats.find(x=>x.id===editId); if (!b) return;
+  const b = beats.find(x=>x.id===editId);
+  if (!b) {
+    // Someone else deleted this row while the sheet was open.
+    hideOverlay('editOv'); setRundownPresence(null);
+    toast('That row was deleted by someone else, so the change was not saved.', 6000);
+    return;
+  }
   b.info  = document.getElementById('ed-info').value.trim()||b.info;
   b.notes = document.getElementById('ed-notes').value.trim();
   if (editColor) b.color = editColor; else delete b.color;
   if (b.style !== 'segment') {
-    b.min = parseInt(document.getElementById('ed-min')?.value)||0;
-    b.sec = parseInt(document.getElementById('ed-sec')?.value)||0;
+    // 90 seconds saves as 1:30, never shows as 00:90.
+    const totalSec = Math.max(0, (parseInt(document.getElementById('ed-min')?.value)||0) * 60 + (parseInt(document.getElementById('ed-sec')?.value)||0));
+    b.min = Math.floor(totalSec / 60);
+    b.sec = totalSec % 60;
     if (editStyle && editStyle !== 'segment') b.style = editStyle;
   }
   hideOverlay('editOv');
@@ -10143,14 +10339,15 @@ function saveEdit() {
 function v(id) { return document.getElementById(id)?.value?.trim()||''; }
 
 function deleteCue() {
-  if (!dangerConfirm(`Remove ${rowConfirmLabel(editId)}?`, 'This removes the entire row and all cue cells in it. In a shared session, the removal syncs to collaborators.')) return;
+  const isSeg = beats.find(x => x.id === editId)?.style === 'segment';
+  if (!dangerConfirm(`Delete ${rowConfirmLabel(editId)}?`, isSeg ? 'Only the segment heading goes. The rows under it stay.' : 'The row and every cue on it are deleted for everyone in the show.')) return;
   // Mirror removeRow: a parent playback row takes its PREP/OUT helper rows too.
   const helperIds = beats.filter(b => String(b.helperFor || '') === String(editId)).map(b => b.id);
   beats = beats.filter(b => b.id !== editId && !helperIds.includes(b.id));
   hideOverlay('editOv');
   setRundownPresence(null);
   renderRundown(); syncToFirestore();
-  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : 'Row removed.');
+  toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : (isSeg ? 'Segment deleted.' : 'Row deleted.'));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -10166,10 +10363,10 @@ function preLiveCheck() {
   const scriptLabel = !totalRows
     ? 'No rows in the rundown'
     : !cuesWithScript
-      ? `${totalRows} row${totalRows===1?'':'s'} but no script copy yet (rows show dimmed label guidance)`
+      ? `${totalRows} row${totalRows===1?'':'s'} but no script yet`
       : cuesWithScript === totalRows
-        ? `All ${totalRows} row${totalRows===1?'':'s'} have script copy`
-        : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script copy · the rest show dimmed label guidance`;
+        ? `All ${totalRows} row${totalRows===1?'':'s'} have script`
+        : `${cuesWithScript} of ${totalRows} row${totalRows===1?'':'s'} have script · the rest have none yet`;
 
   // Local ping OR any remote sighting counts: heartbeats over the session doc
   // land before the operator runtime starts on first Go Live.
@@ -10186,12 +10383,12 @@ function preLiveCheck() {
   const cloudReady = !!(window._firebaseReady && session.code && !isDemo);
   const cloudOk = isDemo || cloudReady;
   const cloudLabel = isDemo
-    ? 'Demo mode · same-browser sync only'
+    ? 'Demo: changes stay in this browser'
     : !session.code
-      ? 'No show code: cross-device sync off'
+      ? 'No show code: other computers will not see changes'
       : cloudReady
-        ? `Syncing · ${session.code}`
-        : 'Cloud not connected';
+        ? `Connected · show ${session.code}`
+        : 'Not connected';
 
   return {
     script: { ok: scriptOk, label: scriptLabel },
@@ -10258,6 +10455,9 @@ function preflightToggleGroup(id) {
 }
 window.preflightToggleGroup = preflightToggleGroup;
 
+// Plain words for checks whose keys are code names. The keys stay: tests and
+// fix requests address rows by key.
+const PREFLIGHT_LABELS = { 'Cloud round-trip': 'Saving speed', 'Theme & brand assets': 'Colors and logos' };
 function preflightRowHtml(r) {
   const inFlight = !!(r.fixId && r.state === 'pend');
   const fixBtn = r.fix && r.fix.label
@@ -10270,7 +10470,7 @@ function preflightRowHtml(r) {
       <div class="precheck-row ${r.state}" data-key="${esc(r.key)}">
         <div class="precheck-icon">${preflightIcon(r.state)}</div>
         <div class="precheck-body">
-          <div class="precheck-label">${esc(r.label || r.key)}</div>
+          <div class="precheck-label">${esc(r.label || PREFLIGHT_LABELS[r.key] || r.key)}</div>
           <div class="precheck-detail">${esc(r.detail)}</div>
           ${r.fixNote ? `<div class="precheck-fix-note">${esc(r.fixNote)}</div>` : ''}
         </div>
@@ -10305,13 +10505,13 @@ function renderPreflightRows() {
   const goBtn = document.getElementById('goLiveCheckGo');
   if (goBtn) {
     goBtn.disabled = !_preflightReviewOnly && checking;
-    goBtn.textContent = _preflightReviewOnly ? 'Done' : checking ? 'Checking' : (fails || warns || fixing ? 'Continue Anyway' : 'Go Live');
+    goBtn.textContent = _preflightReviewOnly ? 'Close' : checking ? 'Checking' : (fails || warns || fixing ? 'Continue Anyway' : 'Go Live');
   }
   const note = document.getElementById('goLiveCheckNote');
   if (note) note.textContent = checking ? 'Running preflight checks…'
     : fixing ? 'A fix is on its way to the other machine. Wait for the answer, or continue anyway.'
     : fails ? fails + ' check' + (fails === 1 ? '' : 's') + ' failed. Use the fix button on the row, or jump to the item.'
-    : warns ? 'A couple of things aren\'t set yet. Review before going live.'
+    : warns ? (warns === 1 ? 'One thing is not set yet. Review it before going live.' : warns + ' things are not set yet. Review them before going live.')
     : 'Every check passed. You\'re clear to go live.';
   const title = document.getElementById('goLiveCheckTitle');
   if (title) title.textContent = _preflightReviewOnly ? 'Show preflight' : 'Ready to go live?';
@@ -10529,7 +10729,7 @@ function recheckPreflightRow(key, f, id) {
         const pct = _talentMirrorFresh() && Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : null;
         if (answered && pct !== null && pct <= 2) return finish('ok', 'Talent script is at the top');
         if (!final) return false;
-        return finish('warn', !answered ? 'The talent display answered, but no heartbeat has landed since'
+        return finish('warn', !answered ? 'The talent display got the request but has not checked in since'
           : pct === null ? 'The talent display answered but has not reported its position yet'
           : 'The talent display answered but still reports ' + pct + '%. Press the fix again', '');
       }
@@ -10558,9 +10758,9 @@ function recheckPreflightRow(key, f, id) {
       } else {
         r.fix = { label: 'Reload talent display', remote: { target: 'talent', kind: 'reload', extra: _talentFixAddress() } };
       }
-      return finish('warn', 'The talent display answered the nudge but no heartbeat has landed since. Reload it', 'A reload keeps the show code and re-links on its own when that laptop is signed in');
+      return finish('warn', 'The talent display got the nudge but has not checked in since. Reload it', 'A reload keeps the show code and re-links on its own when that laptop is signed in');
     };
-    if (verdict(false) === false) waitFor('Answered. Waiting for the next talent heartbeat', r.key === 'Talent build' ? 20000 : 8000, verdict);
+    if (verdict(false) === false) waitFor('Got it. Waiting for the talent display to check in', r.key === 'Talent build' ? 20000 : 8000, verdict);
     return;
   }
   if (f.target === 'playout') {
@@ -10571,12 +10771,12 @@ function recheckPreflightRow(key, f, id) {
         const b = _buildRowState('Air', outrangutanState.live?.build);
         if (fresh && b.state === 'ok') return finish('ok', b.detail);
         if (!final) return false;
-        return finish('warn', fresh ? b.detail : 'The Air reloaded but is not publishing status yet. Open Outrangutan there and join ' + (session.code || 'this show'));
+        return finish('warn', fresh ? b.detail : 'The Air reloaded but is not reporting yet. Open Outrangutan there and join ' + (session.code || 'this show'));
       }
       if (kind === 'rejoin') {
         if (fresh) { _setRemotePlayoutMachineRow(out); r.fixId = ''; renderPreflightRows(); return true; }
         if (!final) return false;
-        return finish('fail', 'The Air answered but is not publishing status yet. Open Outrangutan there and join ' + (session.code || 'this show'));
+        return finish('fail', 'The Air answered but is not reporting yet. Open Outrangutan there and join ' + (session.code || 'this show'));
       }
       if (kind === 'openOutput') {
         if (out && out.status === 'ready') { _setRemotePlayoutMachineRow(out); r.fixId = ''; renderPreflightRows(); return true; }
@@ -10585,9 +10785,9 @@ function recheckPreflightRow(key, f, id) {
       }
       if (kind === 'syncMedia') {
         const missing = Number(out?.kioskMediaMissing || 0);
-        if (out && missing === 0) return finish('ok', 'Kiosk media synced' + (f.result ? ': ' + f.result : ''));
+        if (out && missing === 0) return finish('ok', 'Kiosk media is up to date' + (f.result ? ': ' + f.result : ''));
         if (!final) return false;
-        return finish('fail', out ? preflightCleanDetail(out.detail) : 'The Air synced but has not published its output status yet', f.result || '');
+        return finish('fail', out ? preflightCleanDetail(out.detail) : 'The Air copied the media but has not reported its outputs yet', f.result || '');
       }
       if (kind === 'preflight') {
         const rep = outrangutanState.preflight;
@@ -10611,7 +10811,7 @@ function recheckPreflightRow(key, f, id) {
       }
       return finish('ok', 'Done on the Air' + (f.result ? ': ' + f.result : ''));
     };
-    if (verdict(false) === false) waitFor('Done on the Air. Waiting for its next status packet', r.key === 'Air build' ? 20000 : 5000, verdict);
+    if (verdict(false) === false) waitFor('Done on the Air. Waiting for it to report back', r.key === 'Air build' ? 20000 : 5000, verdict);
     return;
   }
   if (f.target === 'keywi') {
@@ -10859,7 +11059,7 @@ function _cueTalentToTopFix(r) {
   try { dispatchPrompterCommand(buildPrompterControl('reset', 'script-op'), 'live', true); } catch {}
   if (fixSessionRef()) { sendFixRequest(r.key, 'talent', 'top', _talentFixAddress()); return; }
   sendPrompterControl('reset');
-  r.state = 'pend'; r.fixId = 'local_reset'; r.detail = 'Cue to top sent. Waiting for the talent heartbeat';
+  r.state = 'pend'; r.fixId = 'local_reset'; r.detail = 'Cue to top sent. Waiting for the talent display to check in';
   renderPreflightRows();
   const run = _preflightRun;
   steadyTimeout(() => {
@@ -11152,7 +11352,7 @@ function _connectObsFix(r, run) {
   try { obs.connect(); } catch {}
   steadyTimeout(() => {
     const st = obsSystemStatus();
-    _localFixSettle(r, id, run, st ? { state: st.state, detail: st.detail + (st.state === 'ok' ? '' : (obs.lastError?.() ? '. ' + obs.lastError() : '')), fix: st.state === 'ok' ? null : { label: 'Connect OBS', run: _connectObsFix } } : { state: 'warn', detail: 'OBS did not answer' });
+    _localFixSettle(r, id, run, st ? { state: st.state, detail: st.detail, fix: st.state === 'ok' ? null : { label: 'Connect OBS', run: _connectObsFix } } : { state: 'warn', detail: 'OBS did not answer' });
   }, 4000);
 }
 function _talkbackHowFix() {
@@ -11206,7 +11406,7 @@ function _remoteFirstGoRow(armed) {
 }
 function _applyFirstGoArmed(armed) {
   if (!armed) {
-    setPreflightRow('Playout first GO', { state: 'warn', detail: 'Arming failed. Fire one GO before air to prove playback', fix: { label: 'Arm again', run: _armAgainFix } });
+    setPreflightRow('Playout first GO', { state: 'warn', detail: 'Playback did not get ready. Roll one clip before the show to test it', fix: { label: 'Arm again', run: _armAgainFix } });
     return;
   }
   const bits = [];
@@ -11219,16 +11419,16 @@ function _applyFirstGoArmed(armed) {
 // Cloud round-trip verdict; a failed echo gets Retry, a second failure gets
 // Reconnect (the Live rail's sync recovery).
 function _applyCloudRoundTrip(rtt, attempt) {
-  if (rtt >= 0) { setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Write → server ack in ' + rtt + ' ms', fix: null }); return; }
+  if (rtt >= 0) { setPreflightRow('Cloud round-trip', { state: rtt < 2500 ? 'ok' : 'warn', detail: 'Test save confirmed in ' + rtt + ' ms', fix: null }); return; }
   const retry = { label: 'Retry', run: (r, run) => {
-    const id = _localFixStart(r, 'Writing a ping and waiting for the server echo…');
+    const id = _localFixStart(r, 'Sending a test save…');
     preflightCloudRoundTrip().then(v => { if (run !== _preflightRun || r.fixId !== id) return; r.fixId = ''; _applyCloudRoundTrip(v, attempt + 1); renderPreflightRows(); });
   } };
   const reconnect = { label: 'Reconnect', run: (r, run) => {
     const id = _localFixStart(r, 'Reconnecting to the cloud');
     Promise.resolve(recoverLiveSubsystem('sync')).catch(() => {}).then(() => preflightCloudRoundTrip()).then(v => { if (run !== _preflightRun || r.fixId !== id) return; r.fixId = ''; _applyCloudRoundTrip(v, 0); renderPreflightRows(); });
   } };
-  setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Write failed. Check the connection' : 'No server echo within 8 s. Sync may be degraded', fix: attempt > 0 ? reconnect : retry });
+  setPreflightRow('Cloud round-trip', { state: 'fail', detail: rtt === -1 ? 'Test save failed. Check the connection' : 'No answer in 8 seconds. Saving may be slow', fix: attempt > 0 ? reconnect : retry });
 }
 async function resolveDeckPreflightRow(run) {
   const sd = window.CueolaStreamDeck;
@@ -11356,7 +11556,7 @@ async function preflightThemeAssets() {
   } catch (e) { svgWarn = 'brand SVG unreachable (offline?). In-page sprite still renders'; }
   if (notes.length) return { state: 'fail', detail: notes.join(' · ') };
   if (svgWarn) return { state: 'warn', detail: svgWarn };
-  return { state: 'ok', detail: 'Theme “' + currentTheme + '” tokens live · brand sprite + SVG present' };
+  return { state: 'ok', detail: 'Colors and logos loaded (' + (CUEOLA_THEME_LABELS[currentTheme] || currentTheme) + ' theme)' };
 }
 
 // Jump from a failing preflight row straight to the rundown row it points at.
@@ -11513,6 +11713,7 @@ function leaveLiveSessionScreen(liveState, context={}) {
   if (context.failure) throw context.failure;
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('rundown').classList.add('on');
+  updateNowNext();   // the bottom bar names the row that is on air now
   sessionStorage.setItem('cueola_screen','build');
   pushSessionHistoryState('build');
   logShow('session', 'Left live → build screen');
@@ -11859,11 +12060,11 @@ async function applyLiveExitOutputs(outputs, choices={}) {
 }
 
 function liveExitSavedStateLabel() {
-  if (session.isDemo || session.isExpert || !window._firebaseReady) return 'Saved locally';
+  if (session.isDemo || session.isExpert || !window._firebaseReady) return 'Saved on this computer';
   const dot = document.getElementById('syncDot');
-  if (rundownPendingBatches.length || _syncReconnState || dot?.classList.contains('saving')) return 'Saved locally · cloud sync pending';
-  if (dot?.classList.contains('error') || dot?.classList.contains('off') || dot?.classList.contains('local')) return 'Saved locally · cloud sync unavailable';
-  return 'Cloud saved';
+  if (rundownPendingBatches.length || _syncReconnState || dot?.classList.contains('saving')) return 'Still saving';
+  if (dot?.classList.contains('error') || dot?.classList.contains('off') || dot?.classList.contains('local')) return 'Saved on this computer only';
+  return 'Saved';
 }
 
 // Leave live. Outputs FIRST (the talent hold and any requested Air stop),
@@ -12034,6 +12235,7 @@ function toggleShowClock(opts={}) {
 // where the session is parked. Before this, the only way back to row 1 was
 // Admin → Restart Show Clock with a typed RESTART confirm.
 function liveStartShowPressed() {
+  blurLiveControl();
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!canDriveShowClock()) {
     toast('Only the director runs the show clock.');
@@ -12081,7 +12283,7 @@ function lsStartFromHere() {
 // back to the first row — so you can leave live, restart, and go live again to
 // take it from the top. Syncs the reset to any followers.
 function restartShowClock() {
-  if (!dangerConfirm('Restart the show clock for this session?', 'This stops the clock, resets it to 0:00, jumps back to the first row, and broadcasts the reset to synced collaborators.', { requireText:'RESTART' })) return;
+  if (!dangerConfirm('Restart the show clock?', 'This stops the clock and sets it to 0:00 for everyone. When you are the director, it also moves the show back to the first row.', { requireText:'RESTART' })) return;
   stopTimer(false);
   liveClockRunning = false;
   elapsedSecs = 0;
@@ -12090,9 +12292,17 @@ function restartShowClock() {
   // Same as goLive: never park the live position on a leading segment marker
   while (restartIdx >= 0 && restartIdx < beats.length && beats[restartIdx]?.style === 'segment') restartIdx++;
   if (restartIdx >= beats.length) restartIdx = beats.length ? beats.length - 1 : -1;
+  let movedRoom = true;
   if (restartIdx >= 0) {
     if (liveRuntimeOn()) takeCue(restartIdx, 'restart-show', { fire:false, logVerb:'Restart → from the top' });
-    else setOperatorLiveCue(restartIdx, 'restart-show');
+    else {
+      setOperatorLiveCue(restartIdx, 'restart-show');
+      // Off Live the room still has to hear it: without this everyone else stays
+      // on the old cue, and a reload here brings the old cue back.
+      if (isShowCaller()) publishLiveTake(liveShared.take(restartIdx, { nowMs: liveServerNow(), reason: 'restart-show' }).patch);
+      else movedRoom = false;
+      updateNowNext();
+    }
   }
   setLiveText('ls-timer', fmtProductionClock(0));
   document.getElementById('ls-timer')?.classList.remove('warn');
@@ -12102,7 +12312,7 @@ function restartShowClock() {
   if (document.getElementById('liveshow')?.classList.contains('on')) { renderLive(); sendToPrompter(false); }
   broadcastShowClock();  // reset everyone's clock to 0:00 / stopped
   closeAdminPanel();
-  toast('Show restarted: clock at 0:00, back to the top.');
+  toast(movedRoom ? 'Show restarted: clock at 0:00, back to the top.' : 'Show clock is back at 0:00. Only the director can move the show back to the top.');
 }
 
 function getPrompterPayload(isInit=false) {
@@ -12195,7 +12405,8 @@ function scriptSpeakerLabel(d) {
   const explicit = d?.speaker || d?.customSrc || d?.who || '';
   if (explicit) return explicit;
   const cue = getCueOff(d) || getCueOn(d);
-  return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').trim();
+  // Strip the line's verb too ('Cue Host' reads as HOST, not CUE HOST).
+  return String(cue || '').replace(/\s+[—·]\s*Begin\s*$/i, '').replace(/^(cue|standby)\s+/i, '').trim();
 }
 
 // EVERY playable row is emitted, script copy or not. Rows without copy carry
@@ -12318,14 +12529,14 @@ function updateLiveOverview() {
   const nextIdx = liveNextPlayableCueIndex(activeIdx);
   const next = nextIdx >= 0 ? beats[nextIdx] : null;
   const total = totalSecs();
-  const remain = liveRemainingSecs();
   const progress = total ? Math.min(100, Math.max(0, elapsedSecs / total * 100)) : (beats.length ? (activeIdx+1)/beats.length*100 : 0);
   const setText = setLiveText;
+  // A stopped clock is never painted by the ticker: show it in the house format.
+  if (!liveClockRunning) setText('ls-timer', fmtProductionClock(elapsedSecs * 1000));
   setText('ls-show-title', show.name || 'Untitled Show');
   setText('ls-show-sub', `${beats.length ? `Row ${Math.min(rowDisplayNumber(activeIdx), rowDisplayTotal())} of ${rowDisplayTotal()}` : 'No rows'}${session.code&&!session.isExpert ? ` · ${session.code}` : ''}`);
   setText('ls-stat-now', cur ? cur.info || `Row ${rowDisplayNumber(activeIdx)}` : '—');
   setText('ls-stat-next', next ? next.info || `Row ${rowDisplayNumber(nextIdx)}` : 'End of show');
-  setText('ls-stat-remain', remain ? fmtProductionClock(liveRemainingMs()) : '—');
   // Time on the ON AIR cue: server-time arithmetic against the take stamp.
   const rec = liveShared.get();
   const cueDur = cur ? window.CueolaLiveState.cueSeconds(cur) : 0;
@@ -12552,7 +12763,7 @@ function liveRowPreview(idx) {
   const titleEl = document.getElementById('lrpTitle');
   const bodyEl  = document.getElementById('lrpBody');
   if (!titleEl||!bodyEl) return;
-  titleEl.textContent = `${idx+1}. ${b.info||'—'}`;
+  titleEl.textContent = `${b.style === 'segment' ? '' : rowDisplayNumber(idx) + '. '}${b.info||'Untitled row'}`;
   const types = Object.keys(b.cues||{}).filter(t=>CT[t]);
   let html = '';
   if (b.notes) html += `<div style="color:var(--text2);font-size:13px;margin-bottom:12px;line-height:1.5">${esc(b.notes)}</div>`;
@@ -12622,7 +12833,7 @@ function liveCellForBeat(b, type, beatIdx) {
   const isScript = type === 'script';
   const scriptText = isScript ? scriptCueText(d) : '';
   const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
-  if (!on && !off && !scriptMeta) return `<div class="live-cue-empty">·</div>`;
+  if (!on && !off && !scriptMeta && !(type === 'playback' && outrangutanCellLinked(d))) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
   // D11.4: linked playout rows carry the badge (cue name · ON AIR · live
@@ -12675,7 +12886,7 @@ function liveCueOperationLine(operation, text, className='', style='', cueType='
 function focusCuesForBeat(b) {
   const filled = colOrder.filter(type => {
     const d = b.cues?.[type];
-    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)));
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)) || (type === 'playback' && outrangutanCellLinked(d)) || ((type === 'playback' || type === 'audio') && (d.outPadId || d.outPadName)));
   });
   if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
   return `<div class="lf-cues">` + filled.map(type => {
@@ -12709,6 +12920,14 @@ const LIVE_ROW_STATE_LABEL = Object.freeze({
   completed:'Done', skipped:'Skipped', failed:'Failed', disabled:'Disabled',
 });
 
+// After a Back or a Cue to an earlier row, ON AIR and the rows below it air
+// again: they are not dimmed, and read Standby / Later instead of the Done or
+// Skipped they got the first time. Display only; the run history is unchanged.
+function liveRowShownStatus(index, activeIdx) {
+  const status = liveCueExecutionStatus(index);
+  return activeIdx >= 0 && index >= activeIdx && (status === 'completed' || status === 'skipped') ? 'upcoming' : status;
+}
+
 // One quiet pill per row, in the original show vocabulary: the active row is
 // On Air, the next playable row is Next, everything else Later — with the run
 // ledger's terminal states (Done / Skipped / Failed / Disabled) kept intact.
@@ -12722,7 +12941,7 @@ function liveRowStateChips(index, options={}) {
   const failureTitle = execution.failure ? ` data-tip="${esc(execution.failure)}"` : '';
   if (isActive) {
     chips.push('<span class="live-status now">On Air</span>');
-  } else if (LIVE_ROW_STATE_LABEL[execution.status]) {
+  } else if (LIVE_ROW_STATE_LABEL[execution.status] && liveRowShownStatus(index, state.activeCueIndex) !== 'upcoming') {
     const cls = execution.status === 'completed' ? 'done' : execution.status;
     chips.push(`<span class="live-status ${cls}"${failureTitle}>${LIVE_ROW_STATE_LABEL[execution.status]}</span>`);
   } else if (index === liveNextPlayableCueIndex(state.activeCueIndex)) {
@@ -12797,7 +13016,7 @@ function renderLiveFocus() {
 
   if (next) {
     html += `<div class="lf-next" onclick="liveRowPreview(${nextBeatIdx})">
-      <span class="lf-next-badge">NEXT</span>
+      <span class="lf-next-badge">STANDBY</span>
       <span class="lf-next-name">${helperRoleTagHTML(next)}${esc(next.info || '—')}</span>
       <span class="lf-next-time">${fmtDur(next)}</span>
     </div>`;
@@ -12813,8 +13032,8 @@ function renderLiveFocus() {
       if (b.style === 'segment') {
         return `<div class="lf-up-seg">${esc(b.info || 'Segment')}</div>`;
       }
-      const execution = liveCueExecutionStatus(i);
-      return `<div class="lf-up-row live-row-${execution}${i === liveSelectedCueIndex() ? ' live-row-selected' : ''}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" role="button" tabindex="0" aria-label="Select row ${i + 1}; ${execution}">
+      const execution = liveRowShownStatus(i, liveActiveCueIndex());
+      return `<div class="lf-up-row live-row-${execution}${i === liveSelectedCueIndex() ? ' live-row-selected' : ''}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" role="button" tabindex="0" aria-label="Select row ${rowDisplayNumber(i)}; ${execution}">
         <span class="lf-up-num">${rowDisplayNumber(i)}</span>
         <span class="lf-up-name">${helperRoleTagHTML(b)}${esc(b.info || '—')}</span>
         <span class="lf-up-time">${fmtDur(b)}</span>
@@ -12833,6 +13052,7 @@ function updateLiveFocusToggle() {
 }
 
 function toggleLiveFocus() {
+  blurLiveControl();
   liveFocusMode = !liveFocusMode;
   try { localStorage.setItem('cueola_live_focus', liveFocusMode ? '1' : '0'); } catch {}
   renderLive();
@@ -12865,7 +13085,7 @@ function renderLive() {
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
   // Only show department columns actually used in this show — no empty lanes.
-  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))); }));
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))||(type==='playback'&&outrangutanCellLinked(d))); }));
   const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">
@@ -12898,17 +13118,18 @@ function renderLive() {
     const isCur = i === activeIdx;
     const execution = liveCueExecution(i);
     const isDisabled = execution.status === 'disabled';
+    const shownStatus = liveRowShownStatus(i, activeIdx);
     const rowClass = [
-      `live-row-${execution.status}`,
+      `live-row-${shownStatus}`,
       isCur ? 'live-row-active live-row-current' : '',
       i === selectedIdx ? 'live-row-selected' : '',
       isHelperBeat(b) ? `live-row-helper helper-${b.helperRole}` : '',
       rowTintClass(b).trim(),
     ].filter(Boolean).join(' ');
     const goButton = canJump && !isCur && !isDisabled && execution.status !== 'failed'
-      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Activate row ${rowDisplayNumber(i)}" aria-label="GO row ${rowDisplayNumber(i)}">GO</button>`
+      ? `<button type="button" class="live-row-go" onclick="activateLiveRundownRow(event,${i})" data-tip="Cue to row ${rowDisplayNumber(i)}" aria-label="Cue to row ${rowDisplayNumber(i)}">CUE</button>`
       : '';
-    html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${rowDisplayNumber(i)}, ${esc(b.info || 'untitled')}, ${execution.status}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
+    html += `<tr class="${rowClass}" onclick="selectLiveRundownRow(event,${i})" onkeydown="selectLiveRundownRow(event,${i})" tabindex="${isDisabled ? '-1' : '0'}" aria-selected="${i === selectedIdx ? 'true' : 'false'}" aria-disabled="${isDisabled ? 'true' : 'false'}" aria-label="Row ${rowDisplayNumber(i)}, ${esc(b.info || 'untitled')}, ${shownStatus}${isCur ? ', active' : ''}${i === selectedIdx ? ', selected' : ''}">
       <td><div class="live-num">${rowDisplayNumber(i)}</div></td>
       <td><div class="live-row-states">${liveRowStateChips(i)}</div>${goButton}</td>
       <td>
@@ -13179,6 +13400,7 @@ function lsBrowseAsFollower(direction) {
 }
 
 function lsNext() {
+  blurLiveControl();   // a mouse press must not leave focus on a button: Space would press it again
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!isShowCaller()) return lsBrowseAsFollower(1);
   detachIfFollowing();
@@ -13199,12 +13421,13 @@ function rowLogLabel(b) {
 }
 
 function lsPrev() {
+  blurLiveControl();
   if (!liveCommandDispatchAllowed({ notify:true })) return false;
   if (!isShowCaller()) return lsBrowseAsFollower(-1);
   detachIfFollowing();
   const fromIdx = liveActiveCueIndex();
   const ni = livePreviousPlayableCueIndex(fromIdx);
-  if (ni < 0) return false;
+  if (ni < 0) { toast('This is the first cue. There is nothing to go back to.'); return false; }
   // Backward: the bare verb, so the talent glides back to the row (on the
   // talent an advance never travels backward, so Back must not be one).
   return takeCue(ni, 'previous-cue', { fire:false, logVerb:'Back' });
@@ -13318,7 +13541,7 @@ function renderShowCallerBadge() {
     const label = chip.querySelector('.rd-caller-label') || chip;
     label.textContent = model.chipText;
     chip.setAttribute('data-tip', model.title);
-    chip.setAttribute('aria-label', `${model.chipText}. Tap to choose who calls the show`);
+    chip.setAttribute('aria-label', `${model.chipText}. Tap to choose the director`);
   }
 }
 
@@ -13345,7 +13568,7 @@ function renderCallerBanner() {
   const tag = document.getElementById('roleTag');
   if (tag && session.code && !session.isExpert) {
     if (held) {
-      tag.textContent = 'CALLER';
+      tag.textContent = 'DIRECTOR';
       tag.className = 'role-badge role-inst';
     } else {
       // Revoke restores the plain role: enterRundown writes it only once.
@@ -13501,7 +13724,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       delete wireMessage.state.effectiveSpeed;
     }
   }
-  projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Output returned · restoring state' : 'Output connected · applying state');
+  projectPrompterSessionStatus('connected', reason === 'recovery' ? 'Talent screen is back. Catching it up' : 'Talent screen connected. Sending the script');
   _postPrompterMessage(wireMessage);
   if (window._firebaseReady && session.code && !session.isDemo && window._updateDoc) {
     // Honest doc copy: with no fresh talent mirror there is no position or
@@ -13526,7 +13749,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       'prompter.sender':FLOWMINGO_ENDPOINT_ID,
       'prompter.senderClient':CLIENT_ID,
     }).catch(err => {
-      projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Flowmingo state sync failed'));
+      projectPrompterSessionStatus('error', firebaseConnectionLabel(err, 'Could not update the talent screen'));
     });
   }
   clearTimeout(_prompterHandshakeTimer);
@@ -13541,7 +13764,7 @@ function sendPrompterStateSnapshot(outputInstanceId, reason='ready', scope) {
       sendPrompterStateSnapshot(outputInstanceId, 'resend', 'sync');
       return;
     }
-    projectPrompterSessionStatus('recovering', 'Output did not acknowledge the state snapshot');
+    projectPrompterSessionStatus('recovering', 'The talent screen did not answer. Trying again');
   }, PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD);
   return message;
 }
@@ -13889,8 +14112,8 @@ function _adoptDocPrompterSession(d) {
   logShow('prompter', `Prompter takeover: another operator surface re-seeded the session (${docSid}). This window joined it`);
   if (_prompterOperatorRuntimeActive && Date.now() - _lastPrompterTakeoverNoticeTs > 10000) {
     _lastPrompterTakeoverNoticeTs = Date.now();
-    toast('Another operator window took the prompter. This window joined their session.');
-    markLivePrompterStatus('Joined the other operator’s prompter session', 'ok');
+    toast('Another operator window took the prompter. This window now follows it.');
+    markLivePrompterStatus('Following the other operator', 'ok');
   }
 }
 
@@ -14114,7 +14337,7 @@ function _setPrompterStatus(connected, unavailable=false) {
     const truth = _talentStatusLine();
     projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', truth || (ready ? (ptPlaying ? 'Talent scrolling' : pausedLabel) : 'Talent connected · applying state'));
   } else {
-    projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'Talent heartbeat expired' : 'Waiting for Flowmingo output');
+    projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'The talent screen stopped answering' : 'Waiting for the talent screen');
   }
 }
 
@@ -14721,7 +14944,7 @@ async function scriptOperatorExecuteCommand(command) {
       const applied = scriptOperatorApplyPreview(action);
       return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
     }
-    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
       return { ok:false, error:'Flowmingo Op currently owns transport controls' };
     }
     const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
@@ -14750,7 +14973,7 @@ async function scriptOperatorExecuteCommand(command) {
     // Transport over the doc path is delivery, not a promise the talent
     // applied it: the ack (prompter.controlAck) drives 'applied' separately.
     const viaDoc = sent !== false && !isCollaborativePrompterControl(action) && prompterControlDocPathAvailable(null);
-    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the session' : prompterControlLabel(action) + ' sent' };
+    return { ok:true, queued:sent === false, detail:sent === false ? 'Queued until talent is ready' : viaDoc ? 'Sent to the prompter' : prompterControlLabel(action) + ' sent' };
   }
   if (kind === 'draft') {
     const text = String(data.text || '').slice(0, 500000);
@@ -14758,7 +14981,7 @@ async function scriptOperatorExecuteCommand(command) {
     livePrompterDraftVersion += 1;
     adoptPrompterText(text, { forceEditor:true, source:'script-op-popout' });
     markLivePrompterStatus('Draft held', 'busy');
-    return { ok:true, detail:'Draft synchronized' };
+    return { ok:true, detail:'Draft held in Live' };
   }
   if (kind === 'push') {
     const text = String(data.text || '').slice(0, 500000);
@@ -14890,7 +15113,7 @@ function startScriptOperatorHost(identity) {
     if (!_scriptOpHost.checkHeartbeat()) {
       if (!_scriptOpDisconnectAnnounced) {
         _scriptOpDisconnectAnnounced = true;
-        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost, resyncing');
+        setLiveSubsystemStatus('scriptOperator', 'disconnected', 'The Script Op pop-out stopped answering. Reconnecting');
         logShow('error', 'Script Operator disconnected · missed three heartbeats · automatic resync attempt');
         console.warn('[Script Operator] Heartbeat lost', status);
         // D11.8 (Jul 17 pop-out death): checkHeartbeat just cleared
@@ -14951,7 +15174,7 @@ function syncScriptOperatorSubsystemStatus() {
     setLiveSubsystemStatus('scriptOperator', 'closed', 'Script Operator window closed');
     return;
   }
-  if (status.timedOut) setLiveSubsystemStatus('scriptOperator', 'disconnected', 'Script Operator heartbeat lost');
+  if (status.timedOut) setLiveSubsystemStatus('scriptOperator', 'disconnected', 'The Script Op pop-out stopped answering');
   else if (status.ready) setLiveSubsystemStatus('scriptOperator', 'ready', 'Script Operator synchronized');
   else if (status.connected) setLiveSubsystemStatus('scriptOperator', 'connecting', 'Applying Script Operator state');
   else setLiveSubsystemStatus('scriptOperator', 'opening', 'Opening Script Operator window');
@@ -15125,7 +15348,7 @@ function queueLivePrompterDraftPush() {
 }
 
 function clearPrompter() {
-  if (!dangerConfirm('Clear Flowmingo text?', 'This pushes an empty script to the talent display for this session.', { requireText:'CLEAR' })) return;
+  if (!dangerConfirm('Clear the script?', 'This sends an empty script to the prompter.', { requireText:'CLEAR' })) return;
   adoptPrompterText('', { forceEditor:true, source:'cleared' });
   livePrompterDraftDirty = false;
   sendToPrompter(true); // reset scroll on clear
@@ -15269,7 +15492,7 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     if (!_pendingPrompterControls[control.controlId]) return;
     const pending = _pendingPrompterControls[control.controlId];
     delete _pendingPrompterControls[control.controlId];
-    pending?.settle?.({ ok:false, acknowledged:false, error:`Flowmingo talent did not acknowledge ${label.toLowerCase()}` });
+    pending?.settle?.({ ok:false, acknowledged:false, error:`${label} was sent, but the talent screen did not answer` });
     markPrompterToggleState(control.action, 'failed');
     if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
     else markLivePrompterStatus('No talent ack', 'busy');
@@ -15541,7 +15764,7 @@ function launchWorkspace() {
   };
   let blocked = 0;
   if (talent && !openFlowmingoTalentWindow({ code, fallbackInPage: false })) blocked++;
-  if (plandabear && !openPlaced(`index.html?code=${encodeURIComponent(code)}&prepro=1`, 'cueola-plandabear-' + code, 'plandabear')) blocked++;
+  if (plandabear && !openPlaced(`index.html?app=plandabear&code=${encodeURIComponent(code)}`, 'cueola-plandabear-' + code, 'plandabear')) blocked++;
   if (outrangutan && !openPlaced(`index.html?app=outrangutan&code=${encodeURIComponent(code)}`, 'cueola-outrangutan-' + code, 'outrangutan')) blocked++;
   if (keywi && !openPlaced(`index.html?app=keywibird&code=${encodeURIComponent(code)}`, 'cueola-keywi-' + code, 'keywi')) blocked++;
   _wsPendingScriptop = scriptop;
@@ -15625,7 +15848,9 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
 }
 
 function sendPrompterControl(action, payload=null) {
-  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action)) {
+  // Stops always go through: a refused brake_stop / boost_stop would leave
+  // the talent braking or boosting on air.
+  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
     markLivePrompterStatus('Flowmingo Op has control', 'busy');
     return false;   // strict false: a deck key can flash the refusal
   }
@@ -15749,7 +15974,8 @@ let flowOpKeydownHandler = null;
 let flowOpKeyupHandler = null;
 let flowOpLastRemoteControlTs = 0;
 let _flowOpTalentHeartbeatTs = 0;   // dedup: last doc heartbeat ts the Flowmingo Op reader fed in
-let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'talent online' label)
+let _flowOpTalentSeenAt = 0;        // arrival clock of that beat (drives the 'Talent connected' label)
+let flowOpTalentCheckTimer = null;  // re-checks that label when no doc writes arrive
 let ptTechSlateOn = false;    // talent stand-by ("technical difficulties") cover
 let flowOpTechSlate = false;  // mirror of the slate state on the standalone Flowmingo Op
 let ptColorBarsOn = false;    // generated NTSC bars on the talent display
@@ -16481,7 +16707,7 @@ function poScreenSectionHTML() {
         <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
         <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide controls</button>
         <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
-        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full</button>
+        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Fullscreen</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
     </div>`;
@@ -16513,9 +16739,9 @@ function scriptOpDisplayPaneHTML() {
       <div class="flow-control-title">Panel Text</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Zoom <output class="pt-ctrl-val" id="lsq-zoom-value" for="lsq-zoom-range">${zoom}%</output></span>
-        <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)">−</button>
+        <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)" aria-label="Smaller text">−</button>
         <input type="range" class="pt-range" id="lsq-zoom-range" min="85" max="150" step="5" value="${zoom}" oninput="setLiveTextZoomPct(this.value)">
-        <button class="pt-btn" onclick="stepLiveTextZoom(0.05)">+</button>
+        <button class="pt-btn" onclick="stepLiveTextZoom(0.05)" aria-label="Bigger text">+</button>
       </div>
     </div>`;
   return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poThemeSectionHTML())}</div>`;
@@ -17290,7 +17516,7 @@ function liveActionsHTML(scope = 'lsq', disabled = false) {
       </div>
     </div>
 	    <div class="flow-control-section flow-control-cue">
-	      <div class="flow-control-title">Scrub</div>
+	      <div class="flow-control-title">Position</div>
 	      <div class="pt-ctrl-group pt-live-cue flow-control-slider">
 	        <span class="pt-ctrl-label">Cue</span>
 	        <button class="pt-btn pt-icon-btn" onclick="${nudge(-3)}" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
@@ -18752,10 +18978,10 @@ function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
           aria-label="Question for the talent" list="${scope}-question-cards" onkeydown="questionLaneKeydown(event,'${scope}')"${dis}>
         <datalist id="${scope}-question-cards">${(sessionQuestionCards || []).map(card => `<option value="${esc(card)}"></option>`).join('')}</datalist>
         <button type="button" class="pt-btn pt-question-lane-push" data-question-push onclick="pushChatQuestion('${scope}')" data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)"${dis}>${sfIcon('action.upload')}<span>Push card</span></button>
-        ${isFlow ? '' : `<button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow"${dis}>${sfIcon('action.add')}<span>Into script</span></button>`}
+        ${isFlow ? '' : `<button type="button" class="pt-btn pt-question-lane-push pt-question-lane-insert" onclick="insertQuestionAtPrompter('${scope}')" data-tip="Add this question to the end of the row the talent is reading, so they read it in order."${dis}>${sfIcon('action.add')}<span>Into script</span></button>`}
       </div>
       <div class="pt-question-state" data-question-state role="status"${questionOn ? '' : ' hidden'}>${sfIcon('notification.unread')}<span data-question-state-label>Question is up</span></div>
-      <div class="field-hint">${isFlow ? 'Push card shows the question to the talent as a card. Enter pushes, Esc clears.' : 'Push card shows the question to the talent as a card. Into script puts it into the script at the read line. Enter pushes, Esc clears.'}</div>
+      <div class="field-hint">${isFlow ? 'Push card shows the question to the talent as a card. Enter pushes, Esc clears.' : 'Push card shows the question to the talent as a card. Into script adds it to the end of the row the talent is reading. Enter pushes, Esc clears.'}</div>
       <div class="flow-clock-grid flow-alert-grid flow-control-grid one">
         ${btn('action.reset', 'Clear all overlays', send('overlays_clear'), false, '', 'data-overlays-clear data-tip="Drop the clock, wrap, question, and slates in one go"')}
       </div>
@@ -19001,11 +19227,11 @@ function flowOpControlsHTML(disabled=false) {
       </div>
     </div>
     <div class="flow-control-section flow-control-cue">
-      <div class="flow-control-title">Scrub</div>
+      <div class="flow-control-title">Position</div>
       <div class="pt-ctrl-group pt-live-cue flow-control-slider">
         <span class="pt-ctrl-label">Cue</span>
         <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(-3)" data-tip="Cue back" aria-label="Cue prompter back"${dis}>${sfIcon('marker.go','pt-nudge-back')}</button>
-        <input type="range" class="pt-range" id="flow-seek" min="0" max="100" value="0" aria-label="Cue prompter position" onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''" ${seekDrag}${dis}>
+        <input type="range" class="pt-range" id="flow-seek" min="0" max="100" value="${Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : 0}" aria-label="Cue prompter position" onchange="flowOpSendControl('seek_set_'+this.value);this.dataset.seekDragging=''" ${seekDrag}${dis}>
         <button class="pt-btn pt-icon-btn" onclick="flowOpNudgeSeek(3)" data-tip="Cue forward" aria-label="Cue prompter forward"${dis}>${sfIcon('marker.go','pt-nudge-forward')}</button>
         <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="flowOpPunchInSeek()" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
       </div>
@@ -19102,6 +19328,10 @@ function flowOpSyncControls() {
   });
   const rowInfo = flowOpEl('flowOpRowInfo');
   if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
+  // The Position slider follows the talent's reported spot, so Play from
+  // here starts where the talent is instead of at the top of the script.
+  const seek = flowOpEl('flow-seek');
+  if (scriptOpInputCanPatch(seek, 'seekDragging') && Number.isFinite(_talentReportedPct)) seek.value = String(Math.round(_talentReportedPct));
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
     btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
@@ -19170,7 +19400,7 @@ async function flowOpOfferAssignedSessions() {
   const preview = flowOpEl('flowOpScriptPreview');
   if (!preview || !preview.querySelector('.flowop-empty')) return;
   preview.innerHTML = '<div class="flowop-empty flowop-choices">'
-    + '<div class="join-yours-label">Your sessions</div>'
+    + '<div class="join-yours-label">Your shows</div>'
     + idApi.renderSessionChoiceRows(choices, 'flowOpPickAssignedSession')
     + '<div class="flowop-note" style="margin-top:12px">Or type a show code above.</div>'
     + '</div>';
@@ -19182,7 +19412,7 @@ async function flowOpLoadSession(codeOverride='') {
   const code = (codeOverride || input?.value || '').trim().toUpperCase();
   const btn = flowOpEl('flowOpLoadBtn');
   if (!code) {
-    flowOpSetStatus('Enter a code', true);
+    flowOpSetStatus('Type the show code first', true);
     input?.focus();
     return;
   }
@@ -19209,6 +19439,15 @@ async function flowOpLoadSession(codeOverride='') {
   flowOpSetStatus('Loading...');
   _prompterOperatorRuntimeActive = true;
   _ensurePrompterOperatorBridge(true);
+  // The talent's heartbeat is often the only doc write. When the talent
+  // closes, no snapshot comes, so re-check the connected line every 5 s.
+  clearInterval(flowOpTalentCheckTimer);
+  flowOpTalentCheckTimer = setInterval(() => {
+    if (!flowOpCode || !flowOpEl('flowOp')?.classList.contains('on')) return;
+    const st = flowOpEl('flowOpStatus');
+    if (st && st.textContent.startsWith('Talent connected') && (!_flowOpTalentSeenAt || Date.now() - _flowOpTalentSeenAt >= 20000)) flowOpSetStatus(`Waiting for the talent · ${flowOpCode}`);
+  }, 5000);
+  let firstSnapshot = true;
   const load = () => {
     try {
       if (flowOpSub) { flowOpSub(); flowOpSub = null; }
@@ -19218,7 +19457,7 @@ async function flowOpLoadSession(codeOverride='') {
           flowOpData = null;
           flowOpRenderSession(null);
           flowOpRenderControls(true);
-          flowOpSetStatus('Not found', true);
+          flowOpSetStatus('Show not found. Check the code', true);
           if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
           return;
         }
@@ -19248,9 +19487,9 @@ async function flowOpLoadSession(codeOverride='') {
         const talentOnline = hbFromTalent && !!_flowOpTalentSeenAt && (Date.now() - _flowOpTalentSeenAt) < 20000;
         if (talentOnline) {
           const status = prompterSessionController.getState().status;
-          flowOpSetStatus(`${prompterStatusLabel(status).toUpperCase()} · ${code} · talent online`);
+          flowOpSetStatus(`Talent connected · ${code}${status === 'connected' ? '' : ' · ' + prompterStatusLabel(status)}`);
         } else {
-          flowOpSetStatus(`OPENING · ${code} · waiting for talent`);
+          flowOpSetStatus(`Waiting for the talent · ${code}`);
         }
         const control = flowOpData.prompter?.control;
         if (control?.ts && control.ts > flowOpLastRemoteControlTs && !isPrompterSelfSender(control.sender)) {
@@ -19259,6 +19498,12 @@ async function flowOpLoadSession(codeOverride='') {
         }
         if (flowOpData.prompter?.controlAck) _handlePrompterControlAck(flowOpData.prompter.controlAck);
         if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+        // Loaded: hand the keyboard to the hotkeys (Enter left the caret in
+        // the code box, so Space typed a space instead of playing).
+        if (firstSnapshot) {
+          firstSnapshot = false;
+          if (document.activeElement === input || document.activeElement === btn) document.activeElement.blur();
+        }
       }, err => {
         flowOpCode = '';
         flowOpSetStatus(firebaseConnectionLabel(err, 'Error'), true);
@@ -19281,6 +19526,8 @@ function flowOpStopListening() {
     try { flowOpSub(); } catch {}
     flowOpSub = null;
   }
+  clearInterval(flowOpTalentCheckTimer);
+  flowOpTalentCheckTimer = null;
   if (!document.getElementById('liveshow')?.classList.contains('on')) stopPrompterOperatorRuntime();
 }
 
@@ -19336,20 +19583,32 @@ function flowOpFindInScript() {
   if (flowOpSendControl('seek_text', false, { q }) !== false) flowOpSetStatus(`Finding “${q.slice(0, 28)}${q.length > 28 ? '…' : ''}”`);
 }
 
+// The Op's own held arrow keys. Its sends never set ptBraking / ptBoosting
+// (those only mirror other desks), so it tracks its holds here and lets go
+// on key-up, on exit, and when this window loses focus.
+const flowOpKeyHolds = { brake:false, boost:false };
 function flowOpReleaseHoldKeys() {
-  if (!flowOpCode) return;
-  if (ptBraking) flowOpSendControl('brake_stop', true);
-  if (ptBoosting) flowOpSendControl('boost_stop', true);
+  if (flowOpCode && flowOpKeyHolds.brake) flowOpSendControl('brake_stop', true);
+  if (flowOpCode && flowOpKeyHolds.boost) flowOpSendControl('boost_stop', true);
+  flowOpKeyHolds.brake = false;
+  flowOpKeyHolds.boost = false;
   ptBraking = false;
   ptBoosting = false;
 }
+window.addEventListener('blur', () => { if (flowOpEl('flowOp')?.classList.contains('on')) flowOpReleaseHoldKeys(); });
 
 function flowOpBindKeys() {
   if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
   if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
   flowOpKeydownHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (isInteractiveEventTarget(e)) return;
+    // Cmd/Ctrl shortcuts stay the browser's (Cmd+R reload, Cmd+F find), and
+    // typing never fires a hotkey. A clicked button keeps focus in Chrome, so
+    // a focused button no longer blocks the keys (Space used to re-press it).
+    if (e.isComposing || e.metaKey || e.ctrlKey) return;
+    if (isTextEditingTarget(e.target) || e.target?.closest?.('select, .modal, .modal-wrap, .overlay, [role="dialog"]')) return;
+    // No show yet: Space presses the focused button (Load, a show in the list).
+    if (!flowOpCode && e.key !== 'Escape' && e.target?.closest?.('button, summary, a')) return;
     if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
     if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
     if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
@@ -19359,8 +19618,8 @@ function flowOpBindKeys() {
     switch (e.key) {
       case ' ':
       case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
-      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('boost_start'); break;
-      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('brake_start'); break;
+      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.boost = true; flowOpSendControl('boost_start'); } break;
+      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.brake = true; flowOpSendControl('brake_start'); } break;
       case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
       case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
       case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
@@ -19372,8 +19631,10 @@ function flowOpBindKeys() {
   };
   flowOpKeyupHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    if (e.key === 'ArrowUp') { consumeRemoteKey(e); flowOpSendControl('boost_stop', true); }
-    if (e.key === 'ArrowDown') { consumeRemoteKey(e); flowOpSendControl('brake_stop', true); }
+    // Only a hold this screen started gets a stop: arrow keys in a text or
+    // number field used to send stray stops that let go of another desk's hold.
+    if (e.key === 'ArrowUp' && flowOpKeyHolds.boost) { consumeRemoteKey(e); flowOpKeyHolds.boost = false; flowOpSendControl('boost_stop', true); }
+    if (e.key === 'ArrowDown' && flowOpKeyHolds.brake) { consumeRemoteKey(e); flowOpKeyHolds.brake = false; flowOpSendControl('brake_stop', true); }
   };
   document.addEventListener('keydown', flowOpKeydownHandler);
   document.addEventListener('keyup', flowOpKeyupHandler);
@@ -19405,7 +19666,6 @@ function openFlowmingoOperator(codeOverride='') {
 
 function exitFlowmingoOperator() {
   flowOpReleaseHoldKeys();
-  flowOpStopListening();
   flowOpEl('flowOp')?.classList.remove('on');
   if (flowOpReturnScreen === 'promptypus') {
     enterPrompter();
@@ -19419,6 +19679,9 @@ function exitFlowmingoOperator() {
     document.getElementById('entry')?.classList.add('on');
     sessionStorage.setItem('cueola_screen', 'entry');
   }
+  // Last, once the return screen is back: a Live window keeps its prompter
+  // link (this only closes it when Live is not on screen).
+  flowOpStopListening();
 }
 
 function openPrompterFromFlowOp() {
@@ -19807,6 +20070,7 @@ function enterPrompter() {
       return;
     }
     if (isInteractiveEventTarget(e)) return;
+    if (e.metaKey || e.ctrlKey) return;   // Cmd+F / Cmd+R / Cmd+M belong to the browser
     if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptReversing = true; return; }
     if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptReversing = false; return; }
     if (e.repeat) return;
@@ -19944,7 +20208,12 @@ function applyRemoteShowClock(clock) {
   if (!clock || typeof clock !== 'object') return;
   _remoteClockState = clock;
   if (Number.isFinite(Number(clock.seq))) _showClockSeq = Math.max(_showClockSeq, Number(clock.seq));
-  if (clock.senderId === presenceId || (clock.senderClient && clock.senderClient === CLIENT_ID)) return;  // my own write coming back
+  // Only this window's own echo is skipped. CLIENT_ID is shared by every window
+  // of this browser and survives a reload, so it must not count as mine: the
+  // writer+seq signature below already ignores the echo of our own broadcast.
+  // Right after leaving a show the signature is empty: then even this window's
+  // own earlier write is the room's clock, so a rejoin adopts it.
+  if (clock.senderId === presenceId && _lastAppliedClockSig) return;
   if (Number.isFinite(Number(clock.seq)) && (clock.senderClient || clock.senderId)) {
     // Signature dedupe, same pattern as prompter controls: cross-machine wall
     // clocks cannot order writes, so any NEW writer+seq signature applies.
@@ -20186,6 +20455,8 @@ function saveSettings() {
   frameRate = normalizeFrameRate(document.getElementById('set-framerate')?.value);
   applyTheme(currentTheme);
   localStorage.setItem('cueola_theme', currentTheme);
+  // Same as the front-page picker: Planda Bear follows unless it has its own theme.
+  if (!hasPlandaBearThemeOverride()) applyPlandaBearTheme(cueolaThemeToPlandaBearTheme(currentTheme));
   localStorage.setItem('cueola_frame_rate', String(frameRate));
   hideModal('modal-settings');
   renderRundown(); syncToFirestore();
@@ -20239,7 +20510,7 @@ const PAPERWORK_ITEMS = [
   { order:4, id:'rundown', title:'Full Rendered Rundown', sub:'Your whole show, cue by cue, ready to print.' },
   { order:5, id:'video-patch', title:'Video Patch Sheet', sub:'Where every video line runs, source to destination, cabling included.' },
   { order:6, id:'audio-comms-patch', title:'Audio and Comms Patch Sheets', sub:'Audio routing plus who talks on which comms channel.' },
-  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A birdseye plot of your space: audio, video, and lighting layers with signal flow between the gear.' },
+  { order:7, id:'stage-plot', title:'Stage Plot', sub:'A bird’s-eye plan of your space: audio, video, and lighting layers with signal flow between the gear.' },
   { order:8, id:'production-notes', title:'Production Notes', sub:'The crew’s message board: tag a department and the thread stays with the show.' },
 ];
 // ── v2.1 D6: per-session paperwork config (sparse override map on the parent
@@ -20418,14 +20689,19 @@ function preProKey() {
 // listener's prePro branch, but from the active group subdoc.
 let _pbGroupUnsub = null;
 let _pbGroupSubKey = '';
+// The group's own "Who worked on what" log, so a group's activity write trims
+// against the group's log and never copies the whole-class log into it.
+let _pbGroupActivityLog = null;
 function pbEnsureGroupSubscription() {
   const wantKey = groupActive() ? `${session.code}/${activeGroupId}` : '';
   if (wantKey === _pbGroupSubKey) return;
   if (_pbGroupUnsub) { try { _pbGroupUnsub(); } catch {} _pbGroupUnsub = null; }
   _pbGroupSubKey = wantKey;
+  _pbGroupActivityLog = null;
   if (!wantKey || !window._onSnapshot || !window._firebaseReady) return;
   _pbGroupUnsub = window._onSnapshot(preProDocRef(), snap => {
     const d = snap.exists() ? (snap.data() || {}) : {};
+    _pbGroupActivityLog = Array.isArray(d.preProActivity) ? d.preProActivity : [];
     if (d.prePro && typeof d.prePro === 'object') {
       try { mergePreProFromCloud(d.prePro); } catch {}
     }
@@ -20449,6 +20725,7 @@ function selectGroup(gid, opts = {}) {
   hydratePreProFromFirestore().then(() => {
     try { renderPlandaBearAssignmentsCard(); } catch {}
     try { renderPackageSheetPicker(); } catch {}
+    try { renderPlandaBearHubActivity(); } catch {}
   });
   if (!opts.silent) toast(gid ? `Working in ${activeGroupName()}.` : 'Working on the whole-class paperwork.');
   return true;
@@ -20474,7 +20751,7 @@ function renderPbGroupBar() {
   } else {
     bar.innerHTML = `
       <span class="pb-group-bar-label">Your group</span>
-      <b>${esc(activeGroupName() || '—')}</b>
+      <b>${esc(activeGroupName() || 'None')}</b>
       ${groupsLocked() ? '<span class="pb-group-bar-note">Groups are locked</span>'
         : '<button type="button" class="btn-sm btn-ghost" onclick="openGroupPicker()">Switch group</button>'}`;
   }
@@ -20716,12 +20993,15 @@ function pbCollectionsToArrays(doc) {
   return out;
 }
 
-// 3.0: field-level writes are ON. Every Planner save writes only the leaves
-// that changed (masked field paths + per-leaf stamps), so two people editing
-// different fields of the same page never clobber each other. The engine
-// reads both wire shapes; 3.0 ships with a WORKER_SCHEMA bump so no
-// array-only client stays live (the P2607 mixed-version incident guard).
-window.CUEOLA_PB_LEAF_SYNC = true;
+// Field-level writes are OFF again (Sept 29, the night before a class show).
+// Turned on in 3.0 without the one-time move of old lists: a field saved into
+// a list the cloud still holds whole REPLACES that list with the one field,
+// and every re-read added another copy of each row that had no id. Planner
+// saves write each changed section whole again (the 2.x behavior; two people
+// typing on the same page at once: the later save wins). The engine still
+// reads both shapes. Turn this back on only with the one-time list move and
+// a WORKER_SCHEMA bump (PB_COLLAB_PLAN.md, P2607 notes).
+window.CUEOLA_PB_LEAF_SYNC = false;
 
 function persistPreProData(patch, section) {
   const Sync = preProSyncEngine();
@@ -20779,6 +21059,19 @@ function persistPreProDataLegacy(previous, patch, section, now) {
 }
 
 let _pbSuppressActivity = false;  // debounced live-typing saves shouldn't log an activity entry each keystroke
+// "Who worked on what" credits real edits only. Typing, clicks and plot drags
+// set this; leaving the page (Back, Next, close, Preview) logs once only if
+// it is set. Opening a page clears it, so just looking logs nothing.
+let _pbEditedThisVisit = false;
+function pbSaveOnLeave(save) {
+  const edited = _pbEditedThisVisit;
+  const wasSuppressed = _pbSuppressActivity;
+  _pbSuppressActivity = wasSuppressed || !edited;
+  let result;
+  try { result = save(); } finally { _pbSuppressActivity = wasSuppressed; }
+  if (edited) _pbEditedThisVisit = false;
+  return result;
+}
 function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps=null) {
   // 'LOCAL' is the no-session sentinel (openLocalOutrangutan):
   // there is no sessions/LOCAL doc, so a write can only fail with not-found.
@@ -20822,7 +21115,8 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) })
+    // A group trims against its own log, never the whole-class one.
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
       .catch(err => (grouped && err?.code === 'not-found')
         ? window._setDoc(ref, { preProActivity: [entry] }, { merge: true })
         : Promise.reject(err))
@@ -20883,7 +21177,14 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
   }
   if (section && !_pbSuppressActivity && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
-    window._updateDoc(ref, { preProActivity: preProActivityValue(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
+    const grouped = groupActive();
+    // A group trims against its own log, and a group's first save may come
+    // before its doc exists (same fallback as the older writer).
+    window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
+      .catch(err => (grouped && err?.code === 'not-found')
+        ? window._setDoc(ref, { preProActivity: [entry] }, { merge: true })
+        : Promise.reject(err))
+      .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
 }
 
@@ -20895,7 +21196,14 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
   // while CUEOLA_PB_LEAF_SYNC is dark — mergePreProFromCloudLegacy handles that.
   if (!Sync || window.CUEOLA_PB_LEAF_SYNC !== true) {
     const digestible = Sync ? pbCollectionsToArrays(Sync.normalizeDoc(server).doc) : server;
-    return mergePreProFromCloudLegacy(digestible, recoverNewerLocal, sessionCreatedAt);
+    if (Sync) digestible._fieldUpdatedAt = pbSaveTimesWithFieldStamps(server);
+    const putBack = Sync ? pbListsCutByOldWindows(server, digestible) : {};
+    const mergedLegacy = mergePreProFromCloudLegacy(digestible, recoverNewerLocal, sessionCreatedAt);
+    if (Object.keys(putBack).length) {
+      syncPreProToFirestore(putBack, null, liveServerNow());
+      logShow('sync', `Put back ${Object.keys(putBack).length} Planda Bear list(s) that an old open window cut down`);
+    }
+    return mergedLegacy;
   }
   const local = loadPreProData();
   const { merged, recovery } = Sync.mergeDocs(local, server, { pendingPaths:_pbPendingCloudKeys, recoverNewerLocal });
@@ -20936,6 +21244,56 @@ function mergePreProFromCloud(server, recoverNewerLocal=false, sessionCreatedAt=
     }
   }
   return toStore;
+}
+
+// From Sept 25 to this fix, Planda Bear saved one field at a time and
+// stamped each field under _stamps, never touching the per-section save time
+// the whole-list merge compares. Count those stamps, so a device that missed
+// a later edit takes the newer cloud copy instead of pushing its older one
+// back. A list the cloud holds as a map keeps its old time: that map may be
+// a list 3.x cut down, and the instructor decides which copy is right.
+function pbSaveTimesWithFieldStamps(server) {
+  const times = { ...(server._fieldUpdatedAt || {}) };
+  const stamps = server._stamps && typeof server._stamps === 'object' ? server._stamps : {};
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const newest = node => (typeof node === 'number' ? node : isMap(node) ? Math.max(0, ...Object.values(node).map(newest)) : 0);
+  for (const [key, node] of Object.entries(stamps)) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist
+      : ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows'].includes(key) ? server[key] : undefined;
+    if (isMap(list)) continue;
+    const at = newest(node);
+    if (at > (Number(times[key]) || 0)) times[key] = at;
+  }
+  return times;
+}
+
+// A window still on the 3.x build (opened before this fix and never
+// reloaded) saves one field at a time. Saved into a list the cloud holds
+// whole, that one field REPLACES the whole list. The sign: this device saw
+// the list whole, and now it comes back as a map with the same whole-list
+// save time, so nothing but a one-field save has touched it since. Keep this
+// device's copy and save it whole again. Lists this device never saw whole
+// (damaged before the fix) are left for the instructor to check.
+function pbListsCutByOldWindows(server, digest) {
+  const local = loadPreProData();
+  const localTimes = local._fieldUpdatedAt || {};
+  const serverTimes = server._fieldUpdatedAt || {};
+  const seenKey = `${preProKey()}__wholeLists`;
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}') || {}; } catch {}
+  const seenBefore = JSON.stringify(seen);
+  const isMap = v => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const putBack = {};
+  for (const key of ['callSheets', 'people', 'videoPatchRows', 'audioPatchRows', 'commsPatchRows', 'productionSchedule']) {
+    const list = key === 'productionSchedule' ? server.productionSchedule?.checklist : server[key];
+    const savedAt = Number(serverTimes[key]) || 0;
+    if (Array.isArray(list)) { seen[key] = savedAt; continue; }
+    if (!isMap(list) || !savedAt || seen[key] !== savedAt || Number(localTimes[key]) !== savedAt || local[key] === undefined) continue;
+    digest[key] = local[key];
+    putBack[key] = local[key];
+  }
+  if (JSON.stringify(seen) !== seenBefore) { try { localStorage.setItem(seenKey, JSON.stringify(seen)); } catch {} }
+  return putBack;
 }
 
 function mergePreProFromCloudLegacy(server, recoverNewerLocal=false, sessionCreatedAt=0) {
@@ -21447,7 +21805,11 @@ function pbInitCollabListeners() {
       if (!pbIsAutosaveField(e.target)) return;
       const guardKey = pbAutosaveGuardKey(e.target);
       if (guardKey) pbNoteLocalEdit(guardKey);
+      const wasEdited = _pbEditedThisVisit;
       pbQueuePaperworkAutosave();
+      // Picking which sheet or plot to show, or turning grid snap on or off,
+      // is not an edit for the log.
+      if (['pp-call-sheet-select', 'pp-plot-select', 'plot-snap-toggle'].includes(e.target.id)) _pbEditedThisVisit = wasEdited;
     };
     modal.addEventListener('input', queuePaperworkAutosave);
     // Safari commits time pickers and <select>s with only a 'change' event.
@@ -21461,6 +21823,7 @@ function pbInitCollabListeners() {
 // hold, instead of depending on a later keystroke or hub navigation.
 function pbQueuePaperworkAutosave() {
   paperworkDirty = true;
+  _pbEditedThisVisit = true;
   clearTimeout(_pbFieldSaveTimer);
   _pbFieldSaveTimer = setTimeout(() => {
     _pbFieldSaveTimer = null;
@@ -21567,7 +21930,7 @@ function renderPaperworkNav(id, slotId='') {
 
 function openPaperworkRelative(delta) {
   const current = currentPaperworkItemId();
-  savePaperworkItem(current, false);
+  pbSaveOnLeave(() => savePaperworkItem(current, false));
   // D6: skip disabled editors. Production Notes is its own piece (the wide
   // bar on the hub), never a stop in the Previous/Next flow.
   const items = enabledPaperworkItems().filter(item => item.id !== 'production-notes');
@@ -21805,7 +22168,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
     (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
   });
   wrap.innerHTML = `<div class="pb-assign-card">
-    <div class="pb-assign-title">${sfIcon('content.checklist')} Crew Assignments</div>
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
     ${[...byPerson.values()].map(g => `<div class="pb-assign-row pb-assign-stack">
       <div class="pb-assign-head"><span class="pb-assign-name">${esc(g.person)}</span>
       ${g.positions.length ? `<span class="pb-assign-pos">${esc(g.positions.join(' / '))}</span>` : ''}</div>
@@ -21823,7 +22186,7 @@ function closePlandaBear() {
       && document.querySelector('#pbAssignmentsCard [data-role-assignment-row]')) {
     assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
   }
-  saveOpenPaperworkSection(false);
+  pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   hidePaperworkEditors();
   hideModal('paperworkHubModal');
   pbSetPresencePage(null);
@@ -22005,7 +22368,7 @@ async function deletePlandaBearComment(id) {
   await loadPlandaBearComments();
   const comment = plandaBearComments.find(c => c.id === id);
   await writePlandaBearComments(plandaBearComments.filter(c => c.id !== id), comment ? `Removed Comment: ${comment.section}` : 'Removed Comment');
-  toast('Instructor comment removed.');
+  toast('Instructor comment deleted.');
   rerenderVisiblePlandaBearComments();
   renderPlandaBearHubActivity();
 }
@@ -22024,7 +22387,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
       ? `<select class="field-in" id="${slotId}-section" aria-label="Comment section">${plandaBearCommentSectionOptions('Overall')}</select>`
       : `<input type="hidden" id="${slotId}-section" value="${esc(addSection)}">`;
     const studentCopy = comments.length
-      ? 'Mark each note reviewed once you’ve made the change or talked it through.'
+      ? 'Mark each comment reviewed once you’ve made the change or talked it through.'
       : 'Feedback from your instructor lands here.';
     const instructorCopy = 'Leave feedback without touching the paperwork itself.';
     if (!canComment && !comments.length) { slot.innerHTML = ''; return; }
@@ -22034,7 +22397,7 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
           <div class="pb-comments-title">Instructor Comments</div>
           <div class="pb-comments-sub">${canComment ? instructorCopy : studentCopy}</div>
         </div>
-        <div class="pb-comments-count">${comments.length} note${comments.length===1?'':'s'}</div>
+        <div class="pb-comments-count">${comments.length} comment${comments.length===1?'':'s'}</div>
       </div>
       <div class="pb-comment-list">
         ${comments.length ? comments.map(comment => {
@@ -22052,14 +22415,14 @@ function renderPlandaBearComments(section='All', slotId='pbCommentsHub', shouldL
               ${!canComment ? (reviewed
                 ? '<span class="pb-comment-reviewed">Reviewed by you</span>'
                 : `<button type="button" class="pb-comment-review" onclick="markPlandaBearCommentReviewed('${esc(comment.id)}')">Mark reviewed</button>`) : ''}
-              ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Remove</button>` : ''}
+              ${canComment ? `<button type="button" class="pb-comment-delete" onclick="deletePlandaBearComment('${esc(comment.id)}')">Delete</button>` : ''}
             </div>
           </div>`;
-        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet. Notes you leave show up here for the whole group.</div>' : '')}
+        }).join('') : (canComment ? '<div class="pb-comment-empty">Nothing yet. Comments you leave show up here for the whole group.</div>' : '')}
       </div>
       ${canComment ? `<div class="pb-comment-form">
         ${sectionSelect}
-        <textarea class="field-in" id="${slotId}-input" rows="2" placeholder="Add a comment for students to review..."></textarea>
+        <textarea class="field-in" id="${slotId}-input" rows="2" placeholder="Add a comment for the crew to review…"></textarea>
         <button type="button" class="pb-comment-add" onclick="addPlandaBearComment('${esc(addSection)}','${esc(slotId)}')">Add Comment</button>
       </div>` : ''}
     </div>`;
@@ -22085,7 +22448,7 @@ function annotatePlandaBearCommentCards() {
     }
     const count = plandaBearComments.filter(comment => comment.section === section).length;
     badge.classList.toggle('on', count > 0);
-    badge.textContent = count ? `${count} instructor note${count===1?'':'s'}` : '';
+    badge.textContent = count ? `${count} instructor comment${count===1?'':'s'}` : '';
   });
 }
 
@@ -22573,7 +22936,7 @@ function pbNoteActorRole() {
 }
 
 function pbCanManageNote(note) {
-  return pbIsInstructor() || (note?.clientId && note.clientId === CLIENT_ID);
+  return pbIsInstructor() || pbIsMine(note);
 }
 
 /* ── Time + identity helpers for the board ── */
@@ -22804,8 +23167,9 @@ function pbSaveUserPortal() {
   // Reflect the new avatar immediately on the board + the header chip.
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) renderPlandaBearNotes();
   pbRenderPortalChip();
-  // Refresh the presence entry so everyone's bubbles show the new look now.
-  try { joinPresence(); } catch {}
+  // Refresh the presence entry so everyone's bubbles show the new look now,
+  // but only while still in the show: after leaving, this re-added a ghost.
+  if (presenceInterval) { try { joinPresence(); } catch {} }
   // A signed-in profile carries its look to every device.
   window.CueolaIdentity?.onDeviceAvatarSaved?.(_pbPortalDraft || { type: 'initials' });
 }
@@ -22947,13 +23311,13 @@ async function pbExportDraftPDF() {
     toast('Building note PDF...');
     const stamp = new Date(snapshot.exportedAt).toISOString().slice(0, 10);
     const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-draft-${stamp}.pdf`, options);
-    toast(`Unpublished note PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Note draft PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical unpublished-note print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render the unpublished note: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -22974,7 +23338,9 @@ function pbNoteInputKeydown(e) {
 // Notes copy, and a successful join lands directly on the board, never the hub.
 function openProductionNotesShortcut(e) {
   e?.stopPropagation?.();
-  if (session.code || session.isDemo || session.isExpert) { openProductionNotes(); return; }
+  // After leaving a show, session.code still names it. Only a show whose
+  // live feed is still attached opens straight to its board.
+  if (session.isDemo || session.isExpert || (session.code && firestoreUnsub)) { openProductionNotes(); return; }
   openPreProJoinModal('notes');
 }
 
@@ -23104,7 +23470,7 @@ async function pbCompressNoteImage(file) {
 async function pbPrepareNoteAttachment(file) {
   const isImage = /^image\//i.test(file.type || '');
   if (!isImage && file.size > PB_FILE_MAX_BYTES) {
-    toast(`"${file.name}" is over the 4 MB document limit.`);
+    toast(`"${file.name}" is over the 4 MB file limit.`);
     return null;
   }
   const fileId = `pbf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
@@ -23736,7 +24102,17 @@ function pbReplyKeydown(e, rootId) {
   else if (e.key === 'Escape') { e.preventDefault(); pbCancelReply(); }
 }
 
+let _pbReplyPosting = false;   // a reply is on its way; a second Enter or tap waits
 async function pbPostReply(rootId) {
+  if (_pbReplyPosting) { toast('Still sending your last reply. Check the connection, then try again.'); return; }
+  _pbReplyPosting = true;
+  try { await pbPostReplyNow(rootId); }
+  catch (err) {
+    console.warn('[plandabear] reply failed', err);
+    toast('Could not post the reply. Check your connection and try again.');
+  } finally { _pbReplyPosting = false; }
+}
+async function pbPostReplyNow(rootId) {
   const input = document.getElementById('pbReplyInput');
   const text = input?.value.trim() || '';
   const atts = pbReplyPendingAttachments.slice();
@@ -23796,7 +24172,7 @@ async function pbTogglePin(id) {
 function pbStartEditNote(id) {
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
-  if (!(note.clientId && note.clientId === CLIENT_ID)) { toast('You can only edit your own notes.'); return; }
+  if (!pbIsMine(note)) { toast('You can only edit your own notes.'); return; }
   pbEditingNoteId = id;
   renderPlandaBearNotes();
   const ta = document.getElementById('pbEditInput');
@@ -23838,6 +24214,7 @@ async function publishPlandaBearNote() {
   const hasChecklist = pbComposerChecklist.some(it => (it.text || '').trim());
   if (!text && !atts.length && !hasChecklist) { input?.focus(); toast('Type a note, add a checklist, or attach a file first.'); return; }
   const sendBtn = document.getElementById('pbNoteSendBtn');
+  if (sendBtn?.disabled) return;   // already posting (Cmd/Ctrl+Enter skips the disabled button)
   if (sendBtn) sendBtn.disabled = true;
   try {
     if (atts.length) toast(`Uploading ${atts.length === 1 ? 'attachment' : 'attachments'}…`);
@@ -23853,7 +24230,8 @@ async function publishPlandaBearNote() {
       clientId: CLIENT_ID,
       avatar: pbMyAvatar(),
       mentions: pbExtractMentions(text),
-      checklist: pbComposerChecklist.slice(),
+      // A To-Do's Assign pick fills any checklist item left on Anyone.
+      checklist: pbComposerChecklist.map(it => ({ ...it, assignee: it.assignee || (pbComposerTag === 'todo' ? pbComposerAssignee : '') })),
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
     });
     await pbApplyNoteMutation([...plandaBearNotes, note], { set: note }, pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
@@ -23897,20 +24275,20 @@ async function deletePlandaBearNote(id) {
   await loadPlandaBearNotes();
   const note = plandaBearNotes.find(n => n.id === id);
   if (!note) return;
-  if (!pbCanManageNote(note)) { toast('You can only remove your own notes.'); return; }
+  if (!pbCanManageNote(note)) { toast('You can only delete your own notes.'); return; }
   // Deleting a root note takes its replies with it; deleting a reply is just the reply.
   const thread = pbBuildThreads().find(t => t.root.id === id);
   const ids = new Set([id, ...(thread ? thread.replies.map(r => r.id) : [])]);
   const extra = ids.size - 1;
   const msg = extra
-    ? `Delete this note and its ${extra} repl${extra === 1 ? 'y' : 'ies'} for everyone on the session?`
-    : 'Delete this note for everyone on the session?';
-  if (!dangerConfirm(msg, 'Any attached note files tied to the deleted note are removed too. This syncs to collaborators.', { requireText:'DELETE' })) return;
+    ? `Delete this note and its ${extra} repl${extra === 1 ? 'y' : 'ies'} for everyone in the show?`
+    : 'Delete this note for everyone in the show?';
+  if (!dangerConfirm(msg, 'Files attached to it are deleted too, for everyone.', { requireText:'DELETE' })) return;
   plandaBearNotes.filter(n => ids.has(n.id)).forEach(pbDeleteNoteFiles);
   if (pbReplyTargetId && ids.has(pbReplyTargetId)) pbReplyTargetId = null;
   if (pbEditingNoteId && ids.has(pbEditingNoteId)) pbEditingNoteId = null;
   await pbApplyNoteMutation(plandaBearNotes.filter(n => !ids.has(n.id)), { remove: [...ids] }, 'Production Note Removed');
-  toast('Note removed.');
+  toast('Note deleted.');
   renderPlandaBearNotes();
 }
 
@@ -23924,7 +24302,7 @@ function pbAttachmentHTML(att) {
     return `<div class="pb-msg-audio" data-pb-audio="${att.fileId}">
       <div class="pb-audio-head"><span class="pb-file-ico">${sfIcon('department.audio')}</span><span class="pb-file-name">${esc(att.name)}</span>
         <button type="button" class="pb-audio-og" onclick="pbSendAudioToOutrangutan('${att.fileId}',${argName})" data-tip="Download & send to the Outrangutan SFX board">${sfIcon('action.forward')} SFX</button>
-        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download">${sfIcon('action.download')}</button></div>
+        <button type="button" class="pb-audio-dl" onclick="pbDownloadNoteFile('${att.fileId}')" data-tip="Download" aria-label="Download">${sfIcon('action.download')}</button></div>
       <div class="pb-audio-slot"><div class="pb-audio-loading">Loading audio…</div></div>
     </div>`;
   }
@@ -24210,7 +24588,7 @@ function pbPushNoteToSchedule(noteId) {
 }
 
 function pbOpenOwes() {
-  if (!pbIsInstructor()) { toast('Only instructors can open the assignments view.'); return; }
+  if (!pbIsInstructor()) { toast('Only instructors can see Open items.'); return; }
   showModal('pbOwesModal');
   pbRenderOwes();                                   // instant, from local state
   loadPlandaBearNotes().then(pbRenderOwes);         // then refreshed from the cloud
@@ -24274,7 +24652,7 @@ function pbUnseenByHTML(note) {
 }
 
 function pbNoteFootHTML(note, replyCount) {
-  const mine = note.clientId && note.clientId === CLIENT_ID;
+  const mine = pbIsMine(note);
   return `${pbUnseenByHTML(note)}<footer class="pb-note-foot">
     ${pbLikeButtonHTML(note)}
     <button type="button" class="pb-note-act" onclick="pbOpenReply('${note.id}')">${sfIcon('content.note')} Reply${replyCount ? ` (${replyCount})` : ''}</button>
@@ -24288,7 +24666,7 @@ function pbNoteFootHTML(note, replyCount) {
 }
 
 function pbReplyHTML(reply) {
-  const mine = reply.clientId && reply.clientId === CLIENT_ID;
+  const mine = pbIsMine(reply);
   const avatar = `<span class="pb-reply-avatar" style="background:${pbAvatarBg(reply)}">${pbAvatarInner(reply)}</span>`;
   if (reply.id === pbEditingNoteId) {
     return `<div class="pb-reply" data-note-id="${reply.id}">${avatar}${pbEditBoxHTML(reply)}</div>`;
@@ -24401,7 +24779,7 @@ function renderPlandaBearNotes(slotId='pbNotesThread') {
   pbRenderNoteFilters(threads);
 
   if (!total) {
-    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board: post a note, a photo, or a file. Everyone in this session sees it live.</span></div>`;
+    slot.innerHTML = `<div class="pb-note-empty"><span class="pb-note-empty-ico">${sfIcon('content.note')}</span><b>No notes yet</b><span>Start the board: post a note, a photo, or a file. Everyone in this show sees it live.</span></div>`;
     annotatePlandaBearNoteCards();
     return;
   }
@@ -24497,7 +24875,8 @@ function pbLastReadKey() { return `cueola_pb_lastread_${session.code || session.
 function pbGetLastRead() { try { return Number(localStorage.getItem(pbLastReadKey())) || 0; } catch { return 0; } }
 function pbSetLastRead(ts) { try { localStorage.setItem(pbLastReadKey(), String(ts)); } catch {} }
 
-function pbIsMine(n) { return Boolean(n && n.clientId && n.clientId === CLIENT_ID); }
+// Same browser AND same name: on a shared lab computer, another student's notes are not mine.
+function pbIsMine(n) { return Boolean(n && n.clientId && n.clientId === CLIENT_ID && sameParticipantName(n.by, preProActor())); }
 function pbNotesBoardOpen() { return Boolean(document.getElementById('productionNotesModal')?.classList.contains('on')); }
 
 function pbUnreadNoteCount() {
@@ -24907,15 +25286,15 @@ async function exportProductionNoteById(id) {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-note-${stamp}.pdf`, options);
-      toast(`Production note PDF downloaded · ${result.pageCount} pages.`);
+      toast(`Production note PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
     } catch (error) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical production-note print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     }
   } catch (error) {
-    toast(`Note export blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not export the note: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -24954,12 +25333,12 @@ async function exportProductionNotesPDF() {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
     try {
       const result = await exportPaperHTMLAsPDF(html, `cueola-production-notes-${stamp}.pdf`, options);
-      toast(`Notes PDF downloaded · ${result.pageCount} pages.`);
+      toast(`Notes PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
     } catch (error) {
       if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
       console.warn('Paged PDF renderer unavailable; opening the identical notes-log print representation.', error);
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     }
   } catch (error) {
     toast(`Could not export the notes: ${paperworkExportFailureMessage(error)}`);
@@ -25093,7 +25472,8 @@ function pnAddToRowNotes(noteId) {
   const beat = beats.find(b => b.id === pnTargetBeatId);
   if (!note || !beat) { toast('Pick a target row first.'); return; }
   if (!note.text)     { toast('Note has no text to add.'); return; }
-  beat.notes = note.text.slice(0, 120);
+  if (beat.notes && !confirm(`Row ${beats.indexOf(beat) + 1} already has notes. Replace them with this note?`)) return;
+  beat.notes = pbStripMarkdown(note.text).slice(0, 120);
   renderRundown();
   syncToFirestore();
   toast(`Note added to row ${beats.indexOf(beat) + 1}.`);
@@ -25152,11 +25532,23 @@ async function renderPlandaBearHubActivity() {
   try {
     const snap = await window._getDoc(window._doc(window._db,'sessions',session.code));
     if (snap.exists()) log = Array.isArray(snap.data().preProActivity) ? snap.data().preProActivity : [];
+    // A group's paperwork is logged on the group's own doc. Older group logs
+    // may hold copies of class entries, so skip any already listed.
+    if (groupActive()) {
+      const groupSnap = await window._getDoc(preProDocRef());
+      const groupLog = groupSnap.exists() && Array.isArray(groupSnap.data().preProActivity) ? groupSnap.data().preProActivity : [];
+      const entryKey = e => `${e?.at}|${e?.section}|${e?.by}|${e?.clientId}`;
+      const seen = new Set(log.map(entryKey));
+      log = log.concat(groupLog.filter(e => !seen.has(entryKey(e))));
+    }
   } catch {}
   const lastBySection = {};
+  // Notes log one name per action; the Production Notes card counts all of them.
+  const noteSections = new Set(['Production Note','Production Note Reply','Production Note Edited','Production Note Removed','To-Do Posted','To-Do Updated','Checklist Updated','Note Pinned','Note Unpinned']);
   log.forEach(e => {
     if (!e || !e.section) return;
-    if (!lastBySection[e.section] || (e.at||0) > (lastBySection[e.section].at||0)) lastBySection[e.section] = e;
+    const key = noteSections.has(e.section) ? 'Production Notes' : e.section;
+    if (!lastBySection[key] || (e.at||0) > (lastBySection[key].at||0)) lastBySection[key] = e;
   });
   // Annotate each paperwork card with who last touched it
   cards.forEach(c => {
@@ -25205,6 +25597,7 @@ function openPaperworkItem(id) {
     return;
   }
   activePaperworkItemId = id;
+  _pbEditedThisVisit = false;   // a fresh visit: nothing edited yet
   pbSetPresencePage(id);   // tell the room which page I'm on
   if (id === 'call-sheet') return openPrePro();
   if (id === 'production-scheduler') return openProductionSchedule();
@@ -25217,7 +25610,7 @@ function openPaperworkItem(id) {
 }
 
 function returnToPaperworkHub() {
-  saveOpenPaperworkSection(false);
+  pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   // The save above already flushed everything; a still-armed debounce timer
   // would fire after the modal closes and find nothing to save.
   if (_pbFieldSaveTimer) { clearTimeout(_pbFieldSaveTimer); _pbFieldSaveTimer = null; }
@@ -25328,8 +25721,8 @@ function paperworkExportReadiness(options={}) {
 }
 
 function paperworkExportReadinessMessage(readiness) {
-  const messages = (readiness?.issues || []).map(issue => issue.message).filter(Boolean);
-  return messages.join(' ') || 'Saved production data is not ready to export.';
+  const messages = [...new Set((readiness?.issues || []).map(issue => issue.message).filter(Boolean))];
+  return messages.join(' ') || 'The paperwork is not ready to export yet.';
 }
 
 async function waitForPaperworkSaves(options={}) {
@@ -25359,7 +25752,7 @@ async function waitForPaperworkSaves(options={}) {
     // Network-bound like the server reads — the local 8s budget was too tight
     // for a slow connection flushing this client's own queued writes.
     await paperworkExportTimeout(window._waitForPendingWrites(), PAPER_EXPORT_READ_MS,
-      'Cloud saves are still pending. Reconnect and wait for Cloud saved before exporting.');
+      'Your last changes are still saving. Check the connection, wait for Saved, then try again.');
     readiness = paperworkExportReadiness(options);
     if (!readiness.canExport) {
       const error = new Error(paperworkExportReadinessMessage(readiness));
@@ -25430,6 +25823,9 @@ async function readServerPaperworkSnapshot(options={}) {
       const groupData = groupSnap.exists() ? (groupSnap.data() || {}) : {};
       paperworkPrePro = groupData.prePro && typeof groupData.prePro === 'object' ? groupData.prePro : {};
     }
+    // 3.x saves store lists as maps in the cloud; every printer below reads
+    // lists, so convert once here (lists pass through unchanged).
+    paperworkPrePro = pbCollectionsToArrays(paperworkPrePro);
     let assignments = [];
     let assignmentsMode = options.includeAssignments === false ? 'excluded' : 'canonical';
     if (options.includeAssignments !== false) {
@@ -25755,11 +26151,11 @@ async function showRundownPaperPreview() {
     const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
     // Owner 2026-08-30: the page header already prints the production name
     // with "Rundown" under it. No in-body title or show-name line on page 1.
-    showPaperPreview('Rundown Planda Bear Preview', rundownPreviewTableHTML(snapshot),
-      'Download Rundown PDF', 'exportPDF()', 'rundown', options);
+    showPaperPreview('Rundown Preview', rundownPreviewTableHTML(snapshot),
+      'Export Rundown PDF', 'exportPDF()', 'rundown', options);
   } catch (error) {
     lastRundownExportSnapshot = null;
-    toast(`Rundown preview blocked: ${paperworkExportFailureMessage(error)}`);
+    toast(`Could not preview the rundown: ${paperworkExportFailureMessage(error)}`);
   }
 }
 
@@ -25813,7 +26209,7 @@ function rundownPreviewTableHTML(snapshot=null) {
       <td>${pdfCueNum}</td>
       <td><strong>${esc(b.info||'-')}</strong>${b.notes?`<br><span class="cue-muted">${esc(b.notes)}</span>`:''}</td>
       <td>${start}</td>
-      <td>${fmtDur(b)}</td>
+      <td>${(b.min || b.sec) ? fmtDur(b) : '-'}</td>
       <td class="cue-total">${total}</td>`;
     if (!allColumns) {
       return `<tr${rowTintPrintStyle(b)}>${lead}
@@ -26535,6 +26931,7 @@ function saveStagePlot(showToastOnSave=true) {
 // target the active plot, so this is the one place dirty ids are marked.
 function queueStagePlotAutosave() {
   paperworkDirty = true;
+  _pbEditedThisVisit = true;
   _plotPendingSave = true;
   if (activeStagePlotId) _plotDirtyIds.add(activeStagePlotId);
   pbNoteLocalEdit('pp-plot-canvas');
@@ -26683,7 +27080,7 @@ function deleteStagePlot() {
   }
   const idx = resolveActiveStagePlotIndex();
   const plot = stagePlotsWorking[idx];
-  if (!dangerConfirm(`Delete "${stagePlotDisplayName(plot, idx)}"?`, 'The plot and everything placed on it are removed for the whole session.')) return;
+  if (!dangerConfirm(`Delete "${stagePlotDisplayName(plot, idx)}"?`, 'The plot and everything on it are deleted for the whole show.')) return;
   stagePlotsWorking.splice(idx, 1);
   _plotDirtyIds.delete(plot.id);
   const tombstones = pruneStagePlotTombstones({ ...stagePlotTombstones(), [plot.id]: Date.now() });
@@ -27072,7 +27469,7 @@ function renderPlotLayerBar() {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h5c5 0 5-10 10-10"/><path d="M15.5 3.5 19 7l-3.5 3.5"/></svg><span>${plotFlowMode ? 'Drawing Flow' : 'Draw Flow'}</span>
     </button>
     <button type="button" class="plot-flow-btn plot-layerset-btn" onclick="exportStagePlotLayerSetPDF()" data-tip="One PDF: each layer on its own page, then all layers together">
-      ${sfIcon('action.download')}<span>Layer Set PDF</span>
+      ${sfIcon('action.download')}<span>Export by layer</span>
     </button>`;
 }
 
@@ -27297,9 +27694,9 @@ function plotBankKey(data=null) {
   return [...plotBankDisabled(data)].sort().join(',');
 }
 function togglePlotBankManage() {
-  if (!requirePlotManager('Only instructors and admins can manage the bank.')) return;
+  if (!requirePlotManager('Only instructors and admins can manage the gear list.')) return;
   if (groupActive()) {
-    toast('Manage the bank from the main workspace, outside a group. It applies to the whole session.');
+    toast('The gear list is shared by the whole show, so it can’t be changed while the show uses groups.');
     return;
   }
   plotBankManage = !plotBankManage;
@@ -27337,7 +27734,7 @@ function renderPlotPalette(data=null) {
     </div>`;
   }).join('');
   const manageBar = canManage ? `<div class="plot-bank-manage-row">
-    <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage Bank'}</button>
+    <button type="button" class="plot-bank-manage-btn${plotBankManage ? ' on' : ''}" onclick="togglePlotBankManage()">${plotBankManage ? 'Done' : 'Manage gear'}</button>
     ${plotBankManage ? '<div class="plot-insp-hint">Tap an item to hide it from students. Placed items stay on the plot.</div>' : ''}
   </div>` : '';
   host.innerHTML = manageBar + groups;
@@ -27421,7 +27818,7 @@ function renderPlotInspector() {
     </div>` : `
     <div class="plot-insp-empty">${plotFlowMode
       ? 'Drawing flow: click the source gear, then the destination. Esc backs out.'
-      : 'Select gear or a cable on the stage, or click an item in the bank to add one.'}</div>`);
+      : 'Select gear or a cable on the stage, or click an item in the gear list to add one.'}</div>`);
   // Floor plan and space size are the instructor's call (same gate as plot
   // add/delete): students work inside the assigned space.
   const canShapeSpace = canManageCallSheetStructure();
@@ -27455,7 +27852,7 @@ function renderPlotInspector() {
         <button type="button" class="insp-tab ${tab === 'element' ? 'on' : ''}" onclick="setPlotInspectorTab('element')" data-tip="Selected item" aria-label="Selected item">${sfIcon('action.edit')}</button>
         <button type="button" class="insp-tab ${tab === 'stage' ? 'on' : ''}" onclick="setPlotInspectorTab('stage')" data-tip="Space and grid" aria-label="Space and grid">${sfIcon('action.grid')}</button>
       </div>
-      <div class="insp-caption">${tab === 'stage' ? 'Space' : (flow ? 'Cable' : 'Element')}</div>
+      <div class="insp-caption">${tab === 'stage' ? 'Space' : (flow ? 'Cable' : 'Item')}</div>
     </div>
     <div class="insp-pane ${tab === 'element' ? 'on' : ''}">${elementPane}</div>
     <div class="insp-pane ${tab === 'stage' ? 'on' : ''}">${stagePane}</div>`;
@@ -27593,6 +27990,14 @@ function pbInitStagePlotListeners() {
     };
     palette.addEventListener('pointerup', endPalDrag);
     palette.addEventListener('pointercancel', () => { _plotPalDrag?.ghost?.remove(); _plotPalDrag = null; });
+    // Enter/Space fire click with detail 0 and no pointer events.
+    palette.addEventListener('click', e => {
+      if (e.detail !== 0) return;
+      const btn = e.target?.closest?.('.plot-pal-item');
+      if (!btn) return;
+      if (plotBankManage) togglePlotBankType(btn.getAttribute('data-plot-type'));
+      else addPlotItem(btn.getAttribute('data-plot-type'));
+    });
   }
   // Capture phase so Esc means "deselect" before the dialog stack sees it,
   // and Delete clears the selected item without touching form typing.
@@ -27777,7 +28182,7 @@ async function exportStagePlotPaper(html, fileName, options, okToast, failLabel)
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render ${failLabel}: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -27789,7 +28194,7 @@ function resolveExportPlotIndex(plots) {
 }
 async function showStagePlotPreview() {
   try {
-    saveStagePlot(false);
+    pbSaveOnLeave(() => saveStagePlot(false));
     const layers = currentPlotExportLayers();
     const snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'stage-plot', plotLayers: layers, plotId: activeStagePlotId });
     const plots = getStagePlots(snapshot.prePro);
@@ -27838,7 +28243,7 @@ const PLOT_LAYER_SET_PAGES = PLOT_LAYERS.filter(l => l.key !== 'room')
 async function exportStagePlotLayerSetPDF() {
   let snapshot;
   try {
-    saveStagePlot(false);
+    pbSaveOnLeave(() => saveStagePlot(false));
     snapshot = await preparePaperworkExportSnapshot({
       includeAssignments:false, includeNotes:false, documentType:'stage-plot',
       plotLayerSets: PLOT_LAYER_SET_PAGES, plotId: activeStagePlotId,
@@ -27858,8 +28263,8 @@ async function exportStagePlotLayerSetPDF() {
   const fileName = `${cleanPdfName(`${stagePlotDisplayName(plot, index)} - Layer Set`, 'cueola-stage-plot')}.pdf`;
   const pageList = PLOT_LAYER_SET_PAGES.map(keys => plotLayerSetLabel(keys)).join(', ');
   await exportStagePlotPaper(html, fileName, options,
-    pages => `Layer set PDF downloaded · ${pages} page${pages === 1 ? '' : 's'}: ${pageList}.`,
-    'the layer set');
+    pages => `Stage plot by layer downloaded · ${pages} page${pages === 1 ? '' : 's'}: ${pageList}.`,
+    'the stage plot by layer');
 }
 
 function renderCallSheetSelector(sheets=getCallSheets()) {
@@ -27983,7 +28388,7 @@ function composeWeatherLine(w) {
   if (!w) return '';
   const parts = [];
   if (w.conditions) parts.push(w.conditions);
-  if (w.high || w.low) parts.push(`${w.high || '—'} / ${w.low || '—'}`);
+  if (w.high || w.low) parts.push(`${w.high || '-'} / ${w.low || '-'}`);
   if (w.precip) parts.push(`precip ${w.precip}`);
   if (w.wind) parts.push(`wind ${w.wind}`);
   if (w.sunrise) parts.push(`sunrise ${w.sunrise}`);
@@ -28088,10 +28493,10 @@ function weatherSummaryLine(w) {
   if (w.summary) parts.push(w.summary);   // the student's edited line prints as written
   else {
     if (w.conditions) parts.push(w.conditions);
-    if (w.high || w.low) parts.push(`High ${w.high || '—'} / Low ${w.low || '—'}`);
+    if (w.high || w.low) parts.push(`High ${w.high || '-'} / Low ${w.low || '-'}`);
     if (w.precip) parts.push(`Precip ${w.precip}`);
     if (w.wind) parts.push(`Wind ${w.wind}`);
-    if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '—'} / Sunset ${w.sunset || '—'}`);
+    if (w.sunrise || w.sunset) parts.push(`Sunrise ${w.sunrise || '-'} / Sunset ${w.sunset || '-'}`);
   }
   // Say which DAY this forecast is for — a sheet dated Friday prints Friday's
   // storm, and without the label that reads as "wrong weather" on show day.
@@ -28328,7 +28733,7 @@ function renderCallSheetWeatherCard() {
   const setTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
   const setV = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
   setTxt('pp-weather-day', callSheetDayLabel(date) || 'Add a shoot date');
-  setTxt('pp-weather-call', document.getElementById('pp-call')?.value || '—');
+  setTxt('pp-weather-call', timeInputValue('pp-call') ? paperTime(timeInputValue('pp-call')) : 'Add a call time');
   setTxt('pp-weather-loc', document.getElementById('pp-location')?.value?.trim() || 'Add a location');
   const w = callSheetWeather || {};
   setV('pp-wx-summary', weatherEditableLine(w));
@@ -28461,7 +28866,10 @@ async function fetchCallSheetWeather() {
     callSheetWeather.summary = composeWeatherLine(callSheetWeather);
     renderCallSheetWeatherCard();
     paperworkDirty = true;
-    saveCallSheetStateLocally(false);
+    // A forecast fetch (often the automatic refresh on open) is not someone's
+    // work, so it never goes in "Who worked on what".
+    _pbSuppressActivity = true;
+    try { saveCallSheetStateLocally(false); } finally { _pbSuppressActivity = false; }
   } catch (e) {
     setWeatherStatus('Could not reach the weather service. Check your connection or enter weather manually below.', true);
   } finally {
@@ -28498,7 +28906,7 @@ function saveCallSheetStateLocally(showToastOnSave=false) {
 function switchCallSheet(index) {
   const nextIndex = Number(index);
   if (!Number.isFinite(nextIndex)) return;
-  const data = saveCallSheetStateLocally(false);
+  const data = pbSaveOnLeave(() => saveCallSheetStateLocally(false));
   const sheets = getCallSheets(data);
   storeActiveCallSheetIndex(Math.max(0, Math.min(nextIndex, sheets.length - 1)), sheets);
   renderCallSheetSelector(sheets);
@@ -28537,7 +28945,7 @@ function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
   const detail = affectedNames.length
     ? `Assigned to: ${affectedNames.join(', ')}. Their call-sheet assignment will be removed.`
     : 'No students are assigned to this sheet.';
-  if (!dangerConfirm(`Delete "${callSheetDisplayName(sheet, idx)}"?`, `${detail} Session History remains the undo of last resort.`, { requireText:'DELETE' })) return;
+  if (!dangerConfirm(`Delete "${callSheetDisplayName(sheet, idx)}"?`, `${detail} To undo, an instructor can roll the whole show back from History in Settings.`, { requireText:'DELETE' })) return;
   const remaining = sheets.filter((_, i) => i !== idx);
   const tombstones = pruneCallSheetTombstones({ ...callSheetTombstones(data), [sheet.id]: Date.now() });
   const strippedRows = savedRows.map(row => {
@@ -28634,10 +29042,19 @@ function addAnotherCallSheet() {
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   })();
+  // After a delete, "Call Sheet N" (and the id made from that name) can
+  // already exist. Take the first number whose name and id are both free.
+  const takenIds = new Set(sheets.map(s => s.id));
+  const takenNames = new Set(sheets.map((s, i) => callSheetDisplayName(s, i).toLowerCase()));
+  // data holds only the form's sheets, not the delete markers: read the saved ones.
+  const deletedIds = callSheetTombstones(loadPreProData());
+  const idForNumber = n => normalizeCallSheet({ label:`Call Sheet ${n}` }, n - 1).id;
+  let nextSheetNumber = sheets.length + 1;
+  while (takenNames.has(`call sheet ${nextSheetNumber}`) || takenIds.has(idForNumber(nextSheetNumber)) || deletedIds[idForNumber(nextSheetNumber)]) nextSheetNumber++;
   const nextSheet = normalizeCallSheet({
     ...source,
     id: '',   // never inherit the source's paperwork id — a duplicate id makes the two sheets inseparable in role assignments
-    label: `Call Sheet ${sheets.length + 1}`,
+    label: `Call Sheet ${nextSheetNumber}`,
     date: nextDate, call: '', showStart: '', wrap: '', doors: '',
     weather: null, // new day → fetch fresh forecast; venue carries over from source
     people: (Array.isArray(source.people) ? source.people : []).map(p => ({ ...p, call:'' })),
@@ -28647,7 +29064,7 @@ function addAnotherCallSheet() {
   storeActiveCallSheetIndex(sheets.length - 1, sheets);
   // Re-creating a sheet whose generated id collides with a tombstoned one
   // clears that tombstone — otherwise the new sheet would vanish on next read.
-  const tombstones = { ...callSheetTombstones(data) };
+  const tombstones = { ...deletedIds };
   delete tombstones[nextSheet.id];
   const next = { ...data, ...nextSheet, callSheets:sheets, callSheetTombstones:pruneCallSheetTombstones(tombstones), updatedAt:Date.now() };
   persistPreProData(next, 'Call Sheet');
@@ -28864,8 +29281,7 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
       <tr><th>First Aid Kit Location</th><td>${esc(safety.firstAid || '')}</td></tr>
       <tr><th>Fire Extinguisher Location</th><td>${esc(safety.fire || '')}</td></tr>
       <tr><th>Emergency</th><td>${esc(safety.emergency || '')}</td></tr>
-      <tr><th>Other Numbers</th><td>${esc(safety.nonemergency || '')}</td></tr>
-      ${safetySecurityValue(safety.security) ? `<tr><th>Security</th><td>${esc(safetySecurityValue(safety.security))}</td></tr>` : ''}
+      <tr><th>Other Numbers</th><td>${esc(safetyOtherNumbersValue(safety))}</td></tr>
       <tr><th>Late / Lost Contact</th><td>${esc(safety.late || data.late || '')}</td></tr>
       <tr><th>Equipment Needed</th><td>${esc(safety.equipment || '')}</td></tr>
       <tr><th>Safety Notes</th><td>${esc(safety.notes || '')}</td></tr>
@@ -28878,12 +29294,12 @@ function safetyPlanHTML(safety, data=loadPreProData(), sectionNumber=paperworkSe
 // version rendered the live DOM state, so the preview and the package PDF
 // could disagree whenever the save hadn't landed.
 async function showSafetyPlanPreview() {
-  saveSafetyPlan(false);
+  pbSaveOnLeave(() => saveSafetyPlan(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'safety-plan' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the safety plan: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
-  showPaperPreview('Safety Plan Preview', safetyPlanHTML(prePro.safety || getSafetyPlanData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
+  showPaperPreview('Safety Plan Preview', safetyPlanHTML(prePro.safety || getSafetyPlanData(), prePro), 'Keep editing', "hideModal('paperPreviewModal');openSafetyPlan()", 'safety-plan');
 }
 
 function defaultProductionSchedule() {
@@ -29070,7 +29486,7 @@ function renderScheduleLinkedFields(schedule, callSheet=loadPreProData()) {
     const el = document.getElementById(id);
     if (!el) return;
     const v = String(text || '').trim();
-    el.textContent = v || '—';
+    el.textContent = v || 'Not set yet';
     el.classList.toggle('is-empty', !v);
     // An old override that no longer matches the call sheet says so, so the
     // "from the call sheet" hint never lies about where a value came from.
@@ -29085,7 +29501,7 @@ function renderScheduleLinkedFields(schedule, callSheet=loadPreProData()) {
 // "Edit on the call sheet": save what is open here, then open the call sheet
 // editor. The schedule refills from it when it comes back.
 function openCallSheetFromSchedule() {
-  savePaperworkItem('production-scheduler', false);
+  pbSaveOnLeave(() => savePaperworkItem('production-scheduler', false));
   hidePaperworkEditors();
   openPaperworkItem('call-sheet');
 }
@@ -29140,7 +29556,7 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
     <h2>Show Day</h2>
     <table><tbody>
       <tr><th>Show Day</th><td>${esc(paperDate(s.showDate || s.date))}</td></tr>
-      <tr><th>Crew Call</th><td>${esc(paperTime(s.call))}</td></tr>
+      <tr><th>Call Time</th><td>${esc(paperTime(s.call))}</td></tr>
       <tr><th>Doors Open</th><td>${esc(paperTime(s.doors))}</td></tr>
       <tr><th>Show Start</th><td>${esc(paperTime(s.show))}</td></tr>
       <tr><th>Location</th><td>${esc(s.location || '')}</td></tr>
@@ -29153,12 +29569,12 @@ function productionScheduleHTML(schedule, data=loadPreProData(), sectionNumber=p
 
 // Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
 async function showProductionSchedulePreview() {
-  saveProductionSchedule(false);
+  pbSaveOnLeave(() => saveProductionSchedule(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:'production-scheduler' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the schedule: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
-  showPaperPreview('Production Schedule Preview', productionScheduleHTML(prePro.productionSchedule || getProductionScheduleData(), prePro), 'Back to Editor', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
+  showPaperPreview('Production Schedule Preview', productionScheduleHTML(prePro.productionSchedule || getProductionScheduleData(), prePro), 'Keep editing', "hideModal('paperPreviewModal');openProductionSchedule()", 'production-scheduler');
 }
 
 function defaultPatchRows(kind) {
@@ -29176,7 +29592,7 @@ function getPatchRows(kind) {
 const PATCH_FIELD_PLACEHOLDERS = {
   video: { label:'e.g. CAM 2', destination:'e.g. TX1 · SDI in 2', source:'e.g. Sony FX6 on tripod', cabling:'e.g. 50ft SDI via floor run', notes:'e.g. Shading from CCU 2' },
   audio: { label:'e.g. Host mic', destination:'e.g. Board ch 1', source:'e.g. SM7B on boom', cabling:'e.g. XLR snake ch 1', notes:'e.g. Backup lav on ch 5' },
-  comms: { position:'e.g. Show Caller', out:'e.g. Channel A', gear:'e.g. Wired beltpack 3', notes:'e.g. Talks to camera + playback' },
+  comms: { position:'e.g. Director', out:'e.g. Channel A', gear:'e.g. Wired beltpack 3', notes:'e.g. Talks to camera + playback' },
 };
 function patchInput(value, kind, row, field) {
   const id = `pb-patch-${kind}-${row}-${field}`;
@@ -29408,10 +29824,10 @@ function patchTableHTML(kind, title, data=null) {
 
 // Snapshot-fed (see showSafetyPlanPreview): preview shows what exports.
 async function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
-  savePatchSheet(false);
+  pbSaveOnLeave(() => savePatchSheet(false));
   let snapshot;
   try { snapshot = await preparePaperworkExportSnapshot({ includeAssignments:false, includeNotes:false, documentType:kind === 'video' ? 'video-patch' : 'audio-comms-patch' }); }
-  catch (error) { toast(`Preview blocked: ${paperworkExportFailureMessage(error)}`); return; }
+  catch (error) { toast(`Could not preview the patch sheet: ${paperworkExportFailureMessage(error)}`); return; }
   const prePro = snapshot.prePro || {};
   // Section numbers come from the shared builder (D6) so a single-sheet
   // preview and the full package can never disagree.
@@ -29419,14 +29835,14 @@ async function showPatchSheetPaperPreview(kind=activePatchKind || 'video') {
     showPaperPreview('Video Patch Sheet Preview', `
       <h1 class="psec-h psec-video">${paperSectionTitle(paperworkSectionNumber('video-patch'), 'Video Patch Sheet')}</h1>
       ${patchTableHTML('video', 'Video Patch Sheet', prePro)}
-    `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
+    `, 'Keep editing', "hideModal('paperPreviewModal');openPatchSheetEditor('video')", 'video-patch');
     return;
   }
   showPaperPreview('Audio and Comms Patch Sheet Preview', `
     <h1 class="psec-h psec-audio">${paperSectionTitle(paperworkSectionNumber('audio-comms-patch'), 'Audio and Comms Patch Sheets')}</h1>
     ${patchTableHTML('audio', 'Audio Patch Sheet', prePro)}
     ${patchTableHTML('comms', 'Comms Patch Sheet', prePro)}
-  `, 'Back to Editor', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
+  `, 'Keep editing', "hideModal('paperPreviewModal');openPatchSheetEditor('audio-comms')", 'audio-comms-patch');
 }
 
 // Production Notes are a working discussion board, not deliverable paperwork —
@@ -29462,8 +29878,8 @@ function renderPackageSheetPicker() {
     : '';
   const noteCount = Array.isArray(plandaBearNotes) ? plandaBearNotes.length : 0;
   // Owner 2026-08-30: the include-notes choice lives HERE with the export
-  // buttons, not hidden inside the package preview (it stays there too, and
-  // both write the same flag). Which sections print at all is the Paperwork
+  // buttons, not hidden inside the package preview (the preview copy was cut
+  // in 3.0). Which sections print at all is the Paperwork
   // for this show list above.
   const sheetRows = sheets.length > 1 ? `
       <div class="pb-pkg-sheet-picker-sub">Call sheets in the package · ${includedCount} of ${sheets.length}</div>
@@ -29477,7 +29893,7 @@ function renderPackageSheetPicker() {
   host.hidden = false;
   host.innerHTML = `
     <div class="pb-pkg-sheet-picker">
-      <div class="pb-pkg-sheet-picker-title">Package export options<button type="button" class="info-btn" aria-label="What’s in the export package" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+      <div class="pb-pkg-sheet-picker-title">Package export options<button type="button" class="info-btn" aria-label="What’s in the export" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       <label class="pb-pkg-optin">
         <input type="checkbox" ${pbPackageIncludeNotes ? 'checked' : ''} onchange="pbSetPackageNotesFromHub(this.checked)">
         <span>Include Production Notes in the package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
@@ -29516,7 +29932,7 @@ function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('
   const groups = Array.isArray(snapshot?.assignmentGroups) ? snapshot.assignmentGroups : [];
   const rows = groups.flatMap(group => group.roles.map((role, index) => `
     <tr>
-      <td><strong>${esc(group.displayName || 'Unnamed student')}</strong><br><span class="cue-muted">${esc(group.profileId)}</span></td>
+      <td><strong>${esc(group.displayName || 'Unnamed student')}</strong></td>
       <td>${esc(role.positionLabel || role.positionId)}</td>
       <td>${role.status === 'completed' ? 'Completed' : 'Assigned'}</td>
       <td>${role.paperwork.length ? role.paperwork.map(item => esc(item.paperworkLabel)).join('<br>') : 'None required'}</td>
@@ -29527,7 +29943,7 @@ function assignmentRegisterHTML(snapshot, sectionNumber=paperworkSectionNumber('
     <h1 class="psec-h psec-register">${paperSectionTitle(sectionNumber, 'Student Positions and Required Paperwork')}</h1>
     <p>Who holds each position, and the paperwork that position owns.</p>
     <table class="paper-assignment-register">
-      <thead><tr><th>Student profile</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
+      <thead><tr><th>Student</th><th>Position</th><th>Status</th><th>Required paperwork</th><th>Assigned by</th><th>Updated</th></tr></thead>
       <tbody>${rows.join('') || '<tr><td colspan="6">No positions were saved for this production.</td></tr>'}</tbody>
     </table>`;
 }
@@ -29544,13 +29960,8 @@ function preProPackageHTML(forExport=false, snapshot=null) {
   const pickedIds = Array.isArray(snapshot?.options?.callSheetIds) ? snapshot.options.callSheetIds : null;
   const pickedSheets = pickedIds ? allSheets.filter(sheet => pickedIds.includes(sheet.id)) : allSheets;
   const callSheets = pickedSheets.length ? pickedSheets : allSheets.slice(0, 1);
+  // The Include Production Notes box lives in the hub only (the preview copy was a duplicate).
   const includePackageNotes = snapshot ? snapshot.options?.includeNotes === true : pbPackageIncludeNotes;
-  const noteCount = Array.isArray(snapshot?.notes) ? snapshot.notes.length : plandaBearNotes.length;
-  const notesToggle = forExport ? '' : `
-    <label class="pb-pkg-optin no-print">
-      <input type="checkbox" ${includePackageNotes ? 'checked' : ''} onchange="pbTogglePackageNotes(this.checked)">
-      <span>Include Production Notes in this package${noteCount ? ` (${noteCount} note${noteCount === 1 ? '' : 's'})` : ''}</span>
-    </label>`;
   const sections = [];
   // Every package section carries its numbered title into the per-page header
   // via this data attribute (pagination inherits it like orientation). The
@@ -29605,7 +30016,6 @@ function preProPackageHTML(forExport=false, snapshot=null) {
     sections.push(`<section${sectionAttr('production-notes', 'Production Notes')}>${productionNotesThreadHTML(snapshot?.notes, snapshot?.production?.name, numbers.get('production-notes'))}</section>`);
   }
   return `
-    ${notesToggle}
     ${sections.join('\n    <div class="paper-page-break"></div>\n    ')}
   `;
 }
@@ -30348,6 +30758,9 @@ function saveCallSheet(showToastOnSave=true) {
 // Planda Bear's Call Sheet "Show Start" is the source of truth for the rundown
 // start time — keep the build/settings start in sync whenever it's set there.
 function applyPlandaShowStartToRundown() {
+  // A group's call sheet belongs to that group; the rundown is the whole
+  // class's, so a group's show start must not move everyone's start time.
+  if (groupActive()) return;
   const raw = (typeof getShowStartValue === 'function') ? getShowStartValue() : '';
   if (!raw || raw === 'N/A') return;
   const norm = normalizeTimeValue(raw);
@@ -30512,7 +30925,7 @@ function addCallSheetPerson() {
 function fillCallSheetCrewFromRoster() {
   syncCallSheetPeopleFromDOM();
   const roster = getRoleAssignments().filter(row => String(row?.person || '').trim());
-  if (!roster.length) { toast('No positions assigned yet. Assign positions on the Planda Bear hub first.'); return; }
+  if (!roster.length) { toast(adminSession ? 'No positions assigned yet. Assign them in Position Assignments on the main Planda Bear page.' : 'No positions assigned yet. Your instructor assigns them.'); return; }
   // Group person -> joined positions, in roster order.
   const byPerson = new Map();
   roster.forEach(row => {
@@ -30565,6 +30978,10 @@ function estimateWrapFromRundown() {
   const wrap = `${String(Math.floor(endMins / 60)).padStart(2,'0')}:${String(endMins % 60).padStart(2,'0')}`;
   setWrapNotApplicable(false);
   setTimeInputValue('pp-wrap', wrap);
+  // A button fires no input event: hold the refresh off the field and save,
+  // or the next refresh puts the old (blank) wrap back.
+  pbNoteLocalEdit('pp-wrap');
+  pbQueuePaperworkAutosave();
   toast(`Estimated wrap ${paperTime(wrap)} (start + ${rundownFmtTotal(totalSecs)} runtime).`);
 }
 
@@ -30613,13 +31030,13 @@ async function downloadCallSheetPDF() {
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'portrait', allowMixedOrientation:false });
   try {
     const result = await exportPaperHTMLAsPDF(html, savedCallSheetFileName, options);
-    toast(`Call sheet PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Call sheet PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not build the call sheet PDF: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -30671,13 +31088,13 @@ async function exportPreProPackagePDF() {
   const cleanFileName = (snapshot.production.name || 'cueola-plandabear-package').replace(/[^\w\-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').toLowerCase() || 'cueola-plandabear-package';
   try {
     const result = await exportPaperHTMLAsPDF(html, `${cleanFileName}-plandabear-package.pdf`, options);
-    toast(`Paperwork package PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Paperwork package PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not build the package PDF: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -30708,13 +31125,13 @@ async function exportPDF() {
   const options = paperExportOptionsForSnapshot(snapshot, { orientation:'landscape', allowMixedOrientation:false });
   try {
     const result = await exportPaperHTMLAsPDF(html, cleanFileName, options);
-    toast(`Rundown PDF downloaded · ${result.pageCount} pages.`);
+    toast(`Rundown PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
   } catch (error) {
     if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
     console.warn('Paged PDF renderer unavailable; opening the identical print representation.', error);
     try {
       const result = await printPaperHTML(html, options);
-      toast(`PDF renderer unavailable. Print preview opened · ${result.pageCount} pages. Safari tip: pick Letter + orientation in the dialog.`, 4200);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}). Pick Letter and the right orientation there.`, 4200);
     } catch (printError) {
       toast(`Could not render the saved rundown: ${paperworkExportFailureMessage(printError)}`);
     }
@@ -30826,7 +31243,7 @@ window.addEventListener('popstate', () => {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
     return;
   }
-  if (confirm('Leave this session and return to the front page?')) {
+  if (confirm('Leave this show and go back to the front page?')) {
     leaveSessionForFrontPage();
   } else {
     pushSessionHistoryState(sessionStorage.getItem('cueola_screen') || 'build');
@@ -31019,9 +31436,9 @@ function cueolaAppPath() {
 
   const code = urlCode || stored?.code;
   if (!code) return;
-  // ?prepro=1 is the workspace launcher's window-safe variant of the
-  // dashboard's localStorage flag (a flag would race between two tabs
-  // opened in the same gesture).
+  // ?prepro=1 is the window-safe variant of the dashboard's localStorage flag
+  // (a flag would race between two tabs opened in the same gesture). Show
+  // setup now opens ?app=plandabear instead; this keeps older links working.
   const shouldOpenPrePro = localStorage.getItem('cueola_open_prepro') === '1' || params.get('prepro') === '1';
   localStorage.removeItem('cueola_open_prepro');
 
@@ -31086,6 +31503,8 @@ keymapDispatch = guardFn(keymapDispatch, 'Keyboard dispatch');
 // Offer to resume after an unclean exit (Decisions #14). The banner lives on
 // the entry screen; a deep link that routes elsewhere hides it with the screen.
 initResumeBanner();
+// Signing in or out changes whose record it is, so check again.
+document.addEventListener('cueola-identity-change', initResumeBanner);
 
 // P7: Save the show file with the standard shortcut — Cmd/Ctrl+S saves the
 // open surface in place (Outrangutan screen → .ogshow, otherwise → .cueola)
@@ -31136,6 +31555,9 @@ window.addEventListener('keydown', e => {
   const enter = e => {
     const t = e.target.closest?.('[data-tip],[data-fullname]');
     if (!t) { if (anchor && e.type === 'mouseover') hide(); return; }
+    // A sheet moving focus as it opens is not a request for help: only
+    // keyboard focus shows the label.
+    if (e.type === 'focusin') { try { if (!e.target.matches(':focus-visible')) return; } catch {} }
     arm(t);
   };
   const leave = e => {

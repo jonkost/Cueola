@@ -33,6 +33,8 @@ Doors, playback, deck, dashboard: Name field off the three join modals (the prof
 
 Code: one shared copy of pad/normalizeTimeValue/fmtAgo/App Check bootstrap across index and dashboard · duplicate scriptOpNextCueIndex · duplicate protocol utils · console leftovers · old-code localStorage copies removed after copying · the legacy prompter channel (double writes) · remaining unused CSS.
 
+Fix after 3.0 (9/29): the rundown toolbar's Notes and Planda Bear buttons had been hidden in CSS since July, so cutting the Settings "Apps" copies left no way to reach them. Both are back on the toolbar. Admin shows there only while an instructor is signed in.
+
 ## DESIGN CALLS (Jon ticks)
 
 1. Instructor menu: Admin, Show setup and the DIRECTOR chip fold into one menu, hidden without an instructor sign-in.
@@ -46,5 +48,7 @@ Code: one shared copy of pad/normalizeTimeValue/fmtAgo/App Check bootstrap acros
 9. KeyWi Bird: rim customization → on/off; three layout-sharing paths → one Save.
 10. Front door: Blank Slate's "Work locally only" path; "Rows" count in the show strip; version line only in the Guide; Edit toggle hidden (drag always on).
 11. Code: retire the notes legacy mode and the whole-key paperwork sync fallback once the rules are confirmed deployed; stop mirroring activeIdx; split setupFirestore and the preflight into named pieces.
+
+Changed since 3.0.1: the next release brought back the standalone Flowmingo Op screen (the Flowmingo card's Remote Op button), so design call 5 now covers only the in-Live mode. It also brought back the Planda Bear card's "Show code required" label, so that item is off the SAFE list. Design call 4 and the log item in design call 7 are closed: Jon's house rules (CLAUDE.md) keep the frame-rate setting and the "Who worked on what" log. Do not cut either.
 
 The full lane reports with file:line for every item are kept with the session; this file carries the decisions.

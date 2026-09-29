@@ -261,21 +261,21 @@
   }
 
   function issueMessage(scope, code, count) {
-    var label = scope === 'prePro' ? 'Planda Bear paperwork'
-      : scope === 'notes' ? 'Production notes'
-        : scope === 'assignments' ? 'Assignments'
-          : scope === 'rundown' ? 'Rundown' : 'Export';
-    if (code === 'dirty') return label + ' has unsaved draft changes.';
-    if (code === 'debounce') return label + ' still has a deferred save waiting to run.';
-    if (code === 'pending') return label + ' has ' + count + ' pending write' + (count === 1 ? '' : 's') + '.';
-    if (code === 'loading') return label + ' is still loading its saved state.';
-    if (code === 'cache') return label + ' is available only from cache, not a server confirmation.';
-    if (code === 'denied') return label + ' was denied by Firestore.';
-    if (code === 'conflict') return label + ' has a save conflict that must be resolved.';
-    if (code === 'unavailable') return label + ' could not be confirmed because the server is unavailable.';
-    if (code === 'failed') return label + ' has a failed save or read.';
-    if (code === 'unconfirmed') return label + ' has not been confirmed by the server.';
-    return label + ' is not ready to export.';
+    var label = scope === 'prePro' ? 'The paperwork'
+      : scope === 'notes' ? 'Production Notes'
+        : scope === 'assignments' ? 'The positions list'
+          : scope === 'rundown' ? 'The rundown' : 'The show';
+    if (code === 'dirty') return label + ' has changes that are not saved yet.';
+    if (code === 'debounce') return label + ' is still saving.';
+    if (code === 'pending') return label + ' is still saving.';
+    if (code === 'loading') return label + ' is still loading.';
+    if (code === 'cache') return label + ' could not be checked with the cloud. Check the connection.';
+    if (code === 'denied') return label + ' was not allowed to save to the cloud. Reload Cueola, then export again.';
+    if (code === 'conflict') return label + ' was changed on another computer at the same time. Check it, then export again.';
+    if (code === 'unavailable') return label + ' could not reach the cloud. Check the connection.';
+    if (code === 'failed') return label + ' did not save. Check the connection and try again.';
+    if (code === 'unconfirmed') return label + ' is not confirmed as saved yet.';
+    return label + ' is not ready to export yet.';
   }
 
   function assessReadiness(input) {

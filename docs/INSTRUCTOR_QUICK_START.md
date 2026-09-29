@@ -1,4 +1,4 @@
-# Instructor Quick Start (v2.2, 2026-07)
+# Instructor Quick Start (3.0, 2026-09)
 
 Fifteen minutes from a blank term to a class running its first show. Every bold
 term is the exact label you'll see on screen. In-app, press **?** for
@@ -10,20 +10,23 @@ recorded (decision 14).*
 ## 1 · One-time setup (before the term)
 
 1. Sign in on the **Instructor Dashboard** with your instructor account
-   (no account yet? A super admin mints one under **Account Management ▸
-   Manage Accounts**; you'll get a temp password to change on first use).
-2. Mint the term's **Class Keys** (dashboard panel): one per class or role,
-   labeled for the term (e.g. `FALL26-STUDIO-A`). In the apps students see
-   this called the class login code. Same thing, hand it out through the
-   class channel.
+   (no account yet? A super admin mints one under **Account management ▸
+   Manage accounts**; you'll get a temp password to change on first use).
+2. Make the term's class keys: Dashboard ▸ **Manage accounts** (super
+   admins only) ▸ **Class keys**. Type a label (e.g. "Fall 2026 TV
+   Production"), pick **Student key**, press **Create key**; the code is made
+   for you. Make one per class or role and hand it out through the class
+   channel.
 3. Students create their own profile once: on the front page's **Your
    sessions** card they tap **New here? Create your profile** and follow the
-   steps with the class login code (username, look, theme). After that they
-   sign in right on that card by username, and every session assigned to
-   them is one tap away. **There are no passwords.**
+   steps with the class key (name and username, a 4 digit PIN, look and
+   theme). After that they sign in right on that card with their username
+   and PIN, and every session assigned to them is one tap away. **There are
+   no passwords.** A forgotten PIN is reset on **Manage accounts ▸ Roster ▸
+   Reset PIN**.
 4. Want a sandbox first? The front-page **Demo** card loads Campus News (the
    short tour) with no login. For the full drill, The Break Room, use the
-   dashboard's **Create Test Show** button: it mints a real session
+   dashboard's **Create test show** button: it mints a real session
    pre-loaded with a complete late-night show (segments, scripts, complete
    paperwork, a KeyWi Stream Deck profile, an Outrangutan pad board), and
    the show code it mints is what you hand to the crew. Everyone who
@@ -31,19 +34,21 @@ recorded (decision 14).*
 
 ## 2 · Start a production
 
-1. Dashboard ▸ create the session (or in-app **Blank Slate**). The session
-   code is what the whole crew shares; new codes look like `2607KWXR`
+1. Dashboard ▸ **New show**: name it and press **Create show** (or in-app
+   **Blank Slate**). The show code is what the whole crew shares; new codes look like `2607KWXR`
    (year + month + four letters), and older short codes still work.
    Students assigned to the session see it on their sign-in card and enter
    with one tap; anyone with just the code uses the **Have a show code?**
    link under that card. The join doors in Planda Bear, Flowmingo Remote Op,
    Outrangutan, and the typed-code window lead with the same assigned-session
    list for signed-in students; typed codes are the fallback everywhere.
-2. **Entry Requirement**: choose whether the door needs just the show code
-   (**Show code only: anyone with the code joins**) or **Show code + class
-   key: students must sign in with a profile**.
-3. Pick the session's paperwork set: **Intro course** (starter sheets) or
-   **Full production** (everything, incl. patch sheets + scheduler).
+2. Who can join: **New show** has **Students must sign in with a class key**
+   ticked by default. Change it later in **Session Setup ▸ Entry
+   requirement**: **Show code only** (anyone with the code joins) or **Also
+   require a class key** (students must sign in with a profile).
+3. Pick the paperwork set (New show ▸ **More options**, or Session Setup ▸
+   **Paperwork**): **Intro course** (starter sheets) or **Full production**
+   (everything, incl. patch sheets + scheduler).
 4. Working in teams? **Break into groups**: each group gets its own
    paperwork; **Lock groups** when you want assignments frozen. Your
    **Reviewing** picker flips your paperwork view and exports between groups.
@@ -55,8 +60,12 @@ recorded (decision 14).*
   student's **portal** with to-do and unseen-note badges.
 - **Pinned** notes show you who hasn't read them; **Open items** shows who
   owes what.
-- The live screen's link strip (**CLOUD · TALENT · PLAYOUT · SCRIPT**) plus
-  **System status** recovery buttons are the first stop when anything drops.
+- Choose the director before Live: tap the **DIRECTOR** chip on the rundown
+  bar and pick a signed-in student (**Take back** returns it to you). Only the
+  director's **TAKE** moves the show; while that student is connected your
+  TAKE is off. Everyone else sees **Watch live** instead of **Go Live**.
+- The live screen's **System status** rail opens by itself when something
+  drops. Its recovery buttons are the first stop.
 - Disaster recovery: **Settings ▸ File ▸ History** ▸ **Session History**.
   Cloud-trail snapshots restore the rundown for everyone (a recovery copy is
   saved first).
@@ -64,13 +73,13 @@ recorded (decision 14).*
 ## 4 · After the show / series
 
 - **Export PDF Package** per group; saved exports are stamped and traceable.
-- Running a series? Open the finished session on the dashboard ▸
-  **Next Episode** panel ▸ **Start Next Episode →**. Rundown and paperwork
+- Running a series? On the dashboard, open the finished show's **Session
+  Setup** ▸ **Next episode** ▸ **Start next episode →**. Rundown and paperwork
   carry forward, the name auto-increments ("Ep 12" ▸ "Ep 13"), and the new
   session shows an **↳ From** chip.
 
 ## 5 · End of term
 
 Follow [term-boundary-runbook.md](term-boundary-runbook.md): export/archive or
-purge sessions (purge is the PII wipe), revoke the term's Class Keys, mint next
+purge sessions (purge is the PII wipe), revoke the term's class keys, mint next
 term's. Ten minutes, twice a year.

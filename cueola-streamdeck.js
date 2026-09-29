@@ -83,11 +83,11 @@
   var KEYMAP_DESCS = {
     'playout.go': 'Fires the standby cue in Outrangutan. Doubles as resume when paused.',
     'playout.pause': 'Pauses the playing clip; press again to resume. Toggle.',
-    'playout.stop': 'Stops all playback and resets standby to the top.',
+    'playout.stop': 'Stops all playback. Standby goes back to the clip the rundown is waiting on, or to the top.',
     'playout.fade': 'Fades everything out over 0.8s, then stops.',
     'playout.panic': 'Hard-kills all video and SFX instantly. The emergency brake.',
-    'rundown.next': 'Advances the live rundown to the next row.',
-    'rundown.back': 'Steps the live rundown back one row.',
+    'rundown.next': 'Same as the TAKE button in Live: the director\'s press puts the STANDBY cue ON AIR for everyone.',
+    'rundown.back': 'Moves the show back one cue. Director only.',
     'prompter.cue.current': 'Jumps the talent prompter to the current live row.',
     'prompter.playpause': 'Starts or stops the prompter scroll. Toggle.',
     'prompter.top': 'Sends the prompter back to the top of the script.',
@@ -136,11 +136,11 @@
     // Named cue/pad refs are bound from the live show list in the key editor.
     registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', desc: 'Fires one specific SFX pad, picked by name.' });
     registerAction({ id: 'cueRef', kind: 'cueRef', group: 'This show', color: '#234a8a', label: 'CUE', full: 'Cue (by name)', desc: 'Fires one specific cue, picked by name.' });
-    registerAction({ id: 'golive', kind: 'golive', machineLocal: true, group: 'Cueola', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens the Live show screen (with its go-live check).', lamp: function (s) { return !!(s.live && s.live.on); } });
+    registerAction({ id: 'golive', kind: 'golive', machineLocal: true, group: 'Cueola', color: '#8a1f1f', label: 'GO LIVE', full: 'Enter Live / start show', desc: 'Opens Live right away. It skips the pre-show checks that the Go Live button runs.', lamp: function (s) { return !!(s.live && s.live.on); } });
     // Ready-track-roll-take: TAKE fires the armed call now, ABORT cancels it.
     // Both ride the control bus and light while a call is armed or counting.
-    registerAction({ id: 'rundown.take', kind: 'bus', target: 'rundown', action: 'take', group: 'Cueola', color: '#8a1f1f', label: 'TAKE', full: 'TAKE the armed playout call', desc: 'Fires the armed ready-track-roll call immediately instead of waiting out the countdown. Glows while a call is armed.', lamp: busLamp('rundown', 'take') });
-    registerAction({ id: 'rundown.abort', kind: 'bus', target: 'rundown', action: 'abort', group: 'Cueola', color: '#5a4a12', label: 'ABORT', full: 'ABORT the armed playout call', desc: 'Cancels the armed ready-track-roll call before it fires. Glows while a call is armed.', lamp: busLamp('rundown', 'abort') });
+    registerAction({ id: 'rundown.take', kind: 'bus', target: 'rundown', action: 'take', group: 'Cueola', color: '#8a1f1f', label: 'TAKE', full: 'Roll a counting-down clip now', desc: 'Rolls a playback clip now instead of waiting out its pre-roll countdown (Roll now in Live). With no clip counting down it does nothing; NEXT takes the next cue. Glows while a clip counts down.', lamp: busLamp('rundown', 'take') });
+    registerAction({ id: 'rundown.abort', kind: 'bus', target: 'rundown', action: 'abort', group: 'Cueola', color: '#5a4a12', label: 'ABORT', full: 'Cancel a counting-down clip', desc: 'Cancels a playback pre-roll so the clip never rolls (Cancel in Live). Glows while a clip counts down.', lamp: busLamp('rundown', 'abort') });
     // The clock suite: one toggle plus explicit Start / Pause / Resume verbs.
     // Lamps: Start+Resume glow while running; Pause glows while paused mid-show.
     registerAction({ id: 'clock', kind: 'clock', verb: 'toggle', group: 'Cueola · show clock', color: '#243a66', label: 'CLOCK', full: 'Show clock: start / pause', desc: 'One-key clock: starts it, or pauses it if running. Toggle.', toggle: true, lamp: function (s) { return !!(s.clock && s.clock.running); } });
@@ -174,7 +174,7 @@
     // Layouts as pages: a key can jump straight to a saved layout, or cycle them.
     registerAction({ id: 'layout.next', kind: 'layoutNext', group: 'Layouts', color: '#2e3640', label: 'PAGE →', full: 'Next page', desc: 'Cycles to the next saved layout. Turns the deck into pages; the key shows which page you are on.' });
     registerAction({ id: 'layout.prev', kind: 'layoutPrev', group: 'Layouts', color: '#2e3640', label: 'PAGE ←', full: 'Previous page', desc: 'Cycles back to the previous saved layout. The key shows which page you are on.' });
-    registerAction({ id: 'layout.home', kind: 'layoutHome', group: 'Layouts', color: '#2e3640', label: 'HOME', full: 'Home page', desc: 'Jumps straight to this deck\'s default layout, from any page.' });
+    registerAction({ id: 'layout.home', kind: 'layoutHome', group: 'Layouts', color: '#2e3640', label: 'HOME', full: 'Home page', desc: 'Jumps straight to this deck\'s home page, from any page.' });
     registerAction({ id: 'layoutRef', kind: 'layoutRef', group: 'Layouts', color: '#2e3640', label: 'PAGE', full: 'Jump to a layout (by name)', desc: 'Switches the whole deck to one specific saved layout.', lamp: function (s, slot) { return !!(slot && slot.ref && mapping().name === slot.ref); } });
     // OBS (obs-websocket). Lamps read live OBS state so keys glow when live.
     registerAction({ id: 'obs.stream', kind: 'obs', machineLocal: true, op: 'toggleStream', group: 'OBS', color: '#8a1f1f', label: 'STREAM', full: 'OBS: start / stop streaming', desc: 'Starts or stops the OBS stream. Glows while you are live. Toggle.', toggle: true, lamp: function () { return obsState().streaming; } });
@@ -219,7 +219,7 @@
     prompterSize: { label: 'Text size', hue: '#b06ef8', turnLabel: 'Bigger / smaller', pressLabel: 'Reset size',
       desc: 'Turn: talent text size. Press: back to the default size.',
       readout: function (s) { return s.prompter ? String(Math.round(s.prompter.size || 0)) : '-'; }, bar: function (s) { return s.prompter ? Math.min(1, (s.prompter.size || 0) / 120) : 0; },
-      tick: function (d) { return surfacePrompter(d > 0 ? 'size_up' : 'size_down'); }, press: function () { return surfacePrompter('reset'); } },
+      tick: function (d) { return surfacePrompter(d > 0 ? 'size_up' : 'size_down'); }, press: function () { return surfacePrompter('size_set_52'); } },
     prompterScrub: { label: 'Prompter scrub', hue: '#22d3d3', turnLabel: 'Scrub the script', pressLabel: 'Cue to live row',
       desc: 'Turn: glide the prompter anywhere in the script, like a scrub wheel on a video editor. Press: snap it to the current live row.',
       readout: function (s) { var live = jogLivePct(s); return live != null ? Math.round(live) + '%' : '-'; },
@@ -656,11 +656,17 @@
     try { var p = o.setVolume(n, obsVolume() + d * 0.04); if (p && typeof p.then === 'function') p.then(null, onErr); } catch (e) { onErr(e); }
     schedulePaint();
   }
-  var obsWasReady = false;
+  var obsWasReady = false, obsErrShown = '';
   function onObsChange() {
     var now = !!(OBSc() && OBSc().isReady());
-    if (now !== obsWasReady) { obsWasReady = now; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
+    var err = (OBSc() && OBSc().lastError && OBSc().lastError()) || '';
+    // Never redraw a sheet while a field in it has focus: typing would be lost.
+    var ae = document.activeElement, typing = !!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.closest && ae.closest('#sd-picker, #sd-wizard'));
+    if (now !== obsWasReady) { obsWasReady = now; obsErrShown = err; if (document.getElementById('streamdeck') && document.getElementById('streamdeck').classList.contains('on')) render(); schedulePaint(); if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
     else if (now) { updateObsScene(); updateLiveBadge(); schedulePaint(); }
+    // A failed connect never flips ready, so its reason (wrong address, wrong
+    // password, OBS not running) has to redraw the open sheet itself.
+    else if (err !== obsErrShown && !typing) { obsErrShown = err; if (wizardStep >= 0) wizardRender(); renderDeckSettings(); }
   }
   function updateObsScene() { var el = document.querySelector('.sd-obs-scene'); if (el) el.textContent = obsState().currentScene || '(no scene)'; }
   function updateLiveBadge() { var el = document.getElementById('sd-livebadge'); if (!el) return; var o = obsState(), parts = []; if (o.streaming) parts.push('<span class="sd-lb sd-lb-live">LIVE</span>'); if (o.recording) parts.push('<span class="sd-lb sd-lb-rec">REC' + (o.recordPaused ? ' ❚❚' : '') + '</span>'); el.innerHTML = parts.join(''); }
@@ -992,7 +998,7 @@
     render(); paintAll();
   }
   async function connect() {
-    if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return false; }
+    if (!navigator.hid) { toast('Stream Deck needs Chrome or Edge.'); return false; }
     deckLetGoByUser = false;
     var own = await ensureDeckOwnership();
     if (!own.ok) { toast('Could not take the Stream Deck over from the other Cueola window.'); return false; }
@@ -1023,7 +1029,7 @@
   // Grant + open one more deck. The browser's picker only grants one device per
   // call, so adding a third deck is just pressing this again.
   async function addDeck() {
-    if (!navigator.hid) { toast('WebHID needs Chrome or Edge. The control surface is Chromium only.'); return;
+    if (!navigator.hid) { toast('Stream Deck needs Chrome or Edge.'); return;
     }
     deckLetGoByUser = false;
     var own = await ensureDeckOwnership();
@@ -1110,10 +1116,11 @@
     startAnim();
     startGifLoop();
     dropUndersizedGifs();   // a bigger key face than the frames were decoded for: decode again
-    // Silent boot path: no light show and no strip format probe on a mere page
-    // load. Both stay on the explicit Connect flow.
+    // Silent boot path: no light show on a mere page load. The light show stays
+    // on the explicit Connect flow. The strip format probe is console only now
+    // (CueolaStreamDeck._stripProbe()): the + XL strip format is pinned.
     if (silent) paintAll();
-    else connectLightShow().then(function () { return paintAll(); }).then(function () { return stripProbe(); });
+    else connectLightShow().then(function () { return paintAll(); });
     toast('Connected: ' + profile.name + ' (' + profile.keys + ' keys, ' + profile.dials + ' dials).');
     return true;
   }
@@ -1168,7 +1175,7 @@
         var usages = (it.usages || []).map(function (u) { return '0x' + u.toString(16); }).join(',');
         return it.reportCount + '×' + it.reportSize + 'bit' + (usages ? ' usages[' + usages + ']' : '');
       }).join('; ');
-      return kind + ' report 0x' + (rep.reportId || 0).toString(16) + (items ? ' — ' + items : '');
+      return kind + ' report 0x' + (rep.reportId || 0).toString(16) + (items ? ': ' + items : '');
     });
   }
   function describeCollections(cols, indent) {
@@ -1183,7 +1190,7 @@
     return rows;
   }
   async function runDiagnostics() {
-    if (!navigator.hid) { toast('WebHID needs Chrome or Edge.'); return; }
+    if (!navigator.hid) { toast('Stream Deck needs Chrome or Edge.'); return; }
     var dev = device && device.hid, openedHere = false;
     try {
       if (!dev) {
@@ -1198,7 +1205,7 @@
       vendorId: '0x' + dev.vendorId.toString(16),
       productId: '0x' + dev.productId.toString(16),
       productName: dev.productName || '(no product name string)',
-      knownModel: known ? known.name : 'NOT in the model table — the adaptive + XL fallback would apply',
+      knownModel: known ? known.name : 'NOT in the model table, so the + XL fallback would apply',
       // Dial turns are only observable through KeyWi's own connection: a
       // capture on an unconnected deck must say so instead of inviting turns
       // that can never appear.
@@ -1208,8 +1215,10 @@
     };
     try { if (!dev.opened) { await dev.open(); openedHere = true; } }
     catch (e) {
-      report.error = 'Could not open the device (quit the Elgato Stream Deck app — it claims the USB device): ' + (e && e.message ? e.message : e);
-      diagInfo = report; render(); return;
+      report.error = 'Could not open the device. Quit the Elgato Stream Deck app (it holds the USB device), then try again: ' + (e && e.message ? e.message : e);
+      diagInfo = report; render();
+      try { var dpe = document.querySelector('#sd-surface-root .sd-diag'); if (dpe && dpe.scrollIntoView) dpe.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e2) {}
+      return;
     }
     report.descriptor = describeCollections(dev.collections, '');
     // Read every feature report the descriptor declares, plus 0x08 Unit Info
@@ -1231,6 +1240,8 @@
     if (openedHere && !device) { try { await dev.close(); } catch (e) {} }
     diagInfo = report;
     render();
+    // The report draws under the deck, below the fold: bring it into view.
+    try { var dp = document.querySelector('#sd-surface-root .sd-diag'); if (dp && dp.scrollIntoView) dp.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
     toast('Deck diagnostics captured. Nothing was changed on the device.');
   }
   function diagText() {
@@ -1250,14 +1261,14 @@
       lines.push('');
       lines.push('Feature report dumps (GET only):');
       d.features.forEach(function (f) {
-        lines.push('  feature ' + f.id + (f.error ? ' — read failed: ' + f.error : ' — ' + f.hex));
+        lines.push('  feature ' + f.id + (f.error ? ': read failed: ' + f.error : ': ' + f.hex));
         if (f.parsed) lines.push('    parsed as Unit Information: ' + f.parsed);
       });
     }
     lines.push('');
     lines.push('Dial check (turn each dial while this report is open; every turn is logged here and held back from the apps, and its strip zone flashes red to say it was seen):');
     if (d.dialEvents && d.dialEvents.length) d.dialEvents.forEach(function (row) { lines.push('  ' + row); });
-    else if (!d.liveDials) lines.push('  this capture ran without a connected deck, so dial turns cannot be seen here. Close this report, press Connect deck, then open Diagnostics again from the Deck details row.');
+    else if (!d.liveDials) lines.push('  this capture ran without a connected deck, so dial turns cannot be seen here. Close this report, press Connect deck, then open Diagnostics again from Deck settings or the Deck details row.');
     else lines.push('  no dial turns seen yet. Turn the scrub dial clockwise: the newest row should say "forward". If it says "back": select that deck\'s tab above the keys, open Deck settings, and set Dials to Reversed (the flip is saved per deck).');
     return lines.join('\n');
   }
@@ -3287,8 +3298,8 @@
   }
   function switchProfile(id) { if (!profiles[id]) return; activeProfileId = id; persist(true); render(); paintAll(); }
   // Page keys: hop between saved layouts straight from the deck, both ways.
-  function cycleLayout(dir) { var ids = Object.keys(profiles); if (ids.length < 2) { toast('Only one page saved. Add more layouts to page between them.'); return; } var next = ids[(ids.indexOf(activeProfileId) + (dir || 1) + ids.length) % ids.length]; switchProfile(next); toast('Page: ' + profiles[next].name); }
-  function switchLayoutByName(name) { var id = Object.keys(profiles).find(function (k) { return profiles[k].name === name; }); if (id) { switchProfile(id); toast('Page: ' + name); } else toast('No layout named "' + name + '".'); }
+  function cycleLayout(dir) { var ids = Object.keys(profiles); if (ids.length < 2) { toast('Only one page. Add a page with + to flip between pages.'); return; } var next = ids[(ids.indexOf(activeProfileId) + (dir || 1) + ids.length) % ids.length]; switchProfile(next); toast('Page: ' + profiles[next].name); }
+  function switchLayoutByName(name) { var id = Object.keys(profiles).find(function (k) { return profiles[k].name === name; }); if (id) { switchProfile(id); toast('Page: ' + name); } else toast('No page named "' + name + '".'); }
   // Deck-aware layout paging: a PAGE key on a secondary deck pages THAT deck.
   function cycleLayoutFor(deck, dir) {
     if (!deck || deck === device) { cycleLayout(dir); return; }
@@ -3301,19 +3312,19 @@
   // HOME: straight back to the deck's default layout from any page.
   function homeLayoutFor(deck) {
     if (!deck || deck === device) {
-      if (!profiles[defaultProfileId]) { toast('No default layout set. Use Set default in the layout bar.'); return; }
+      if (!profiles[defaultProfileId]) { toast('No home page set. Use Set home in the Pages row.'); return; }
       if (activeProfileId !== defaultProfileId) { switchProfile(defaultProfileId); toast('Page: ' + profiles[defaultProfileId].name); }
       return;
     }
     var c = deck.cfg || {};
-    if (!c.profiles || !c.profiles[c.defaultProfileId]) { toast('No default layout set on that deck.'); return; }
+    if (!c.profiles || !c.profiles[c.defaultProfileId]) { toast('No home page set on that deck.'); return; }
     if (c.activeProfileId !== c.defaultProfileId) { c.activeProfileId = c.defaultProfileId; persistDeck(deck); repaintDeck(deck); toast('Page: ' + c.profiles[c.defaultProfileId].name); }
   }
   function switchLayoutByNameFor(deck, name) {
     if (!deck || deck === device) { switchLayoutByName(name); return; }
     var c = deck.cfg || {}, id = Object.keys(c.profiles || {}).find(function (k) { return c.profiles[k].name === name; });
-    if (id) { c.activeProfileId = id; persistDeck(deck); repaintDeck(deck); toast('Layout: ' + name); }
-    else toast('No layout named "' + name + '".');
+    if (id) { c.activeProfileId = id; persistDeck(deck); repaintDeck(deck); toast('Page: ' + name); }
+    else toast('No page named "' + name + '".');
   }
   function persistDeck(deck) {
     if (!deck || deck === device) { persist(true); return; }
@@ -3327,7 +3338,7 @@
   function duplicateActive() { var p = mapping(); addProfile(p.name + ' copy', JSON.parse(JSON.stringify(p.keys)), p.dials.slice(), JSON.parse(JSON.stringify(p.touch))); }
   function renameActive(name) { if (name) { mapping().name = uniqueName(name); persist(); render(); } }
   function deleteActive() { if (Object.keys(profiles).length <= 1) { toast('Keep at least one profile.'); return; } delete profiles[activeProfileId]; if (defaultProfileId === activeProfileId) defaultProfileId = Object.keys(profiles)[0]; activeProfileId = Object.keys(profiles)[0]; persist(); render(); paintAll(); }
-  function setDefaultActive() { defaultProfileId = activeProfileId; persist(); render(); toast('"' + mapping().name + '" is the default layout for this deck.'); }
+  function setDefaultActive() { defaultProfileId = activeProfileId; persist(); render(); toast('"' + mapping().name + '" is now the home page. The deck starts here.'); }
   function resetActive() { mapping().keys = defaultKeySlots(profile.keys); mapping().dials = defaultDialSet(profile); mapping().touch = defaultTouch(profile.strip ? profile.strip.zones : 0); persist(); render(); paintAll(); }
   // Add a page: pick its starter. "Starter" is the by-app default for this
   // deck size; "Director" is the rundown-only page a student director runs
@@ -3337,7 +3348,7 @@
     var body = '<div class="sd-ed-head">Add a page</div>'
       + '<div class="sd-ed-desc">Pick what the new page starts with. Every key can be changed afterwards.</div>'
       + '<button class="sd-picker-opt" data-tpl="default">Starter: every app, laid out for this deck</button>'
-      + '<button class="sd-picker-opt" data-tpl="director">Director: rundown only (BACK, NEXT, TAKE, ABORT, ROW, CLOCK)</button>'
+      + '<button class="sd-picker-opt" data-tpl="director">Director: rundown only (PREV, NEXT, TAKE, ABORT, ROW, CLOCK)</button>'
       + '<div class="sd-save-actions"><button class="btn-secondary" id="sd-tpl-cancel">Cancel</button></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
@@ -3364,7 +3375,7 @@
     var url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = slug(p.name) + '.keywi'; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    toast('Saved "' + p.name + '.keywi".');
+    toast('Exported ' + slug(p.name) + '.keywi.');
   }
   function importFile(file) {
     if (!file) return;
@@ -3511,7 +3522,7 @@
       + '<button class="btn-secondary" id="sd-lay-export">Export file</button>'
       + '<input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden>'
       + '<button class="btn-primary" id="sd-lay-save">Save current</button>'
-      + '<button class="btn-secondary" id="sd-lay-close">Done</button>'
+      + '<button class="btn-secondary" id="sd-lay-close">Close</button>'
       + '</div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
@@ -3536,6 +3547,8 @@
         if (name == null) return;
         name = String(name).trim().slice(0, 40);
         if (!name || name === l.name) return;
+        var nk = 'k_' + slug(name).replace(/[^a-z0-9]/g, '_'), other = nk !== k && _cloudLayouts[nk];
+        if (other && !window.confirm('You already have a saved layout called "' + (other.name || name) + '". Replace it with this one?')) return;
         renameCloudLayout(k, name);
       };
     });
@@ -3592,14 +3605,14 @@
     if (showGrid) { paintMirror(); paintStrip(true); }
   }
   function previewBanner() {
-    return '<div class="sd-preview-banner"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><div>Preview mode: a virtual Stream Deck + XL so you can lay it out, pick a theme, and press keys on screen. Plug in real hardware and hit <b>Connect real deck</b> to drive the show.</div><button class="btn-secondary" id="sd-preview-connect">Connect real deck</button></div>';
+    return '<div class="sd-preview-banner"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><div>Preview mode: a virtual Stream Deck + XL so you can lay it out and pick a theme. Click a key to change it. Plug in real hardware and hit <b>Connect real deck</b> to drive the show.</div><button class="btn-secondary" id="sd-preview-connect">Connect real deck</button></div>';
   }
   function statusBar() {
     var s = surfaceState();
     return '<div class="sd-status">'
       + statusChip('Device', device ? profile.name : (previewMode ? 'Preview (virtual)' : (deckHeldElsewhere ? 'In another window' : 'Not connected')), device ? 'ok' : 'off')
       + (micoParked() ? '' : statusChip('Micochondria', talkbackState.connected ? 'Daemon connected' : 'Not running', talkbackState.connected ? 'ok' : 'off', 'sd-chip-mico'))
-      + statusChip('Session', s.session && s.session.code ? s.session.code : 'None', s.session && s.session.code ? 'ok' : 'off')
+      + statusChip('Show', s.session && s.session.code ? s.session.code : 'Not joined', s.session && s.session.code ? 'ok' : 'off')
       + '<div class="sd-status-actions">'
       + saveBtnHTML()
       + ((device || previewMode) ? '<button class="btn-secondary sd-icon-btn" id="sd-settings" data-tip="Deck settings: theme, OBS' + (micoParked() ? '' : ', Micochondria') + '" aria-label="Deck settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>' : '')
@@ -3662,7 +3675,13 @@
     if (pageRenaming == null) return;   // blur after Enter must not double-fire
     var id = pageRenaming; pageRenaming = null;
     var name = String(value || '').trim();
-    if (name && profiles[id] && name !== profiles[id].name) { profiles[id].name = uniqueName(name); persist(); }
+    if (name && profiles[id] && name !== profiles[id].name) {
+      var oldName = profiles[id].name, newName = uniqueName(name);
+      profiles[id].name = newName;
+      // PAGE keys bound to this page by name follow the rename.
+      Object.keys(profiles).forEach(function (pid) { (profiles[pid].keys || []).forEach(function (k) { if (k && k.a === 'layoutRef' && k.ref === oldName) { k.ref = newName; k.refName = newName; } }); });
+      persist(); schedulePaint();
+    }
     render();
   }
   function deletePage(id) {
@@ -3675,10 +3694,10 @@
     // Configuration (theme, OBS, mics) lives in Deck settings; this row keeps
     // only the working controls for the deck in front of you.
     return '<div class="sd-bright-row">'
-      + '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>'
+      + (device ? '<button class="btn-secondary' + (learnArmed ? ' sd-armed' : '') + '" id="sd-learn">' + (learnArmed ? 'Press a control to map it…' : 'Live learn') + '</button>' : '')
       + (device ? '<label>Brightness</label><input type="range" id="sd-bright" min="0" max="100" value="' + brightness + '"><span id="sd-bright-val">' + brightness + '%</span>' : '')
       + (device ? '<button class="btn-secondary" id="sd-test">Test pattern</button>' : '')
-      + '<button class="btn-secondary" id="sd-reset">Reset this layout</button>'
+      + '<button class="btn-secondary" id="sd-reset">Reset this page</button>'
       + '<button class="btn-secondary" id="sd-wizard-btn">Setup wizard</button></div>';
   }
   // OBS lives in the Deck settings sheet (owner 2026-08-04: configuration
@@ -3784,7 +3803,7 @@
       + '<div class="sd-set-sec">Diagnostics</div>'
       + '<div class="sd-set-status"><span class="sd-obs-off">A report of what the deck itself says it is, for support questions.</span></div>'
       + '<div class="sd-obs"><button class="sd-mini" id="sd-diag-settings">Diagnostics</button></div>'
-      + '<div class="sd-save-actions"><button class="btn-primary" id="sd-set-done">Done</button></div>';
+      + '<div class="sd-save-actions"><button class="btn-primary" id="sd-set-done">Close</button></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-settings-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-set-done', closeOverlay);
@@ -4131,7 +4150,7 @@
       .concat(Object.keys(groups).filter(function (g) { return GROUP_ORDER.indexOf(g) < 0; }));
     var curAction = slotAction(slot);
     var body = '<div class="sd-ed-head">Edit key ' + (index + 1) + (fromLearn ? ' <span class="sd-ed-learned">learned</span>' : '')
-      + (curAction.toggle ? ' <span class="sd-ed-chip">TOGGLE</span>' : '') + (curAction.hold ? ' <span class="sd-ed-chip">HOLD</span>' : '') + (curAction.machineLocal ? ' <span class="sd-ed-chip sd-ed-local" data-tip="Acts on this machine only, never over the session: on a multi-machine rig this key does nothing remote.">THIS MACHINE</span>' : '') + '</div>';
+      + (curAction.toggle ? ' <span class="sd-ed-chip">TOGGLE</span>' : '') + (curAction.hold ? ' <span class="sd-ed-chip">HOLD</span>' : '') + (curAction.machineLocal ? ' <span class="sd-ed-chip sd-ed-local" data-tip="Works on this computer only. On a rig with more than one computer, this key does nothing on the others.">THIS MACHINE</span>' : '') + '</div>';
     if (curAction.desc) body += '<div class="sd-ed-desc">' + esc(curAction.desc) + '</div>';
     body += '<div class="sd-ed-cols"><div class="sd-ed-actions"><div class="sd-ed-sub">Action</div>';
     orderedGroups.forEach(function (g) { body += '<div class="sd-picker-g">' + esc(g) + '</div>'; groups[g].forEach(function (o) { body += '<button class="sd-picker-opt' + (o.id === slot.a && !slot.ref ? ' cur' : '') + '" data-pick="' + esc(o.id) + '">' + esc(o.label || '(blank)') + '</button>'; }); });
@@ -4166,7 +4185,7 @@
       + '<label class="sd-ed-f">Label<input id="sd-ed-label" placeholder="' + esc(slotAction(slot).label || 'default') + '" value="' + esc(slot.label || '') + '"></label>'
       + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-hidelabel"' + (slot.hideLabel ? ' checked' : '') + '><span>Hide label</span></label>'
       + '<div class="sd-ed-f">Accent color<div class="sd-swatches"><button class="sd-sw sd-sw-auto' + (slot.color ? '' : ' cur') + '" data-color="" data-tip="Auto">Auto</button>'
-      + SWATCHES.map(function (col) { return '<button class="sd-sw' + (slot.color === col ? ' cur' : '') + '" data-color="' + col + '" style="background:' + col + '"></button>'; }).join('') + '</div></div>'
+      + SWATCHES.map(function (col) { return '<button class="sd-sw' + (slot.color === col ? ' cur' : '') + '" data-color="' + col + '" aria-label="Accent color ' + col + '" style="background:' + col + '"></button>'; }).join('') + '</div></div>'
       + '<label class="sd-ed-f">Custom color (hex)<input id="sd-ed-hex" placeholder="#1c7a3e" maxlength="7" autocomplete="off" spellcheck="false" value="' + esc(customHex) + '"></label>'
       + '<label class="sd-ed-f">Symbol<input id="sd-ed-symsearch" placeholder="Search symbols" autocomplete="off"></label>'
       + '<div class="sd-symgrid" id="sd-symgrid">' + SYMBOL_PICK.map(function (row) { return '<button class="sd-symopt' + (slot.symbol === row[1] ? ' cur' : '') + '" data-sympick="' + esc(row[1]) + '" data-symname="' + esc(row[0]) + '" data-tip="' + esc(row[0]) + '" aria-label="' + esc(row[0]) + '"><canvas width="52" height="52"></canvas></button>'; }).join('') + '</div>'
@@ -4188,7 +4207,7 @@
       + [['wipe', 'Wipe'], ['ring', 'Ring'], ['bar', 'Bottom bar']].map(function (opt) { return '<button data-style="' + opt[0] + '"' + (styleCur === opt[0] ? ' class="cur"' : '') + '>' + opt[1] + '</button>'; }).join('') + '</div></div>'
       + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-flash"' + (slot.flash === false ? '' : ' checked') + '><span>Press flash</span></label>'
       + '<label class="sd-ed-check"><input type="checkbox" id="sd-ed-reactive"' + (slot.reactive === false ? '' : ' checked') + '><span>Reactive animation</span></label>'
-      + '<div class="sd-ed-actions-row"><button class="sd-mini" id="sd-ed-clear">Reset appearance</button><button class="btn-primary" id="sd-ed-done">Done</button></div></div></div>';
+      + '<div class="sd-ed-actions-row"><button class="sd-mini" id="sd-ed-clear">Reset appearance</button><button class="btn-primary" id="sd-ed-done">Close</button></div></div></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-ed-card">' + body + '</div>'; o.className = 'sd-picker on';
     wireKeyEditor(index); render();
   }
@@ -4555,7 +4574,7 @@
       catch (e) { toast('Copy failed: select the text and copy by hand.'); }
     });
     bind('sd-talkoff', function () { releaseTalkback(true); });
-    bind('sd-reset', resetActive); bind('sd-test', testPattern);
+    bind('sd-reset', function () { if (window.confirm('Reset the page "' + mapping().name + '"? Every key, dial and key picture on it goes back to the default. This cannot be undone.')) resetActive(); }); bind('sd-test', testPattern);
     bind('sd-learn', function () { armLearn(!learnArmed); render(); if (learnArmed) toast('Press a key or turn a dial on the deck to map it.'); });
     bind('sd-pf-new', openNewPageSheet); bind('sd-pf-dup', duplicateActive); bind('sd-pf-home', setDefaultActive);
     r.querySelectorAll('.sd-page-tab').forEach(function (tab) {
@@ -4790,8 +4809,8 @@
       // Micochondria is parked (no hardware yet): its wizard slot teaches
       // pages instead, which every deck size benefits from.
       body = '<div class="sd-wz-t">Pages</div>'
-        + '<p class="sd-wz-p">Every saved layout is a <b>page</b>, so even a six-key deck can carry a whole show: a rehearsal page, a live page, an OBS page. The default layouts ship with <b>PAGE ←</b> and <b>PAGE →</b> keys, and a <b>HOME</b> key jumps straight back to your default layout.</p>'
-        + '<p class="sd-wz-p">Make a new page with <b>New</b> or <b>Duplicate</b> in the layout bar, then flip between them from the deck itself. The page keys show where you are, like 2/3.</p>';
+        + '<p class="sd-wz-p">Every saved layout is a <b>page</b>, so even a six-key deck can carry a whole show: a rehearsal page, a live page, an OBS page. The default layouts ship with <b>PAGE ←</b> and <b>PAGE →</b> keys, and a <b>HOME</b> key jumps straight back to your home page (<b>Set home</b> picks it).</p>'
+        + '<p class="sd-wz-p">Make a new page with <b>+</b> or <b>Duplicate</b> in the Pages row, then flip between them from the deck itself. The page keys show where you are, like 2/3.</p>';
     } else if (n === 2) {
       body = '<div class="sd-wz-t">Mic<span class="sd-wz-hi">ochondria</span> <span class="sd-wz-opt">optional</span></div>'
         + '<p class="sd-wz-p">The powerhouse for the mics: hold <b>TKB</b> to talk to the crew, hold <b>VofU</b> to speak to the room. It needs the little talkbackd program running on this machine:</p>'
@@ -4808,7 +4827,7 @@
       body = '<div class="sd-wz-t">Make it yours</div>'
         + '<p class="sd-wz-p">Pick a look. It reskins the physical keys and the on-screen deck alike:</p>'
         + '<div class="sd-theme-chips sd-wz-themes">' + chips + '</div>'
-        + '<p class="sd-wz-p">From here: click any key to remap it, use <b>Live learn</b> to map by touch, and save whole layouts as pages. And yes, there is a HYPE key.</p>';
+        + '<p class="sd-wz-p">From here: click any key to remap it, use <b>Live learn</b> (with a real deck plugged in) to map by touch, and save whole layouts as pages. And yes, there is a HYPE key.</p>';
     }
     var foot = '<div class="sd-wz-foot">'
       + (n > 0 ? '<button class="btn-secondary" id="sd-wz-back">Back</button>' : '<button class="btn-secondary" id="sd-wz-skipall">Skip the tour</button>')

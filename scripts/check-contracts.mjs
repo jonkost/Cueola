@@ -158,11 +158,28 @@ export function checkContracts(pages, allowlist = {}) {
 
 /* Which scripts serve which page. Outrangutan rides index.html. */
 export const PAGE_CONFIG = [
-  { name: 'index', html: ['index.html'], js: ['cueola-app.js', 'cueola-live-session.js', 'cueola-prompter-session.js', 'cueola-script-operator-protocol.js', 'cueola-avatar-profile.js', 'cueola-assignment-model.js', 'cueola-export-model.js', 'cueola-identity.js', 'outrangutan/output-protocol.js', 'outrangutan/stream-deck-label.js', 'outrangutan/outrangutan.js'] },
-  { name: 'script-operator', html: ['script-operator.html'], js: ['cueola-script-operator-protocol.js', 'script-operator.js'] },
-  { name: 'outrangutan-output', html: ['outrangutan/output.html'], js: ['outrangutan/output-protocol.js', 'outrangutan/output-command-queue.js'] },
-  { name: 'dashboard', html: ['dashboard.html'], js: [] },
+  { name: 'index', html: ['index.html'], js: ['cueola-avatar-profile.js', 'cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-export-model.js', 'cueola-prepro-sync.js', 'cueola-pin.js', 'cueola-identity.js', 'cueola-admin-auth.js', 'cueola-live-session.js', 'cueola-live-state.js', 'cueola-link-state.js', 'cueola-keymap.js', 'cueola-mac-link.js', 'cueola-prompter-session.js', 'cueola-script-operator-protocol.js', 'outrangutan/output-protocol.js', 'outrangutan/kiosk-transport.js', 'outrangutan/stream-deck-label.js', 'cueola-app.js', 'outrangutan/outrangutan.js', 'cueola-streamdeck-device.js', 'cueola-obs.js', 'assets/keywi-art/manifest.js', 'cueola-streamdeck.js'] },
+  { name: 'script-operator', html: ['script-operator.html'], js: ['cueola-keymap.js', 'cueola-script-operator-protocol.js', 'cueola-scriptop-prefs.js', 'script-operator.js'] },
+  { name: 'outrangutan-output', html: ['outrangutan/output.html'], js: ['outrangutan/output-protocol.js', 'outrangutan/output-command-queue.js', 'outrangutan/kiosk-transport.js'] },
+  { name: 'dashboard', html: ['dashboard.html'], js: ['cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-pin.js', 'cueola-admin-auth.js'] },
 ];
+
+/* A script a page loads but PAGE_CONFIG does not list is never checked, so
+ * the lint would pass blind. Returns each such script. */
+const SCRIPT_SRC_RE = /<script\b[^>]*\bsrc\s*=\s*"([^"?#]+)/g;
+export function uncheckedScripts(pageConfig, readHtml, resolve) {
+  const out = [];
+  for (const page of pageConfig) {
+    for (const htmlPath of page.html) {
+      for (const m of readHtml(htmlPath).matchAll(SCRIPT_SRC_RE)) {
+        if (/^(?:[a-z]+:)?\/\//i.test(m[1])) continue;
+        const src = resolve(htmlPath, m[1]);
+        if (!page.js.includes(src)) out.push({ page: page.name, kind: 'unchecked-script', name: src, where: htmlPath });
+      }
+    }
+  }
+  return out;
+}
 
 const isNode = typeof process !== 'undefined' && !!process.versions?.node;
 if (isNode) {
@@ -175,6 +192,8 @@ if (isNode) {
   try { allowlist = JSON.parse(readFileSync(join(root, 'scripts/contract-allowlist.json'), 'utf8')); } catch {}
   const pages = PAGE_CONFIG.map(p => ({ name: p.name, html: p.html.map(load), js: p.js.map(load) }));
   const { errors, stats } = checkContracts(pages, allowlist);
+  errors.push(...uncheckedScripts(PAGE_CONFIG, path => readFileSync(join(root, path), 'utf8'),
+    (htmlPath, src) => join(dirname(htmlPath), src)));
   console.log(`contract check · ${stats.pages} pages · ${stats.idRefs} id refs · ${stats.handlerRefs} handler refs · ${stats.allowlisted} allowlisted`);
   if (errors.length) {
     for (const e of errors) console.error(`  BROKEN ${e.kind} "${e.name}" (${e.page}) at ${e.where}`);

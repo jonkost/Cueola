@@ -24,7 +24,7 @@
     'freeMode', 'startTime', 'requireLoginCode', 'groups', 'groupsLocked'];
   // Paperwork STRUCTURE inside prePro that carries (D6 config included).
   const CLONE_PREPRO_FIELDS = ['callSheets', 'callSheetTombstones', 'productionSchedule',
-    'safety', 'videoPatchRows', 'audio-commsPatchRows', 'commsPatchRows', 'paperworkEnabled',
+    'safety', 'videoPatchRows', 'audioPatchRows', 'audio-commsPatchRows', 'commsPatchRows', 'paperworkEnabled',
     'positionsCustom', 'positionsRemoved', 'stagePlots', 'stagePlotTombstones', 'plotBank'];
 
   function deepCopy(value) {
@@ -55,6 +55,17 @@
     return copy;
   }
 
+  // Call sheets in sheet order. 3.x saves keep them as a map keyed by sheet
+  // id, each sheet carrying its place in `ord`; older saves keep a list.
+  function orderedCallSheets(callSheets) {
+    if (Array.isArray(callSheets)) return callSheets;
+    if (!callSheets || typeof callSheets !== 'object') return [];
+    const ord = sheet => (typeof sheet.ord === 'number' ? sheet.ord : 1e9);
+    return Object.keys(callSheets).map(key => callSheets[key])
+      .filter(sheet => sheet && typeof sheet === 'object')
+      .sort((a, b) => ord(a) - ord(b));
+  }
+
   // Whitelist-carry a prePro map (session master copy OR a group subdoc's).
   function seedPrePro(sourcePrePro, now) {
     const source = (sourcePrePro && typeof sourcePrePro === 'object') ? sourcePrePro : {};
@@ -67,6 +78,15 @@
     });
     if (Array.isArray(prePro.callSheets)) {
       prePro.callSheets = prePro.callSheets.map(scrubCallSheet);
+    } else if (prePro.callSheets && typeof prePro.callSheets === 'object') {
+      // Map shape: scrub each sheet and keep the map (a list here would bring
+      // back whole-list saves in the new show), keyed by the sheet's new id.
+      const map = {};
+      orderedCallSheets(prePro.callSheets).forEach((sheet, i) => {
+        const copy = scrubCallSheet(sheet, i);
+        map[copy.id] = copy;
+      });
+      prePro.callSheets = map;
     }
     delete prePro.callSheetTombstones;   // tombstones belong to the OLD sheets' ids
     if (source.production !== undefined) { prePro.production = deepCopy(source.production); stamps.production = now; }
@@ -100,7 +120,7 @@
     seed.prePro = seedPrePro(source.prePro, now);
     // Legacy top-level re-spread: old clients read the active sheet's fields
     // off the session doc root — seed them from the first carried sheet.
-    const firstSheet = Array.isArray(seed.prePro.callSheets) ? seed.prePro.callSheets[0] : null;
+    const firstSheet = orderedCallSheets(seed.prePro.callSheets)[0] || null;
     if (firstSheet) {
       ['label', 'production', 'call', 'showStart', 'wrap', 'doors', 'location', 'address',
         'venue', 'parking', 'entrance', 'late', 'stream', 'dress', 'meals', 'mealTime', 'notes']

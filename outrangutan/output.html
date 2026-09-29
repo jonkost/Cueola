@@ -754,9 +754,12 @@
         if (!Number.isFinite(Number(m.v))) return { ok: false, error: 'Volume value is invalid.' };
         front.el.volume = Math.max(0, Math.min(1, Number(m.v)));
         return { ok: true };
-      case 'fit':
-        front.el.style.objectFit = m.fit || 'contain';
+      case 'fit': {
+        const fitEl = vimg.getAttribute('src') ? vimg : front.el;   // a still on air sits on vimg
+        fitEl.style.objectFit = m.fit || 'contain';
+        if (m.scale != null || m.posX != null || m.posY != null) applyTransform({ el: fitEl }, m);
         return { ok: true };
+      }
       case 'fade': {
         runtime.error = '';
         runtime.recoverability = 'none';

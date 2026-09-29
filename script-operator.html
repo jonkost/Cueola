@@ -10,11 +10,11 @@
   <link rel="apple-touch-icon" href="assets/icons/app/apple-touch-icon.png">
   <meta name="theme-color" content="#080b12">
   <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-  <link rel="stylesheet" href="script-operator.css?v=f7743fc234">
-  <script src="cueola-keymap.js?v=ffb4fb0e1a" defer></script>
+  <link rel="stylesheet" href="script-operator.css?v=76c28d0419">
+  <script src="cueola-keymap.js?v=49533adade" defer></script>
   <script src="cueola-script-operator-protocol.js?v=414e116aee" defer></script>
   <script src="cueola-scriptop-prefs.js?v=dfcf350611" defer></script>
-  <script src="script-operator.js?v=07d5af1057" defer></script>
+  <script src="script-operator.js?v=ccdb88c4fd" defer></script>
   <style>
     /* Simple tier (owner 2026-09 debloat): mirrors index.html's .cc-more. The
        second-tier controls of each tab fold behind one collapsed More; every
@@ -95,25 +95,25 @@
             </button>
             <button class="inspector-tab" id="tab-live" type="button" role="tab" aria-selected="false" aria-controls="pane-live" data-tab="live" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span>
-              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Cue &amp; On Air</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">On air</span>
             </button>
             <button class="inspector-tab" id="tab-clocks" type="button" role="tab" aria-selected="false" aria-controls="pane-clocks" data-tab="clocks" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span>
-              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Clocks &amp; Alerts</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Clocks</span>
             </button>
             <button class="inspector-tab" id="tab-display" type="button" role="tab" aria-selected="false" aria-controls="pane-display" data-tab="display" style="width:auto;min-width:56px;height:auto;padding:6px 8px;border-radius:14px;grid-template-rows:auto auto;row-gap:3px">
               <span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span>
-              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Display &amp; Theme</span>
+              <span class="inspector-tab-label" style="display:block;font-size:9px;line-height:1;letter-spacing:.04em;text-transform:none;white-space:nowrap">Display</span>
             </button>
           </div>
         </div>
 
         <!-- Tab grouping mirrors the in-app Script Op panel (LS_INSP_LABELS):
-             Playback / Cue & On Air / Clocks & Alerts / Display & Theme. Simple
+             Playback / On air / Clocks / Display. Simple
              tier: each tab shows the controls a student reaches for first and
              folds the rest behind one collapsed More. The editor helpers that
              exist only in this pop-out (Formatting & Markers, Panel Text) ride
-             Display & Theme: this layout stops at four tabs. -->
+             Display: this layout stops at four tabs. -->
         <div class="inspector-pane is-active" id="pane-transport" role="tabpanel" aria-labelledby="tab-transport" data-pane="transport">
           <section class="control-section">
             <h2>Playback</h2>
@@ -238,7 +238,7 @@
               <button class="control-button question-lane-push" id="questionLanePush" type="button" data-question-push data-tip="Push this question to the talent as a QUESTION card (turns the question indicator on)" data-requires-state>
                 <span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push card</span>
               </button>
-              <button class="control-button question-lane-push" id="questionLaneInsert" type="button" data-question-insert data-tip="Paste this question INTO the script at the prompter's current position — the talent reads it in the natural flow" data-requires-state>
+              <button class="control-button question-lane-push" id="questionLaneInsert" type="button" data-question-insert data-tip="Add this question to the end of the row the talent is reading, so they read it in order." data-requires-state>
                 <span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Into script</span>
               </button>
             </div>
@@ -249,7 +249,7 @@
             </div>
             <div class="question-lane" style="align-items:flex-start;margin-top:4px">
               <p class="section-help" style="flex:1;margin:0">Shows the question to the talent as a card.</p>
-              <p class="section-help" style="flex:1;margin:0">Puts the question into the script at the read line.</p>
+              <p class="section-help" style="flex:1;margin:0">Adds the question to the end of the row the talent is reading.</p>
             </div>
             <button class="control-button full-width" type="button" data-command-kind="control" data-action="overlays_clear" data-tip="Drop the clock, wrap, question, and slates in one go" data-requires-state>
               <span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Clear all overlays</span>

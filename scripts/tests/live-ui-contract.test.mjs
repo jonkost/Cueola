@@ -357,7 +357,7 @@ test('Production Notes SFX bridge: taggable uploads and a pull API for Outrangut
   assert.match(app, /async getFile\(item\)/);
   // SFX is a first-class board tag, and the composer states the audio cap.
   assert.match(app, /sfx:\s+\{ label:'SFX',\s+symbol:'media\.waveform' \}/);
-  assert.match(html, /Audio files up to 4 MB \(mp3 or m4a\)\./);
+  assert.match(html, /Files up to 4 MB each\. Use mp3 or m4a for sound\./);
   // The closed-Outrangutan hand-off toast points at the pull path too.
   assert.match(app, /Import from Production Notes/);
 });
@@ -613,7 +613,7 @@ test('one Stream Deck drives the whole rig over the session control bus (D11.7)'
   assert.match(playbackJs, /const CONTROL_BUS_ACTIONS = \{/);
   assert.match(playbackJs, /window\.cueolaControlBus === 'function'/);
   assert.match(playbackJs, /controlBus: \{ target: cmd\.target/);
-  assert.match(playbackJs, /rundown_go: 'Rundown GO'/);
+  assert.match(playbackJs, /rundown_go: 'TAKE \(next row\)'/);
   // Cueola executes only on the show-calling surface with live open, dedupes
   // by id, and judges freshness by snapshot arrival gaps (sender-clock
   // staleness is gone: it dropped presses on skewed Macs).
@@ -1505,7 +1505,7 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   // Honest status line, pop-out copy, and the talent's refused-write notice.
   assert.match(app, /function _talentStatusLine\(\)/);
   assert.match(app, /talent:\{ line:_talentStatusLine\(\), connected:_talentMirrorFresh\(\) \}/);
-  assert.match(app, /'Sent to the session'/);
+  assert.match(app, /'Sent to the prompter'/);
   assert.match(app, /ptSetCueolaStatus\('Cloud write refused: sign in again on this device', true\)/);
 });
 
@@ -1946,7 +1946,7 @@ test('show clock survives leaving Live; Back on Live is the same sheet; refusals
   assert.match(pop, /if \(document\.getElementById\('liveshow'\)\?\.classList\.contains\('on'\)\) \{\n    pushSessionHistoryState\('live'\);\n    if \(liveSessionState\(\)\.lifecycle === 'live'\) requestExitLive\(\);\n    return;\n  \}/);
   const liveBranch = pop.indexOf("pushSessionHistoryState('live')");
   const outputBranch = pop.indexOf("document.getElementById('promptypus')?.classList.contains('on')\n    ||");
-  const confirmAt = pop.indexOf("confirm('Leave this session and return to the front page?')");
+  const confirmAt = pop.indexOf("confirm('Leave this show and go back to the front page?')");
   assert.ok(liveBranch > 0 && outputBranch > liveBranch && confirmAt > outputBranch, 'live, then output screens, then the builder confirm');
   // Refusal copy by lifecycle: builder says what to do.
   const gate = app.slice(app.indexOf('function liveCommandDispatchAllowed(options={})'), app.indexOf('function releaseLiveCommandHolds()'));
@@ -1993,11 +1993,11 @@ test('pre-live grant from the Build screen: chip, banner, union roster, presence
   assert.match(enter, /renderShowCallerBadge\(\);\n  renderCallerBanner\(\);/);
   const leave = app.slice(app.indexOf('function leaveLiveSessionScreen(liveState, context={})'), app.indexOf('function isFollowingSelf()'));
   assert.match(leave, /renderShowCallerBadge\(\); renderCallerBanner\(\);/);
-  // Banner: CTA only off Live, deck note from grantedDecks, CALLER role tag restored on revoke.
+  // Banner: CTA only off Live, deck note from grantedDecks, DIRECTOR role tag restored on revoke.
   const banner = app.slice(app.indexOf('function renderCallerBanner()'), app.indexOf('function renderFollowChips()'));
   assert.match(banner, /cta\.style\.display = \(lifecycle === 'live' \|\| id === 'lsCallerBanner'\) \? 'none' : '';/);
   assert.match(banner, /window\.CueolaStreamDeck\.grantedDecks\(\)/);
-  assert.match(banner, /tag\.textContent = 'CALLER';/);
+  assert.match(banner, /tag\.textContent = 'DIRECTOR';/);
   assert.match(banner, /tag\.textContent = session\.role === 'instructor' \? 'INST' : 'STU';/);
   // Picker roster: presence + participant records + role assignments, deduped
   // on the lowercased username, Director button by position, grant shape.
