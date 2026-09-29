@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="outrangutan/outrangutan.css?v=3597876ad9">
+<link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
   --bg:#080b12;--s1:#0d1020;--s2:#131728;--s3:#1a1f32;--s4:#222840;
@@ -1035,7 +1035,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .info-btn .sf-symbol{font-size:14px}
 .info-btn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .info-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media(pointer:coarse){.info-btn{min-width:32px;height:32px}}
+@media(pointer:coarse){.info-btn{min-width:44px;height:44px}}
 #infoPop{position:fixed;z-index:400;width:min(340px,calc(100vw - 32px));background:var(--glass-bg-strong);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));border: 1px solid transparent;border-radius:var(--ui-radius-group);padding:var(--sp-4);animation:rise .18s var(--ease) both}
 #infoPop[hidden]{display:none}
 .info-pop-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:7px}
@@ -1318,10 +1318,10 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .plandabear-theme-bar.on{display:flex}
 .plandabear-theme-label{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);padding-bottom:6px;border-bottom: 1px solid transparent}
 [data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
-[data-plandabear-theme="honey"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
+[data-plandabear-theme="honey"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
 /* Eucalyptus runs a bright leaf-green accent: accent-filled buttons take dark
    ink (white on #6cd234 is about 1.9:1, far under AA). */
-[data-plandabear-theme="eucalyptus"] .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
+[data-plandabear-theme="eucalyptus"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
 [data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
 [data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
 [data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
@@ -1542,7 +1542,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .pb-save-status .sf-symbol{font-size:14px}
 .pb-save-status.is-saved .sf-symbol{color:var(--green)}
 .pb-save-status.is-offline{color:var(--yellow)}
-@media(max-width:700px){.pb-save-status span{display:none}}
+@media(max-width:700px){.pb-save-status span:not(.sf-symbol){display:none}}
 
 .marker-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
 .marker-divider{height:1px;background:var(--bord2);margin:2px 0 8px}
@@ -1747,9 +1747,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .pb-post-btn:hover{filter:brightness(1.12)}
 .pb-post-btn:disabled{opacity:.55;cursor:default}
 .pb-post-btn.small{padding:7px 13px;font-size:11px;margin-left:0}
-/* One hint voice per card: this matches .field-hint instead of shouting in
-   9.5px mono next to it. */
-.pb-composer-hint{font-size:11px;font-family:var(--sans);line-height:1.5;color:var(--text3);user-select:none;flex:1;min-width:90px}
 /* The 4MB cap only matters once something is attached, so it rides the tray. */
 .pb-attach-cap-hint{display:none}
 #pbAttachTray:not([hidden])+.pb-attach-cap-hint{display:block}
@@ -2066,7 +2063,6 @@ button.pb-todo-check:hover{border-color:var(--green)}
   .pb-replies{margin-left:6px;padding-left:10px}
   .pb-msg-img{max-width:100%}
   .pb-board-search{max-width:none;order:3;width:100%;flex-basis:100%}
-  .pb-composer-hint{display:none}
   .pb-file-name{max-width:150px}
   .pb-reply-acts{opacity:1}
   .pb-fab{right:14px;bottom:14px;width:50px;height:50px;font-size:26px}
@@ -2107,7 +2103,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-pkg-sheet-picker-title{font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3)}
 .pb-pkg-sheet-picker-sub{margin-top:8px;font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .pb-pkg-sheet-picker .pb-pkg-optin{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text2);cursor:pointer}
-.pb-pkg-sheet-picker .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+.pb-pkg-sheet-picker .pb-pkg-optin input{cursor:pointer}
 .pb-pkg-sheet-warning{font-size:12.5px;line-height:1.5;color:var(--yellow);border: 1px solid transparent;border-left:3px solid transparent;border-radius:var(--ui-radius-control);padding:9px 12px;background:color-mix(in srgb,var(--yellow) 11%,var(--s2))}
 /* v2.1 D2 — group picker + hub group bar */
 .group-chip-grid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
@@ -2126,6 +2122,8 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .paper-progress-bar{height:100%;width:0%;border-radius:4px;background:var(--accent);transition:width .25s ease}
 .paper-progress-bar.indeterminate{width:35%;animation:paper-progress-slide 1.1s ease-in-out infinite alternate}
 @keyframes paper-progress-slide{from{margin-left:0}to{margin-left:65%}}
+/* Export progress sits above the preview it was started from. */
+#paperProgressSheet{z-index:310}
 .paper-preview *{letter-spacing:0;font-kerning:normal}
 .paper-preview h1{font-size:22px;margin:0 0 4px}
 .paper-preview h2{font-size:14px;margin:18px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}
@@ -2243,7 +2241,7 @@ h1.psec-plot{border-left-color:#0284c7 !important;background:#e7f4fb !important;
 .paper-export-page-number{flex:none;font-weight:700;white-space:nowrap}
 
 /* ── TOAST ── */
-#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--liquid-fill-strong);border: 1px solid transparent;border-radius:var(--ui-radius-control);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));padding:9px 18px;font-size:14px;color:var(--text);z-index:999;display:none;white-space:nowrap;animation:rise .2s ease both}
+#toast{position:fixed;bottom:90px;left:50%;translate:-50% 0;background:var(--liquid-fill-strong);border: 1px solid transparent;border-radius:var(--ui-radius-control);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));padding:9px 18px;font-size:14px;color:var(--text);z-index:999;display:none;white-space:normal;text-align:center;width:max-content;max-width:calc(100vw - 32px);animation:rise .2s ease both}
 /* Notification center bell + unread badge */
 .notif-center{position:relative;display:inline-flex;flex-shrink:0}
 .notif-center[hidden]{display:none}
@@ -2382,6 +2380,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .rb-text b{color:var(--text);font-family:var(--mono)}
 .rb-actions{display:flex;gap:8px;flex:none}
 .rb-btn{padding:7px 13px;font-size:12px}
+/* Phones: the buttons get their own row under the sentence. */
+@media(max-width:520px){.resume-banner{flex-wrap:wrap}.rb-text{flex:1 1 0;min-width:0}.rb-actions{width:100%}.rb-actions .rb-btn{flex:1}}
 /* P7: show log viewer */
 .slog-modal{max-width:640px}
 .slog-list{max-height:46vh;overflow-y:auto;border: 1px solid transparent;border-radius:11px;background:var(--s1);padding:6px 0;margin-top:10px}
@@ -2450,7 +2450,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pn-act-btn.pn-act-new:hover{border-color:transparent;color:var(--green);background:color-mix(in srgb,var(--green) 14%,var(--s2))}
 .pn-empty{padding:28px 14px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--text3);font-size:12px}
 #pnPanelBtn.active{color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--accent) 14%,transparent)}
-@media(max-width:900px){.pn-panel{display:none!important}}
+@media(max-width:900px){.pn-panel,#pnPanelBtn{display:none!important}}
 
 /* ── PRINT ── */
 @media print {
@@ -2517,7 +2517,12 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   .patch-upload-btn{width:100%}
   .paperwork-actions{grid-template-columns:1fr}
   .paperwork-flow-actions{align-items:stretch;flex-direction:column;padding:10px}
-  .paperwork-flow-left,.paperwork-flow-right{display:grid;grid-template-columns:1fr;gap:8px}
+  .paperwork-flow-left{display:grid;grid-template-columns:1fr;gap:8px}
+  .paperwork-flow-right{display:flex;flex-wrap:nowrap;align-items:stretch;gap:8px}
+  .paperwork-flow-actions .paperwork-flow-right>button{flex:1 1 0;min-width:0;padding-left:8px;padding-right:8px}
+  .pb-hub-modal .pb-modal-header{flex-wrap:wrap}
+  /* The buttons drop under the title only when the title would get narrower than 220px. */
+  .pb-hub-modal .pb-brand-lockup{flex:1 1 220px}
   .call-grid-head{display:none}
   .ar-panel .chip-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 	  .paperwork-grid{grid-template-columns:1fr}
@@ -3298,8 +3303,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 }
 .ls-live-actions .flow-control-section{min-width:0}
 .ls-live-actions .flow-control-cue{grid-column:1/-1}
-.ls-live-actions .flow-control-rowcue,
 .ls-live-actions .flow-control-onair{grid-column:auto}
+/* Cue and the More disclosure each take the full width (side by side, the
+   Position slider inside More was too narrow to drag). */
+.ls-live-actions .flow-control-rowcue,.ls-live-actions>.sop-more{grid-column:1/-1}
 /* Script Op drawer: one clean full-width column — the 2-up squeeze crammed
    Theme + Screen into ~half the sidebar and made the controls unreadable. */
 .ls-sidebar :is(#lsPrompterRemote,#lsDisplayControls) .prompt-op-panel.flow-control-panel{
@@ -3759,7 +3766,7 @@ input.pt-range::-moz-range-thumb,
 #paperPreviewControls{display:flex;flex-direction:column;align-items:center;gap:8px}
 #paperPreviewControls:empty{display:none}
 #paperPreviewControls .pb-pkg-optin{display:flex;align-items:center;gap:9px;width:fit-content;margin:0;padding:9px 14px;border: 1px solid transparent;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--s2) 68%,transparent);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer}
-#paperPreviewControls .pb-pkg-optin input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+#paperPreviewControls .pb-pkg-optin input{cursor:pointer}
 /* One capsule primary per panel: the preview's confirming action is the
    centered capsule above, so the step nav's Next stays a quiet utility here. */
 #pbNavPreview .primary{background:color-mix(in srgb,var(--s2) 68%,transparent);border-color: transparent;color:var(--text2)}
@@ -4196,7 +4203,25 @@ input.pt-range::-moz-range-thumb,
 .topbar .brand{gap:8px;padding:5px 4px!important}
 .topbar .brand .brand-ico,.ls-brand .brand-ico{width:42px;height:42px;vertical-align:-.42em}
 .ls-brand{display:inline-flex;align-items:center;gap:8px}
-#rundown .topbar #adminBtn,#rundown .topbar #pnPanelBtn,#rundown .topbar #plandaBearBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
+#rundown .topbar #adminBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
+/* A full rundown bar (instructor rig: Admin, DIRECTOR, crew, OBS/TALK/DECK) must never push
+   Go Live off the edge. Above 900px the plain buttons give up label width first; icons stay. */
+@media(min-width:901px){
+  #rundown .tb-right>.tbtn-ghost:not(.icon-only){flex-shrink:1;min-width:44px;overflow:hidden}
+  #rundown .tb-right>.tbtn-ghost:not(.icon-only)>span:not(.sf-symbol){min-width:0;overflow:hidden;text-overflow:ellipsis}
+}
+/* Laptop and iPad widths: buttons that have an icon show only the icon, so no
+   label is cut to "E..." or "N...". The word stays for screen readers. */
+@media(min-width:901px) and (max-width:1279px){
+  #rundown .tb-right>.tbtn-ghost:has(>.sf-symbol)>span:not(.sf-symbol){position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  #rundown .tb-right>.tbtn-ghost:has(>.sf-symbol){min-width:44px;justify-content:center;flex-shrink:0}
+}
+/* A signed-in instructor's bar (Admin, DIRECTOR, crew, OBS/TALK/DECK) is wider:
+   keep the icon-only look up to 1599px there so no label is cut. */
+@media(min-width:1280px) and (max-width:1599px){
+  #rundown .tb-right:has(>.tbtn-admin)>.tbtn-ghost:has(>.sf-symbol)>span:not(.sf-symbol){position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  #rundown .tb-right:has(>.tbtn-admin)>.tbtn-ghost:has(>.sf-symbol){min-width:44px;justify-content:center;flex-shrink:0}
+}
 
 /* Root-relative on purpose: relative url() in a custom property resolves against the
    stylesheet that USES the var (assets/sf-symbols.css), not the one that declares it. */
@@ -4440,6 +4465,8 @@ input.pt-range::-moz-range-thumb,
   z-index:50;
   width:min(360px,calc(100% - 44px));
   margin:0;
+  backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+  -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
 .paperwork-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 /* Owner rule (Aug 2026): Planda Bear buttons hug their content, never the row. */
@@ -4654,6 +4681,7 @@ input.pt-range::-moz-range-thumb,
   .live-row-go{min-height:44px;margin-top:6px;padding:8px;font-size:11px}
   .admin-tab{width:44px;height:44px}
   .admin-act-btn,.admin-src-add{min-height:44px}
+  .paperwork-flow-actions button,.paperwork-actions :is(.btn-primary,.btn-secondary),.pb-pw-row,.seg-btn{min-height:44px}
   .admin-src-chip .rm{min-width:32px;min-height:32px}
   .fmt-btn{width:44px;height:44px}
   .ls-pact-circle{width:44px;height:44px}
@@ -5073,7 +5101,7 @@ input.pt-range::-moz-range-thumb,
 	      <div class="e-logo"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>
 	      <div class="e-title">Cue<span class="brand-hi">ola</span></div>
 	    </div>
-	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, sync <em>Flowmingo</em>, cue playback with <em>Outrangutan</em>, and drive it all from a Stream Deck with <em>KeyWi Bird.</em></div>
+	    <div class="e-sub">Build rundowns, prep paperwork with <em>Planda Bear</em>, go live, prompt with <em>Flowmingo</em>, cue playback with <em>Outrangutan</em>, and drive it all from a Stream Deck with <em>KeyWi Bird.</em></div>
 	    <!-- P7: crash recovery — one click rejoins the last session after an unclean exit (Decisions #14) -->
 	    <div class="resume-banner" id="resumeBanner" hidden>
 	      <span class="sf-symbol rb-ico" data-symbol="action.repeat" aria-hidden="true"></span>
@@ -5148,7 +5176,7 @@ input.pt-range::-moz-range-thumb,
       <button type="button" class="e-card e-card-app oc-yellow" onclick="openPlandaBearJoin()">
         <div class="ec-icon"><svg class="brand-ico"><use href="#ic-plandabear"/></svg></div>
         <div class="ec-title">Plan<span class="brand-hi">da Bear</span></div>
-        <div class="ec-desc">View and build the paperwork package for your session.</div>
+        <div class="ec-desc">Build the paperwork for your show: call sheet, schedule, safety plan and more.</div>
         <span class="ec-pill ec-pill-yellow">Show code required</span>
       </button>
       <div class="e-card e-card-app flowmingo-card oc-cyan">
@@ -5222,12 +5250,12 @@ input.pt-range::-moz-range-thumb,
         <span class="cc-sys-item" id="sysChipDeck" style="display:none"><span class="cc-sys-dot"></span>DECK</span>
       </button>
 	      <button class="tbtn tbtn-ghost" id="adminBtn" onclick="openAdminPanel()">Admin</button>
-	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
+	      <button class="tbtn tbtn-ghost" id="editModeBtn" onclick="toggleEditMode()" data-tip="Move and edit rows"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span><span>Edit</span></button>
 	      <button class="tbtn tbtn-ghost" id="pnPanelBtn" onclick="togglePnPanel()" data-tip="Show production notes next to the rundown"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span><span>Notes</span></button>
 	      <button class="tbtn tbtn-ghost" id="plandaBearBtn" onclick="openPaperworkHub()"><span>Plan<span class="brand-hi">da Bear</span></span></button>
 	      <button id="rdCallerBtn" type="button" style="display:none" data-state="viewer" onclick="openControlGrantPicker()" aria-label="Choose the director"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span class="rd-caller-label">DIRECTOR: You</span></button>
 	      <button class="tbtn tbtn-ghost" id="showSetupBtn" onclick="openWorkspaceLauncher()" data-tip="One click opens this machine's show windows on their displays"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span>Show setup</span></button>
-	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
+	      <button class="tbtn tbtn-ghost" onclick="openLearningHub()" data-tip="Open the Guide"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Guide</span></button>
 	      <input type="file" id="rundownFileInput" accept=".cueola,.json,application/json" hidden onchange="importRundownFile(this.files[0]); this.value='';">
       <button class="tbtn tbtn-ghost icon-only rundown-fullscreen-btn" onclick="toggleCueolaFullscreen('rundown')" data-tip="Enter fullscreen" aria-label="Enter fullscreen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
       <button class="tbtn tbtn-ghost icon-only" onclick="showModal('modal-settings')" data-tip="Open settings" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
@@ -5281,8 +5309,8 @@ input.pt-range::-moz-range-thumb,
       <div class="bb-s"><span class="bb-l">Remaining</span><div class="prod-clock-face"><span class="bb-led bb-led-rm" id="bb-rm">—</span></div></div>
     </div>
     <div class="now-next">
-      <div class="nn now" id="nn-now">ON AIR → —</div>
-      <div class="nn nxt" id="nn-nxt">STANDBY → —</div>
+      <div class="nn now" id="nn-now">ON AIR → None</div>
+      <div class="nn nxt" id="nn-nxt">STANDBY → None</div>
     </div>
   </div>
 </div>
@@ -5295,7 +5323,7 @@ input.pt-range::-moz-range-thumb,
     <div class="ls-brand"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
     <!-- D12.1 connection truth: persistent per-link status, rendered ONLY from
          the shared link-state model (never from raw heartbeat events). -->
-    <div class="ls-links" id="lsLinkStrip" aria-label="Connection status" role="group">
+    <div class="ls-links" id="lsLinkStrip" aria-label="Director" role="group">
       <!-- D12.3 show-caller certainty: who has the wheel, always visible. -->
       <span class="ls-caller" id="lsCallerBadge" data-state="viewer" data-tip="Waiting for the director">FOLLOWING</span>
     </div>
@@ -5373,7 +5401,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="ls-sr-only" id="lsStatusAnnouncement" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="ls-status-transients" aria-live="polite" aria-atomic="true">
-      <div class="ls-prompter-mini ls-sync-mini" id="ls-stat-sync" data-tip="Cloud sync lost. Showing the last saved state while it reconnects." hidden>SYNC RECONNECTING…</div>
+      <div class="ls-prompter-mini ls-sync-mini" id="ls-stat-sync" data-tip="Lost the connection. Showing the last saved version until it is back." hidden>RECONNECTING…</div>
       <div class="ls-prompter-mini ls-sfx-mini" id="ls-stat-sfx" data-tip="A sound effect pad just played" hidden>SFX</div>
     </div>
   </section>
@@ -5543,7 +5571,7 @@ input.pt-range::-moz-range-thumb,
     <div class="pt-ctrl-group">
       <button class="pt-btn" id="pt-play-btn" onclick="ptTogglePlay()">
         <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
-        PLAY
+        Play
       </button>
     </div>
     <div class="pt-ctrl-group" role="group" aria-label="Prompter speed">
@@ -5586,7 +5614,7 @@ input.pt-range::-moz-range-thumb,
       </div>
       <div class="pt-cueola-help">Link a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
       <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
-        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || session.code || '')">Open Remote Operator</button>
+        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || (session.isDemo || session.isExpert ? '' : session.code) || '')">Open Remote Operator</button>
       </div>
       <hr class="pt-modal-sep">
       <h2>Edit / Load Script</h2>
@@ -5651,10 +5679,10 @@ input.pt-range::-moz-range-thumb,
     </div>
     <aside class="flowop-side">
       <section class="flowop-panel">
-        <div class="flowop-panel-title">Session</div>
+        <div class="flowop-panel-title">Show</div>
         <div id="flowOpSessionMeta">
-          <div class="flowop-session-title">No session loaded</div>
-          <div class="flowop-note">Enter the same code used on the talent Flowmingo screen.</div>
+          <div class="flowop-session-title">No show loaded</div>
+          <div class="flowop-note">Enter the same show code the talent screen uses.</div>
         </div>
       </section>
       <section class="flowop-panel flowop-controls-panel">
@@ -5759,7 +5787,7 @@ input.pt-range::-moz-range-thumb,
     <div class="sheet-title" id="editTitle">Edit Cue</div>
     <div class="edit-fields" id="editFields"></div>
     <button class="save-btn" onclick="saveEdit()"><span class="sf-symbol" data-symbol="action.confirm" aria-hidden="true"></span><span>Save Changes</span></button>
-    <button class="del-btn" onclick="deleteCue()">Remove this row</button>
+    <button class="del-btn" onclick="deleteCue()">Delete this row</button>
   </div>
 </div>
 
@@ -5772,7 +5800,7 @@ input.pt-range::-moz-range-thumb,
     <div id="cueConfigFields"></div>
     <button class="btn-primary" onclick="saveCueConfig()">Save</button>
     <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Delete this cue</button>
-    <button class="btn-secondary" onclick="hideModal('cueConfigModal')">Cancel</button>
+    <button class="btn-secondary" onclick="hideModal('cueConfigModal');setRundownPresence(null)">Cancel</button>
   </div>
 </div>
 
@@ -5820,8 +5848,8 @@ input.pt-range::-moz-range-thumb,
      the wheel to any signed-in student and takes it back, mid-show. -->
 <div class="overlay" id="lsGrantOv" onclick="if(event.target===this)hideOverlay('lsGrantOv')">
   <div class="warn-card u-border-soft" style="max-width:460px">
-    <div class="warn-title u-fs16">Hand rundown control</div>
-    <div class="u-sub-note">The chosen student drives GO, playback calls, and the prompter for everyone, with the same sequential safety rail instructors get. You keep full control alongside them and can take it back any time.</div>
+    <div class="warn-title u-fs16">Choose the director</div>
+    <div class="u-sub-note">The director's TAKE moves the show, playback and the prompter for everyone. While a student director is connected, your TAKE is off. Take it back here any time.</div>
     <div id="lsGrantBody"></div>
     <div class="u-mt12" style="text-align:right"><button class="admin-act-btn" onclick="hideOverlay('lsGrantOv')">Close</button></div>
   </div>
@@ -5875,7 +5903,7 @@ input.pt-range::-moz-range-thumb,
       <div class="warn-title u-title-lg">Start the show from…</div>
       <button class="ov-close-x" onclick="hideOverlay('lsStartChoiceOv')" data-tip="Cancel" aria-label="Cancel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
     </div>
-    <div class="u-choice-note">This session is parked on <strong id="lsStartChoiceRow" class="u-c-text"></strong> with the clock at 0:00, likely left over from a previous run.</div>
+    <div class="u-choice-note">The show is on <strong id="lsStartChoiceRow" class="u-c-text"></strong>, not the first row.</div>
     <button class="btn-primary u-w-full u-mb8" onclick="lsStartFromTop()"><span class="sf-symbol" data-symbol="chevron.up" aria-hidden="true"></span> Take it from the top: <span id="lsStartChoiceTopLbl"></span></button>
     <button class="btn-secondary u-w-full" onclick="lsStartFromHere()">Start here: <span id="lsStartChoiceHereLbl"></span></button>
   </div>
@@ -5890,14 +5918,14 @@ input.pt-range::-moz-range-thumb,
       <div class="pb-brand-lockup">
         <div class="pb-brand-mark"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg></div>
         <div class="pb-brand-copy">
-          <div class="pb-modal-kicker">Pre-production workspace</div>
+          <div class="pb-modal-kicker">Show paperwork</div>
           <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
           <div class="pb-modal-sub">Your paperwork in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
         </div>
       </div>
       <div class="plandabear-tools">
-      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" data-tip="Go back to the Cueola rundown" aria-label="Back to Cueola rundown"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
-      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" data-tip="Planda Bear settings: theme, exports, and previews" aria-label="Planda Bear settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
+      <button class="pb-back-rundown-btn" onclick="closePlandaBear()" data-tip="Close Planda Bear and go back to Cueola" aria-label="Back to Cueola"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
+      <button class="plandabear-settings-btn" id="plandabearThemeToggle" onclick="togglePlandaBearThemes()" data-tip="Planda Bear settings: theme and admin sign in" aria-label="Planda Bear settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
       </div>
     </div>
     <div class="pb-modal-body">
@@ -5918,12 +5946,6 @@ input.pt-range::-moz-range-thumb,
         <button type="button" class="theme-swatch" data-plandabear-theme-choice="prepbear" onclick="setPlandaBearTheme('prepbear')" aria-pressed="false"><div class="ts-preview"></div><div class="ts-name">PrepBear</div></button>
       </div>
       </details>
-      <!-- The bottom action row's exports live here too, so the gear menu covers
-           the whole package without a scroll to the end of the hub. Each button
-           closes the popover first or it would sit open behind the preview. -->
-      <div class="plandabear-theme-label">Exports</div>
-      <div class="settings-file-grid">
-      </div>
       <div class="plandabear-theme-label" id="pbGearAdminLabel" hidden>Admin</div>
       <div class="settings-file-grid" id="pbGearAdminTools" hidden>
         <button type="button" class="btn-secondary settings-file-btn" onclick="togglePlandaBearThemes();openAdminLogin()" data-tip="Sign in as admin to edit position assignments on the hub"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span>Admin sign in</span></button>
@@ -5976,7 +5998,7 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="paperPreviewModal">
   <div class="modal pb-builder-modal u-modal-scroll-tall">
     <div class="paperwork-modal-head">
-      <div class="modal-title" id="paperPreviewTitle"><span id="paperPreviewTitleText">Preview</span><button type="button" class="info-btn" aria-label="About exports and the verified stamp" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+      <div class="modal-title" id="paperPreviewTitle"><span id="paperPreviewTitleText">Preview</span><button type="button" class="info-btn" aria-label="What’s in the export" onclick="toggleInfoPop(event,'export-package')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
     <div id="paperPreviewControls"></div>
@@ -6007,7 +6029,7 @@ input.pt-range::-moz-range-thumb,
           <label class="field-lbl">Current Call Sheet</label>
           <select class="field-in" id="pp-call-sheet-select" onchange="switchCallSheet(this.value)"></select>
         </div>
-        <div class="field"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="Setup Day, Production Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
+        <div class="field"><label class="field-lbl">Call Sheet Name</label><input class="field-in" id="pp-sheet-label" maxlength="80" placeholder="e.g. Setup Day" oninput="updateActiveCallSheetLabel(this.value)"></div>
         <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherCallSheet()" data-tip="Add another call sheet, e.g. a second shoot day">+ Add</button>
         <button class="call-add-btn call-delete-btn u-callbtn u-c-red" type="button" onclick="deleteCallSheet()" data-tip="Delete this call sheet. Instructors and admins only.">Delete</button>
       </div>
@@ -6019,7 +6041,7 @@ input.pt-range::-moz-range-thumb,
         <div class="field"><label class="field-lbl">Shoot Date</label><input class="field-in field-narrow" id="pp-date" type="date" onchange="renderCallSheetWeatherCard();maybeAutoRefreshCallSheetWeather()"></div>
         <div class="field"><label class="field-lbl">Call Time</label><input class="field-in field-narrow" id="pp-call" type="time" oninput="renderCallSheetWeatherCard()"></div>
         <div class="field"><label class="field-lbl">Show Start</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-show-start" type="time" oninput="setShowNotApplicable(false)"><button class="field-action-btn" id="pp-show-na" type="button" onclick="toggleShowNotApplicable()" aria-pressed="false">N/A</button></div></div>
-        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start plus the rundown's total runtime">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div></div>
+        <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start (or call time) plus the rundown's total time">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div><div class="field-hint">Tap Rundown to fill this in: show start plus the rundown's total time.</div></div>
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact Name</label><input class="field-in" id="pp-late-name" maxlength="80" placeholder="e.g. Sam"><div class="field-hint">Who to text if you are running late.</div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact Number</label><input class="field-in" id="pp-late-phone" maxlength="40" inputmode="tel" placeholder="e.g. (555) 210-8100"><div class="field-hint">Their phone number.</div></div>
@@ -6043,7 +6065,7 @@ input.pt-range::-moz-range-thumb,
         <div class="wx-head">
           <div class="wx-summary">
             <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="content.calendar" aria-hidden="true"></span></span><span id="pp-weather-day">Add a shoot date</span></span>
-            <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="time.clock" aria-hidden="true"></span></span><span id="pp-weather-call">—</span></span>
+            <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="time.clock" aria-hidden="true"></span></span><span id="pp-weather-call">Add a call time</span></span>
             <span class="wx-chip"><span class="wx-chip-ico"><span class="sf-symbol" data-symbol="geo.location" aria-hidden="true"></span></span><span id="pp-weather-loc">Add a location</span></span>
           </div>
           <button type="button" class="wx-fetch-btn" id="pp-weather-fetch-btn" onclick="fetchCallSheetWeather()"><span id="pp-weather-ico"><span class="sf-symbol" data-symbol="weather.default" aria-hidden="true"></span></span> Get forecast</button>
@@ -6078,7 +6100,7 @@ input.pt-range::-moz-range-thumb,
       <div class="call-grid" id="pp-crew-grid"></div>
       <div class="field-hint" id="pp-crew-roster-hint" hidden></div>
       <button class="call-add-btn" onclick="addCallSheetPerson()"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Add person</span></button>
-      <button class="call-add-btn" onclick="fillCallSheetCrewFromRoster()" data-tip="Add everyone from the saved role assignments in one tap"><span class="sf-symbol" data-symbol="people.group" aria-hidden="true"></span><span>Fill from roster</span></button>
+      <button class="call-add-btn" onclick="fillCallSheetCrewFromRoster()" data-tip="Add everyone who has a position, in one tap"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Fill from roster</span></button>
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Plans and Notes<button type="button" class="info-btn" aria-label="What the plans and notes section is for" onclick="toggleInfoPop(event,'cs-notes')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
@@ -6105,7 +6127,7 @@ input.pt-range::-moz-range-thumb,
       <div class="prepro-grid">
         <div class="field"><label class="field-lbl">Local Hospital</label><input class="field-in" id="sp-hospital" maxlength="120" placeholder="e.g. Mercy General"></div>
         <div class="field"><label class="field-lbl">Hospital Address</label><input class="field-in" id="sp-hospital-address" maxlength="160" placeholder="e.g. 1200 Health Way"><div class="field-hint">Prints on the call sheet too, so the crew can navigate fast.</div></div>
-        <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in field-narrow" id="sp-hospital-phone" maxlength="40" placeholder="(555) 210-4400"></div>
+        <div class="field"><label class="field-lbl">Hospital Phone</label><input class="field-in" id="sp-hospital-phone" maxlength="40" placeholder="e.g. (555) 210-4400"></div>
         <div class="field"><label class="field-lbl">Emergency</label><input class="field-in" id="sp-emergency" maxlength="160" placeholder="911, campus emergency, etc."></div>
         <div class="field"><label class="field-lbl">Other numbers</label><input class="field-in" id="sp-nonemergency" maxlength="240" placeholder="e.g. Facilities (555) 210-3000 · Campus security (555) 210-2000"><div class="field-hint">Non-emergency lines, security, facilities: anyone the crew may need to call.</div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact</label><input class="field-in" id="sp-late" maxlength="120" placeholder="e.g. Sam (555) 210-8100"><div class="field-hint">Who to text if someone runs late. Auto-fills from the Call Sheet.</div></div>
@@ -6163,16 +6185,16 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Show Day<button type="button" class="info-btn" aria-label="What the show day section is for" onclick="toggleInfoPop(event,'ps-show-day')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
-      <div class="field-hint">Crew call and show start never fill in on their own: enter the real times. Show day, doors, location and address come from the call sheet.</div>
+      <div class="field-hint">Call time and show start never fill in on their own: type the real times.</div>
       <div class="prepro-grid prepro-grid-times">
-        <div class="field"><label class="field-lbl">Show Day</label><div class="field-static" id="ps-show-date">—</div></div>
-        <div class="field"><label class="field-lbl">Crew Call</label><input class="field-in" id="ps-call" type="time"></div>
-        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-static" id="ps-doors">—</div></div>
+        <div class="field"><label class="field-lbl">Show Day</label><div class="field-static" id="ps-show-date">Not set yet</div></div>
+        <div class="field"><label class="field-lbl">Call Time</label><input class="field-in" id="ps-call" type="time"></div>
+        <div class="field"><label class="field-lbl">Doors Open</label><div class="field-static" id="ps-doors">Not set yet</div></div>
         <div class="field"><label class="field-lbl">Show Start</label><input class="field-in" id="ps-show" type="time"></div>
       </div>
       <div class="prepro-grid u-mt10">
-        <div class="field"><label class="field-lbl">Location</label><div class="field-static" id="ps-location">—</div></div>
-        <div class="field"><label class="field-lbl">Address</label><div class="field-static" id="ps-address">—</div></div>
+        <div class="field"><label class="field-lbl">Location</label><div class="field-static" id="ps-location">Not set yet</div></div>
+        <div class="field"><label class="field-lbl">Address</label><div class="field-static" id="ps-address">Not set yet</div></div>
         <div class="u-col-span field-hint" id="ps-linked-hint">Show day, doors, location and address are from the call sheet. <button type="button" class="field-link-btn" onclick="openCallSheetFromSchedule()">Edit on the call sheet</button></div>
         <div class="field u-col-span"><label class="field-lbl">Show Notes</label><textarea class="field-in u-textarea-cozy" id="ps-show-notes" rows="2" placeholder="Arrival details, holding areas, final reminders, day-of timing notes"></textarea></div>
       </div>
@@ -6210,7 +6232,7 @@ input.pt-range::-moz-range-thumb,
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title">Stage Plot</div>
-        <div class="modal-sub">Build each system as its own layer: drag gear from the bank, then draw the signal flow between it.</div>
+        <div class="modal-sub">Build each system as its own layer: drag gear onto the plot, then draw the signal flow between the pieces.</div>
       </div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
@@ -6222,7 +6244,7 @@ input.pt-range::-moz-range-thumb,
           <label class="field-lbl">Current Plot</label>
           <select class="field-in" id="pp-plot-select" onchange="switchStagePlot(this.value)"></select>
         </div>
-        <div class="field"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="Studio A talk show" oninput="updateActiveStagePlotLabel(this.value)"></div>
+        <div class="field"><label class="field-lbl">Plot Name</label><input class="field-in" id="pp-plot-label" maxlength="80" placeholder="e.g. Studio A talk show" oninput="updateActiveStagePlotLabel(this.value)"></div>
         <button class="call-add-btn u-callbtn" type="button" onclick="addAnotherStagePlot()" data-tip="Add another stage plot">+ Add</button>
         <button class="call-add-btn call-delete-btn u-callbtn u-c-red" type="button" onclick="deleteStagePlot()" data-tip="Delete this plot. Instructors and admins only.">Delete</button>
       </div>
@@ -6249,7 +6271,7 @@ input.pt-range::-moz-range-thumb,
     <div class="paperwork-modal-head">
       <div>
         <div class="modal-title"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span> Production Notes</div>
-        <div class="modal-sub">Post what changed, tag the department, and replies stay threaded. Everyone in this session sees it live.</div>
+        <div class="modal-sub">Post what changed, tag the department, and replies stay threaded. Everyone in this show sees it live.</div>
       </div>
       <button class="paperwork-back" onclick="returnToPaperworkHub()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
     </div>
@@ -6294,7 +6316,7 @@ input.pt-range::-moz-range-thumb,
           </div>
           <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
-          <div class="field-hint pb-attach-cap-hint">Audio files up to 4 MB (mp3 or m4a).</div>
+          <div class="field-hint pb-attach-cap-hint">Files up to 4 MB each. Use mp3 or m4a for sound. Photos are made smaller to fit.</div>
           <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
           <div>
             <div class="pb-compose-label">Tag for</div>
@@ -6302,9 +6324,7 @@ input.pt-range::-moz-range-thumb,
           </div>
           <div class="pb-compose-actions">
             <button type="button" class="pb-attach-add" onclick="document.getElementById('pbNoteFileInput').click()" data-tip="Attach images, audio, or documents"><span class="sf-symbol" data-symbol="action.attach" aria-hidden="true"></span><span>Attach</span></button>
-            <button type="button" class="pb-attach-add export-action" onclick="pbExportDraftPDF()" data-tip="Save this note as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
             <input type="file" id="pbNoteFileInput" hidden multiple accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.md,.csv,.rtf,.pages,.key,.numbers,.xls,.xlsx,.ppt,.pptx" onchange="pbHandleNoteFiles(this,'main')">
-            <span class="pb-composer-hint"><b>**bold**</b> · <i>*italic*</i> · ~~strike~~ · lists · ⌘/Ctrl+Enter to post</span>
             <button type="button" class="pb-post-btn" id="pbNoteSendBtn" onclick="publishPlandaBearNote()" data-tip="Post the note (Cmd/Ctrl+Enter)"><span>Post</span><span class="sf-symbol" data-symbol="action.forward" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -6334,14 +6354,14 @@ input.pt-range::-moz-range-thumb,
 
 <div class="modal-wrap" id="modal-prepro-join">
   <div class="modal">
-    <div class="modal-title">Open Planda Bear<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
-    <div class="modal-sub">Enter the show code to work on the Planda Bear package.</div>
+    <div class="modal-title">Open Planda Bear<button type="button" class="info-btn" aria-label="About show codes and class keys" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+    <div class="modal-sub">Enter the show code to work on your show’s paperwork.</div>
     <div class="join-identity-strip" id="pp-identity-strip" hidden></div>
     <div class="join-your-sessions" id="pp-your-sessions" hidden></div>
     <div class="join-altcode-label" id="pp-altcode-label" hidden>Have a different code?</div>
     <div class="field"><label class="field-lbl">Show Code</label><input class="field-in u-code-input" id="pp-join-code" type="text" placeholder="Show code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="pp-join-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
-    <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class key</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
+    <div class="field join-entrycode" id="pp-entrycode-row" hidden><label class="field-lbl">Class key</label><input class="field-in" id="pp-entry-code" type="text" maxlength="80" placeholder="This show needs it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="pp-join-err">Fill in both fields.</div>
     <button class="btn-primary" id="pp-join-btn" onclick="joinPreProSession()">Open Planda Bear</button>
     <button class="btn-secondary" onclick="hideModal('modal-prepro-join')">Cancel</button>
@@ -6362,7 +6382,7 @@ input.pt-range::-moz-range-thumb,
 <!-- Who owes what: instructors' per-person open to-dos / checklist items -->
 <div class="modal-wrap" id="pbOwesModal">
   <div class="modal pb-owes-modal">
-    <div class="modal-title"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span> Who owes what</div>
+    <div class="modal-title"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span> Open items</div>
     <div class="modal-sub">Every open to-do and checklist item on the board, grouped by the person it is assigned to.</div>
     <div class="pb-owes-list" id="pbOwesList"></div>
     <button class="btn-secondary" onclick="hideModal('pbOwesModal')">Close</button>
@@ -6434,7 +6454,7 @@ input.pt-range::-moz-range-thumb,
     <p class="live-exit-intro" id="exitLiveIntro">You can come back any time. The rundown stays where it is.</p>
     <ul class="live-exit-list" id="exitLiveList" role="status" aria-live="polite" aria-atomic="true"></ul>
     <div class="live-exit-toggles" id="exitLiveToggles">
-      <label class="live-exit-toggle" id="exitLiveClockRow" hidden><input type="checkbox" id="exitLiveClockToggle" onchange="renderLiveExitDecision()"><span>Pause the show clock<small>Pauses it for everyone. Start Show resumes it.</small></span></label>
+      <label class="live-exit-toggle" id="exitLiveClockRow" hidden><input type="checkbox" id="exitLiveClockToggle" onchange="renderLiveExitDecision()"><span>Pause the show clock<small>Pauses it for everyone. Resume Clock starts it again.</small></span></label>
       <label class="live-exit-toggle" id="exitLivePlayoutRow" hidden><input type="checkbox" id="exitLivePlayoutToggle" onchange="renderLiveExitDecision()"><span><span id="exitLivePlayoutLabelText">Stop playout on the Air</span><small>Stops what is playing. Output windows stay open.</small></span></label>
     </div>
     <div class="live-exit-status" id="exitLiveStatus" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -6475,16 +6495,16 @@ input.pt-range::-moz-range-thumb,
 ══════════════════════════════════════════ -->
 <div class="modal-wrap" id="modal-stud">
   <div class="modal">
-    <div class="modal-title">Join a Session<button type="button" class="info-btn" aria-label="About session and class codes" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
+    <div class="modal-title">Join a show<button type="button" class="info-btn" aria-label="About show codes and class keys" onclick="toggleInfoPop(event,'join-session')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
     <div class="modal-sub">Enter the show code your director gave you.</div>
     <div class="join-identity-strip" id="stud-identity-strip" hidden></div>
     <div class="join-your-sessions" id="stud-your-sessions" hidden></div>
     <div class="join-altcode-label" id="stud-altcode-label" hidden>Have a different code?</div>
     <div class="field"><label class="field-lbl">Show Code</label><input class="field-in u-code-input" id="stud-code" type="text" placeholder="Show code" maxlength="20"></div>
     <div class="field"><label class="field-lbl">Your Name</label><input class="field-in" id="stud-name" type="text" placeholder='e.g. "Alex"' maxlength="40"></div>
-    <div class="field join-entrycode" id="stud-entrycode-row" hidden><label class="field-lbl">Class key</label><input class="field-in" id="stud-entry-code" type="text" maxlength="80" placeholder="This session requires it" autocapitalize="characters" autocomplete="off"></div>
+    <div class="field join-entrycode" id="stud-entrycode-row" hidden><label class="field-lbl">Class key</label><input class="field-in" id="stud-entry-code" type="text" maxlength="80" placeholder="This show needs it" autocapitalize="characters" autocomplete="off"></div>
     <div class="modal-err" id="stud-err">Fill in both fields.</div>
-    <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join Session</button>
+    <button id="stud-join-btn" class="btn-primary" onclick="joinSession()">Join show</button>
     <button class="btn-secondary" onclick="hideModal('modal-stud')">Cancel</button>
   </div>
 </div>
@@ -6492,8 +6512,8 @@ input.pt-range::-moz-range-thumb,
 <div class="modal-wrap" id="modal-workspace">
   <div class="modal">
     <div class="modal-title">Show setup</div>
-    <div class="modal-sub">Pick the session and the windows this machine needs. Cueola remembers the set for next time. If a window gets blocked, allow pop-ups for this site once.</div>
-    <div class="field"><label class="field-lbl">Session</label>
+    <div class="modal-sub">Pick the show and the windows this machine needs. Cueola remembers the set for next time. If a window gets blocked, allow pop-ups for this site once.</div>
+    <div class="field"><label class="field-lbl">Show</label>
       <select class="field-in" id="ws-code" onchange="wsCodeChanged()"></select>
       <input class="field-in u-code-input-caps" id="ws-code-manual" type="text" placeholder="Show code" maxlength="20" hidden oninput="this.value=this.value.toUpperCase();wsRenderTalentLink()">
     </div>
@@ -6519,7 +6539,7 @@ input.pt-range::-moz-range-thumb,
       </div>
       <div class="field-hint">Each window can open on a chosen physical display (Chrome or Edge). The talent display also goes fullscreen there.</div>
     </div>
-    <div class="modal-err" id="ws-err">Pick or type a session code.</div>
+    <div class="modal-err" id="ws-err">Pick or type a show code.</div>
     <button class="btn-primary" onclick="launchWorkspace()">Open my show</button>
     <button class="btn-secondary" onclick="hideModal('modal-workspace')">Cancel</button>
   </div>
@@ -6604,7 +6624,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-actions">
       <button class="btn-secondary" onclick="clearShowLog()">Clear</button>
       <button class="btn-secondary export-action" onclick="exportShowLog()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export .txt</span></button>
-      <button class="btn-primary" onclick="hideModal('modal-showlog')">Done</button>
+      <button class="btn-primary" onclick="hideModal('modal-showlog')">Close</button>
     </div>
   </div>
 </div>
@@ -6617,7 +6637,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-actions">
       <button class="btn-secondary" id="sessionHistoryRestoreLocal" onclick="restoreCurrentLocalSessionToCloud()" hidden><span class="sf-symbol" data-symbol="action.repeat" aria-hidden="true"></span><span>Restore Current Local Copy</span></button>
       <button class="btn-secondary export-action" id="sessionHistoryExportAll" onclick="exportAllSessionSnapshots()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export All</span></button>
-      <button class="btn-primary" onclick="hideModal('modal-session-history')">Done</button>
+      <button class="btn-primary" onclick="hideModal('modal-session-history')">Close</button>
     </div>
   </div>
 </div>
@@ -6848,6 +6868,9 @@ input.pt-range::-moz-range-thumb,
 .sd-giphy-forget:hover { color:var(--text); }
 .sd-giphy-share { margin:8px 0 0; }
 .sd-picker-opt .sd-note { font-size:11.5px; }
+.sd-layout-list { display:flex; flex-direction:column; gap:var(--sp-1,4px); margin-top:var(--sp-2,8px); }
+.sd-layout-row { display:flex; align-items:center; gap:var(--sp-2,8px); }
+.sd-layout-row .sd-picker-opt { flex:1 1 auto; min-width:0; margin-bottom:0; }
 .sd-funopt { width:32px; height:32px; border-radius:8px; border: 1px solid transparent; background:var(--s2); cursor:pointer; padding:4px; line-height:0; }
 .sd-funopt img { width:100%; height:100%; object-fit:contain; display:block; }
 .sd-funopt.cur { border-color:var(--green); box-shadow:0 0 0 1px var(--green); }
@@ -6978,6 +7001,8 @@ input.pt-range::-moz-range-thumb,
 .fd-row .field-in { flex:1; min-width:0; }
 .fd-row .btn-primary { width:auto; flex:0 0 auto; }
 .fd-links { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px; font-size:12.5px; color:var(--text3); }
+/* Phones: the row wraps, so drop the dot separators (they hung at line ends) and space the links. */
+@media (max-width:520px){ .fd-links { column-gap:14px; } .fd-links > span:not(.fd-user) { display:none; } }
 .fd-link { background:none; border:none; color:var(--text2); font-size:12.5px; cursor:pointer; padding:2px 4px; border-radius:6px; }
 .fd-link:hover { color:var(--accent); }
 .fd-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; width:100%; }
@@ -7072,7 +7097,6 @@ input.pt-range::-moz-range-thumb,
 .link-accent{color:var(--accent)}
 .btn-danger-text{color:var(--red)}
 .admin-section-tag{color:var(--text3);font-size:9px}
-.admin-follow-in{flex:1;min-width:120px;font-size:12px;padding:6px 10px}
 .admin-act-btn:disabled{opacity:.45;cursor:not-allowed}
 .row-ea-btn:disabled{opacity:.3;cursor:not-allowed}
 .p-tip-head{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px}
@@ -7086,6 +7110,7 @@ input.pt-range::-moz-range-thumb,
 .cc-save-src{display:inline-flex;align-items:center;gap:6px;min-height:36px;margin-top:8px;padding:6px 12px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:13px;font-weight:600;cursor:pointer}
 .cc-save-src:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 .cc-save-src[hidden]{display:none}
+@media (pointer:coarse){.cc-save-src{min-height:44px}}
 .cc-script-ta{resize:vertical;line-height:1.7;font-size:14px}
 .cc-note-ta{font-size:13px;line-height:1.6}
 .cc-note-ta-sm{font-size:12px;line-height:1.5}
@@ -7263,9 +7288,9 @@ input.pt-range::-moz-range-thumb,
 
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
-<script src="cueola-session-clone.js?v=4a94fe587e"></script>
+<script src="cueola-session-clone.js?v=3e5916bd3c"></script>
 <script src="break-room-show.js?v=0d8b8b324b"></script>
-<script src="cueola-export-model.js?v=75dc3942e7"></script>
+<script src="cueola-export-model.js?v=bf11137a90"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=7b1ee45cc7"></script>
@@ -7273,19 +7298,19 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-live-state.js?v=6314983dd7"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
-<script src="cueola-keymap.js?v=ffb4fb0e1a"></script>
+<script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
 <script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=3d636f4ffb"></script>
-<script src="outrangutan/outrangutan.js?v=d75f53816e"></script>
+<script src="cueola-app.js?v=d3a05c8638"></script>
+<script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=cbb1a63591"></script>
+<script src="cueola-streamdeck.js?v=cfb0fab355"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

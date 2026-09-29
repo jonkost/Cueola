@@ -1,9 +1,7 @@
 {
-  "_comment": "Known-legacy DOM references check-contracts.mjs must tolerate. Every entry is tech debt — remove the dead code, then the entry. Do not add new entries to silence a failure you caused.",
+  "_comment": "DOM ids check-contracts.mjs must tolerate. An entry is either dead code (remove the code, then the entry) or an id a helper builds where the lint cannot see it: sd-chip-mico is passed to statusChip() in cueola-streamdeck.js. Do not add new entries to silence a failure you caused.",
   "missing-id": [
-    "cc-v-custom",
-    "cc-a-custom",
-    "cc-s-custom"
+    "sd-chip-mico"
   ],
   "missing-handler": []
 }
