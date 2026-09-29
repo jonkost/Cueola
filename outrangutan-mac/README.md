@@ -120,6 +120,10 @@ standby, and its next GO picks up where it stopped.
 Find a pad by name, emoji or key with the search field in the toolbar
 (Pads view). It looks through every bank.
 
+**Record** (in the pad bar, or right-click an empty pad) records a sound
+effect from the Mac's sound input onto a pad. macOS asks once to allow the
+microphone. Recordings are kept in Music, Outrangutan Recordings.
+
 Switch to **Pads** above the list.
 
 - Drop sounds on the board (or on one pad), or click an empty pad to pick one.
@@ -240,6 +244,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `record`: a pretend microphone records onto a pad; a second take with
+  the same name gets its own file.
 - `trim`: pictures of the trim bar for a video cue and a pad.
 - `undo`: Undo and Redo for adding, a slider drag, removing, moving,
   duplicating and a pad change, the lock holding an undo back, and opening a
@@ -289,6 +295,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Obs.swift` | OBS Studio control and Settings, OBS |
 | `SoundTap.swift` | Listens to cue sound for the meter, without changing it |
 | `Thumbnails.swift` | The small pictures in the cue list |
+| `Recorder.swift` | Recording a sound effect onto a pad |
 | `TrimView.swift` | The trim bar: frames, sound wave, In and Out handles |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |

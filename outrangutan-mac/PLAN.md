@@ -64,7 +64,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Cue sound device, a sound device per output | Built (step 4) | Cue sound plays on a device's first two channels. |
 | Cue sound meter | Built | A listener on each player; the sound itself is untouched. |
 | Cue sound on any channel pair | Later | Needs cue sound to move onto the same audio engine as the pads. |
-| Record a sound effect | Step 3 | |
+| Record a sound effect | Built | From the Mac's sound input onto a pad. |
 | Multiple outputs, identify, pick a screen and audio device per output | Built (step 4) | Up to four outputs. A cue picks its output, or every output. Replaces the kiosk Chrome windows. |
 | Apple design pass | Built (step 4) | Toolbar, native Inspector with icon tabs (the house inspector standard), Settings window, Playback menu, SF Pro and SF Mono, standard empty screens, app icon from the brand art, the Mac's light or dark look. Needs macOS 14. |
 | Join a show by code, sign in, publish cues and what is on air | Built (step 5) | The rule above: same fields, same shape. |

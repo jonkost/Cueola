@@ -9,6 +9,7 @@ struct PadBoardView: View {
     @State private var renaming: PadBank?
     @State private var newName = ""
     @State private var search = ""
+    @State private var recordSlot: Int?
     /// Test mode only: a search to start with.
     var startSearch = ""
 
@@ -56,6 +57,12 @@ struct PadBoardView: View {
         // Find a pad by name, emoji or key, across every bank.
         .searchable(text: $search, placement: .toolbar, prompt: "Find a Pad")
         .onAppear { if !startSearch.isEmpty { search = startSearch } }
+        .sheet(item: Binding(get: { recordSlot.map(SlotID.init) }, set: { recordSlot = $0?.id })) { s in
+            RecordSheet(board: board, slot: s.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recordPad)) { note in
+            if let slot = note.object as? Int { recordSlot = slot }
+        }
         .alert("Rename bank", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Rename") {
@@ -90,6 +97,15 @@ struct PadBoardView: View {
                 }
             }
             .padding(14)
+        }
+    }
+
+    private func recordIntoNextSlot() {
+        guard let bank = board.currentBank else { return }
+        let free = (0..<PadBoard.padCountMax).first { board.pad(bank: bank.id, slot: $0) == nil }
+        if let free {
+            if free >= bank.padCount { board.addSlot() }
+            recordSlot = free
         }
     }
 
@@ -129,6 +145,11 @@ struct PadBoardView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help("Off: hitting a pad stops every other pad.")
+            Button { recordIntoNextSlot() } label: {
+                Label("Record", systemImage: "mic")
+            }
+            .help("Record a sound effect onto the next empty pad")
+            .disabled(board.locked)
             Button { board.stopAll() } label: {
                 Label("Stop Pads", systemImage: "stop.fill")
             }
@@ -227,6 +248,10 @@ struct EmptyPadTile: View {
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .opacity(board.locked ? 0.4 : 1)
         .onTapGesture { if !board.locked { choose() } }
+        .contextMenu {
+            Button("Choose a Sound\u{2026}") { choose() }.disabled(board.locked)
+            Button("Record a Sound\u{2026}") { NotificationCenter.default.post(name: .recordPad, object: slot) }.disabled(board.locked)
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard !board.locked, let url = urls.first(where: PadBoard.isSound) else { return false }
             board.assign(url: url, slot: slot)
@@ -423,4 +448,11 @@ struct LevelMeterView: View {
         let db = 20 * log10(level)
         return max(0, (db + 48) / 48)
     }
+}
+
+/// A pad slot, for the Record sheet.
+struct SlotID: Identifiable { let id: Int }
+
+extension Notification.Name {
+    static let recordPad = Notification.Name("outrangutan.recordPad")
 }

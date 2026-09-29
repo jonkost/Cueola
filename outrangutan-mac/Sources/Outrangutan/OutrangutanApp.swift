@@ -173,6 +173,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyWatcher = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             if NSApp.keyWindow?.firstResponder is NSText { return event }
+            // A sheet (Connect, Record a Sound) or Settings is in front: its
+            // own buttons get the keys, never GO.
+            if let key = NSApp.keyWindow, key.sheetParent != nil || key.identifier?.rawValue.contains("Settings") == true { return event }
             if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return event }
             // Settings is waiting for a new key: let it have this one.
             if KeyMap.shared.recording != nil { return event }

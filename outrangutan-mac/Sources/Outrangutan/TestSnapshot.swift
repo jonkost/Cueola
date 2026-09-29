@@ -75,6 +75,36 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "record": steps = [
+            (0.5, {
+                // A pretend microphone: a sound file fed in slices, the way
+                // the real input hands them over.
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                Recorder.testFolder = dir.appendingPathComponent("Recordings")
+                engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
+                let rec = Recorder()
+                guard let source = try? AVAudioFile(forReading: media.appendingPathComponent("demo-aww.wav")) else { return note("no source") }
+                do { try rec.open(named: "Crowd aww", format: source.processingFormat) } catch { return note("open failed: \(error)") }
+                note("a recording: \(rec.state == .recording)")
+                while let buf = AVAudioPCMBuffer(pcmFormat: source.processingFormat, frameCapacity: 2048),
+                      (try? source.read(into: buf, frameCount: 2048)) != nil, buf.frameLength > 0 {
+                    rec.write(buf)
+                }
+                rec.finish()
+                guard case .done(let url) = rec.state else { return note("b not done: \(rec.state)") }
+                note("b saved \(url.lastPathComponent) in \(url.deletingLastPathComponent().lastPathComponent)")
+                engine.pads.assign(url: url, slot: 0)
+                let pad = engine.pads.pads.first
+                note("c on the pad: \(pad?.name ?? "-"), \(String(format: "%.2f", engine.pads.length(pad?.id ?? "") ?? 0)) s long (the source is \(String(format: "%.2f", Double(source.length) / source.processingFormat.sampleRate)) s)")
+                note("d the pad plays: \(engine.pads.fire(pad?.id ?? "").ok)")
+                let again = Recorder()
+                try? again.open(named: "Crowd aww", format: source.processingFormat)
+                again.finish()
+                if case .done(let u2) = again.state { note("e a second take with the same name: \(u2.lastPathComponent)") }
+                picture(RecordSheet(board: engine.pads, slot: 1), size: CGSize(width: 440, height: 250), to: dir.appendingPathComponent("record-sheet.png"))
+            }),
+            (1.0, { engine.pads.stopAll() }),
+        ]
         case "trim": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

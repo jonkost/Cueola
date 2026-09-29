@@ -22,6 +22,8 @@
 	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.video</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Outrangutan records sound effects onto pads from your microphone or audio interface.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
