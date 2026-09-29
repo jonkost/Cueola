@@ -8,6 +8,9 @@ struct PadBoardView: View {
     @ObservedObject var board: PadBoard
     @State private var renaming: PadBank?
     @State private var newName = ""
+    @State private var search = ""
+    /// Test mode only: a search to start with.
+    var startSearch = ""
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 260), spacing: 12)]
 
@@ -16,6 +19,9 @@ struct PadBoardView: View {
             bankBar
             Divider()
             ScrollView {
+                if !search.isEmpty {
+                    found
+                } else {
                 LazyVGrid(columns: columns, spacing: 12) {
                     if let bank = board.currentBank {
                         ForEach(0..<bank.padCount, id: \.self) { slot in
@@ -44,8 +50,12 @@ struct PadBoardView: View {
                     }
                 }
                 .padding(14)
+                }
             }
         }
+        // Find a pad by name, emoji or key, across every bank.
+        .searchable(text: $search, placement: .toolbar, prompt: "Find a Pad")
+        .onAppear { if !startSearch.isEmpty { search = startSearch } }
         .alert("Rename bank", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Rename") {
@@ -55,6 +65,33 @@ struct PadBoardView: View {
                 renaming = nil
             }
             Button("Cancel", role: .cancel) { renaming = nil }
+        }
+    }
+
+    /// Pads that match the search, bank by bank.
+    @ViewBuilder
+    private var found: some View {
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let hits = board.pads.filter {
+            $0.name.lowercased().contains(q) || $0.emoji.contains(q) || $0.key.lowercased() == q
+        }
+        if hits.isEmpty {
+            ContentUnavailableView.search(text: search)
+                .padding(.top, 40)
+        } else {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(board.banks) { bank in
+                    let inBank = hits.filter { $0.bank == bank.id }.sorted { $0.slot < $1.slot }
+                    if !inBank.isEmpty {
+                        Section {
+                            ForEach(inBank) { PadTile(board: board, pad: $0) }
+                        } header: {
+                            Text(bank.name).font(.headline).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .padding(14)
         }
     }
 

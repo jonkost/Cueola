@@ -75,6 +75,24 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "padsearch": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let b1 = PadBank(id: "bk_1", name: "Show open"), b2 = PadBank(id: "bk_2", name: "Game segment")
+                func pad(_ n: Int, _ bank: String, _ name: String, _ file: String, _ emoji: String) -> Pad {
+                    var p = Pad(id: Pad.newID(offsetMs: n), slot: n % 4, bank: bank, name: name, path: media.appendingPathComponent(file).path, key: "")
+                    p.emoji = emoji
+                    return p
+                }
+                engine.replaceShow(cues: [], pads: [
+                    pad(0, "bk_1", "Air horn", "demo-airhorn.wav", "📯"), pad(1, "bk_1", "Applause", "demo-applause.wav", "👏"),
+                    pad(4, "bk_2", "Horn fail", "demo-aww.wav", "😢"), pad(5, "bk_2", "Rimshot", "demo-rimshot.wav", "🥁"),
+                ], banks: [b1, b2], multiTrigger: true)
+                picture(PadBoardView(board: engine.pads, startSearch: "horn"), size: CGSize(width: 760, height: 420), to: dir.appendingPathComponent("pad-search.png"))
+                picture(PadBoardView(board: engine.pads, startSearch: "kazoo"), size: CGSize(width: 760, height: 420), to: dir.appendingPathComponent("pad-search-none.png"))
+            }),
+            (1.2, {}),
+        ]
         case "watch": steps = watchSteps(engine: engine, watch: watch, dir: dir, note: note)
         case "obs": steps = obsSteps(engine: engine, dir: dir, note: note)
         case "key": steps = keySteps2(engine: engine, scopes: scopes, dir: dir, note: note, snap: snap)

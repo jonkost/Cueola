@@ -58,7 +58,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Sound effect pads: banks, emoji, colors, hotkeys, retrigger, loop | Built (step 3) | Sounds load into memory before the show, so a pad fires with no delay. Four copies per pad for Layer. |
 | A pad tied to a cue | Built (step 3) | |
 | Pads from the rundown and the deck | Built (step 3) | |
-| Pad search | Later | |
+| Pad search | Built | Every bank, by name, emoji or key. |
 | Sound chain: gain, 3-band EQ, compressor, master volume | Built for pads (step 3) | The same EQ points and compressor as the web app. |
 | Pad meter, pads on any channel pair of an audio interface | Built (step 4) | |
 | Cue sound device, a sound device per output | Built (step 4) | Cue sound plays on a device's first two channels. |

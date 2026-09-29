@@ -109,6 +109,9 @@ standby, and its next GO picks up where it stopped.
 
 ## Sound effect pads
 
+Find a pad by name, emoji or key with the search field in the toolbar
+(Pads view). It looks through every bank.
+
 Switch to **Pads** above the list.
 
 - Drop sounds on the board (or on one pad), or click an empty pad to pick one.
@@ -228,6 +231,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.
 - `obs`: a pretend OBS checks the password proof (against openssl), takes a
