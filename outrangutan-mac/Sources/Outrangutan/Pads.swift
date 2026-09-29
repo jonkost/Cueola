@@ -133,6 +133,8 @@ final class PadBoard: ObservableObject {
     var onChange: (() -> Void)?
     /// Called each time a pad fires, with how long it runs (nil for a loop).
     var onFire: ((Pad, Double?) -> Void)?
+    /// Called with a line for the show log each time a pad plays.
+    var onLog: ((String) -> Void)?
 
     private let audio = AVAudioEngine()
     private let bus = AVAudioMixerNode()
@@ -150,6 +152,9 @@ final class PadBoard: ObservableObject {
         currentBankID = b[0].id
         audio.attach(bus)
         audio.connect(bus, to: audio.mainMixerNode, format: nil)
+        // Test mode never makes a sound. The meter reads the board before
+        // this point, so it still moves.
+        if TestSnapshot.isOn { audio.mainMixerNode.outputVolume = 0 }
         // Measure what the pads send out, for the meter.
         bus.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let data = buffer.floatChannelData else { return }
@@ -202,6 +207,7 @@ final class PadBoard: ObservableObject {
         }
         let length: Double? = pad.loop ? nil : Double(buffer.frameLength) / buffer.format.sampleRate
         sounding[id] = (Date(), length)
+        onLog?((pad.emoji.isEmpty ? "" : pad.emoji + " ") + pad.name)
         onFire?(pad, length)
         return .done
     }

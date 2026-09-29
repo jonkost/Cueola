@@ -9,6 +9,7 @@ public struct WireCommand: Equatable {
     public var ts: Double          // sender's clock, milliseconds
     public var expiresAt: Double   // sender's clock, milliseconds, 0 = none
     public var sender: String
+    public var by: String          // the person who sent it, when the sender says
     public var action: String      // go, stop, pause, panic, fadeStop, cue, pad, arm
     public var cueId: String
     public var padId: String
@@ -16,13 +17,14 @@ public struct WireCommand: Equatable {
     public var pads: [String]
 
     public init(commandId: String, origId: String = "", ts: Double = 0, expiresAt: Double = 0,
-                sender: String = "", action: String, cueId: String = "", padId: String = "",
+                sender: String = "", by: String = "", action: String, cueId: String = "", padId: String = "",
                 armCueId: String = "", pads: [String] = []) {
         self.commandId = commandId
         self.origId = origId.isEmpty ? commandId : origId
         self.ts = ts
         self.expiresAt = expiresAt
         self.sender = sender
+        self.by = by
         self.action = action
         self.cueId = cueId
         self.padId = padId
@@ -38,6 +40,7 @@ public struct WireCommand: Equatable {
                   ts: Wire.number(d["ts"]) ?? 0,
                   expiresAt: Wire.number(d["expiresAt"]) ?? 0,
                   sender: Wire.string(d["sender"]) ?? "",
+                  by: Wire.string(d["by"]) ?? "",
                   action: Wire.string(d["action"]) ?? "",
                   cueId: Wire.string(d["cueId"]) ?? "",
                   padId: Wire.string(d["padId"]) ?? "",

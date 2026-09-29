@@ -89,6 +89,7 @@ final class ShowLink: ObservableObject {
     }
 
     func leave(keepSignIn: Bool = false) {
+        if !code.isEmpty { engine.log.add(.link, "Left \(code)") }
         pollTask?.cancel()
         pollTask = nil
         heartbeat?.invalidate()
@@ -139,6 +140,8 @@ final class ShowLink: ObservableObject {
     }
 
     private func trouble(_ text: String) {
+        // Log a problem once, not on every retry.
+        if phase != .trouble || message != text { engine.log.add(.problem, text) }
         phase = .trouble
         message = text
     }
@@ -155,6 +158,7 @@ final class ShowLink: ObservableObject {
         if phase != .linked {
             phase = .linked
             message = "Connected to \(code)"
+            engine.log.add(.link, "Connected to \(code)")
         }
         if let fixes = doc["fixRequests"] as? [String: Any] { handleFixRequests(fixes) }
         let og = doc["outrangutan"] as? [String: Any] ?? [:]

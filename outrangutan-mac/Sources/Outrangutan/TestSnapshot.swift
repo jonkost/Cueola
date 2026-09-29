@@ -15,12 +15,14 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "log": a short show from this Mac and from the rundown, then pictures
+///   of the Show Log, and the cue sheet and log printed to PDF.
 enum TestSnapshot {
     static var isOn: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
 
     /// The pretend show record, only in the link test.
-    @MainActor static let fake: FakeRecordStore? = isOn && (scenario == "link" || scenario == "pads") ? FakeRecordStore() : nil
+    @MainActor static let fake: FakeRecordStore? = isOn && ["link", "pads", "log"].contains(scenario) ? FakeRecordStore() : nil
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
@@ -55,6 +57,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
         case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
@@ -150,6 +153,89 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
+        ]
+    }
+
+    /// The show log and printing. Silent, like every test.
+    @MainActor private static func logSteps(engine: Engine, link: ShowLink, files: ShowFiles, dir: URL,
+                                            note: @escaping (String) -> Void, state: @escaping (String) -> Void) -> Steps {
+        guard let fake else { return [] }
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func file(_ name: String, _ kind: CueKind, _ label: String) -> Cue {
+            Cue(name: label, path: media.appendingPathComponent(name).path, kind: kind, wireID: Cue.newWireID())
+        }
+        var n = 0
+        func send(_ action: String, cueId: String = "", padId: String = "") {
+            n += 1
+            let t = ShowLink.now
+            let c: [String: Any] = ["commandId": "log_TEST_\(n)", "origId": "log_TEST_\(n)", "ts": t, "expiresAt": t + 8000,
+                                    "by": "Jon Kost", "sender": "flowmingo_test", "action": action, "cueId": cueId, "padId": padId]
+            fake.set(["outrangutan", "commandQueue"], [c])
+            fake.set(["outrangutan", "command"], c)
+        }
+        func pictures(of pdf: URL, as name: String) {
+            // Page one of each PDF, as a picture to look at.
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+            p.arguments = ["-s", "format", "png", pdf.path, "--out", dir.appendingPathComponent(name).path]
+            p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+            try? p.run(); p.waitUntilExit()
+        }
+        return [
+            (1.0, {
+                var intro = file("bars-16x9.mp4", .video, "Open: bars")
+                intro.notes = "Roll on the director's call"
+                var still = file("still-16x9.png", .still, "Title card")
+                still.duration = 5; still.continueMode = .autoFollow
+                var applause = file("demo-applause.wav", .audio, "Applause")
+                applause.preWait = 1
+                let lost = Cue(name: "Clip that moved", path: "/nowhere/clip.mov", kind: .video, wireID: Cue.newWireID(offsetMs: 9))
+                let bank = PadBank(id: "bk_log", name: "Bank 1")
+                var horn = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Air horn",
+                               path: media.appendingPathComponent("demo-airhorn.wav").path, key: "1")
+                horn.emoji = "📯"
+                engine.replaceShow(cues: [intro, still, applause, lost], pads: [horn], banks: [bank], multiTrigger: true)
+                engine.update(engine.cues[0].id) { $0.sfxPadId = horn.id; $0.trimIn = 90 }
+                link.join(code: "LOG1")
+            }),
+            (1.0, { engine.openOutput(); engine.go() }),
+            (0.6, { engine.togglePause() }),
+            (0.4, { engine.togglePause() }),
+            (0.4, { send("cue", cueId: engine.cues[1].wireID ?? "") }),
+            (0.8, { send("pad", padId: engine.pads.pads[0].id) }),
+            (0.6, { send("cue", cueId: "og_not_here") }),
+            (0.6, { engine.standbyID = engine.cues[3].id; engine.go() }),
+            (0.3, { engine.stop(); engine.pads.fire(engine.pads.pads[0].id) }),
+            (0.4, { send("panic") }),
+            (0.8, {
+                engine.closeOutput(1)
+                engine.log.entries.forEach { note("log: \($0.line)") }
+                // The Show Log window, drawn the way the test camera can.
+                let root = ShowLogView(log: engine.log) { "Log Test Show" }
+                    .frame(width: 760, height: 460)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 460), styleMask: [.titled], backing: .buffered, defer: false)
+                win.appearance = NSAppearance(named: .darkAqua)
+                win.contentView = NSHostingView(rootView: root)
+                win.orderBack(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("log-window.png"))
+                    }
+                    win.orderOut(nil)
+                }
+            }),
+            (1.0, {
+                let sheet = dir.appendingPathComponent("cue-sheet.pdf"), logPDF = dir.appendingPathComponent("show-log.pdf")
+                Printer.printCueSheet(engine: engine, showName: "Log Test Show", pdfTo: sheet)
+                Printer.printLog(engine.log.entries, showName: "Log Test Show", pdfTo: logPDF)
+                note("printed: cue sheet \(FileManager.default.fileExists(atPath: sheet.path)), log \(FileManager.default.fileExists(atPath: logPDF.path))")
+                pictures(of: sheet, as: "cue-sheet.png")
+                pictures(of: logPDF, as: "show-log.png")
+                state("done")
+            }),
         ]
     }
 

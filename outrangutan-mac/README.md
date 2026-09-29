@@ -75,6 +75,18 @@ Show** (Command-O) and **New Show** (Command-N).
 - The window is named for the show file. Double-clicking a show file in
   Finder opens it here.
 
+## Show log and printing
+
+- **Show Log** (Window menu, Command-L) lists every GO, stop, pause, pad hit,
+  output opened or closed, command from the show and problem, with the time
+  and who asked for it ("This Mac", or the person in Cueola). Search it,
+  pick what it shows, export it as text or print it.
+- Every day's log is also saved to
+  `~/Library/Application Support/Outrangutan/Logs`, a line at a time, so a
+  crash never loses it.
+- **Print Cue Sheet** (File menu, Command-P) prints the cue list and the pad
+  map for the booth. The print window can also save a PDF.
+
 If Outrangutan closes during a show (a crash, a force quit, a pulled plug),
 it says what was on air when it opens again. **Stand By** puts that cue on
 standby, and its next GO picks up where it stopped.
@@ -131,7 +143,8 @@ effect, or a rundown row's sound effect hits the pad on this Mac.
 swift test
 ```
 
-Test mode opens the app in the background, presses GO, Pause and All Stop by
+Test mode is silent: videos are muted and the pads play to a silent output
+(the pad meter still moves). It opens the app in the background, presses GO, Pause and All Stop by
 itself, saves pictures of both windows into a folder and writes what happened
 to `test-log.txt`:
 
@@ -154,6 +167,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
+- `log`: a short show from this Mac and from the rundown, then a picture of
+  the Show Log and the cue sheet and log printed to PDF.
 - `files`: saves a show file, opens it again and checks every cue and pad
   came back the same, opens a file shaped like the web app's, and picks up
   after a pretend crash. Everything is written inside the test folder.
@@ -175,6 +190,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `ShowLog.swift` | The show log and its window |
+| `Printer.swift` | Printing the cue sheet and the log |
 | `ShowFiles.swift` | New, Open and Save: show files the web app shares |
 | `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |
 | `CloudClient.swift` | Signing in and reading and writing the show record |

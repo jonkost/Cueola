@@ -20,7 +20,17 @@ struct OutrangutanApp: App {
                 .keyboardShortcut("i")
             }
             PlaybackCommands(engine: appDelegate.engine)
+            CommandGroup(before: .windowList) {
+                OpenLogButton()
+                Divider()
+            }
         }
+
+        // The show log: its own window, from the Window menu or Command-L.
+        Window("Show Log", id: "log") {
+            ShowLogView(log: appDelegate.engine.log) { [files = appDelegate.files] in files.showName }
+        }
+        .defaultSize(width: 720, height: 480)
 
         Settings {
             SettingsView(engine: appDelegate.engine)
@@ -44,6 +54,11 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("k")
         }
+        CommandGroup(replacing: .printItem) {
+            Button("Print Cue Sheet\u{2026}") { Printer.printCueSheet(engine: files.engine, showName: files.showName) }
+                .keyboardShortcut("p")
+                .disabled(!files.hasShow)
+        }
         CommandGroup(replacing: .saveItem) {
             Button("Save Show") { files.save() }
                 .keyboardShortcut("s")
@@ -53,6 +68,16 @@ struct FileCommands: Commands {
                 Button("Show the Show File in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }
             }
         }
+    }
+}
+
+/// Window menu: opens the show log.
+struct OpenLogButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Show Log") { openWindow(id: "log") }
+            .keyboardShortcut("l")
     }
 }
 

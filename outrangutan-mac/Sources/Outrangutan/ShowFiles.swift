@@ -31,6 +31,9 @@ final class ShowFiles: ObservableObject {
 
     var hasShow: Bool { !engine.cues.isEmpty || !engine.pads.pads.isEmpty }
 
+    /// The show's name: its file's name, or a plain one before it is saved.
+    var showName: String { currentFile?.deletingPathExtension().lastPathComponent ?? "Outrangutan Show" }
+
     // MARK: Menu commands
 
     func newShow() {
@@ -38,6 +41,7 @@ final class ShowFiles: ObservableObject {
                      info: "This clears the cue list and the pads on this Mac.") { [self] in
             engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
             currentFile = nil
+            engine.log.add(.file, "Started a new show")
         }
     }
 
@@ -134,6 +138,7 @@ final class ShowFiles: ObservableObject {
         }
         currentFile = url
         engine.notice = nil
+        engine.log.add(.file, "Saved the show file \u{201C}\(url.lastPathComponent)\u{201D}")
         return true
     }
 
@@ -324,6 +329,7 @@ final class ShowFiles: ObservableObject {
         engine.replaceShow(cues: cues, pads: placed, banks: banks, multiTrigger: settings["multiTrigger"] as? Bool)
         if let selected = Wire.string(show["selectedId"]), let c = engine.cue(wireID: selected) { engine.standbyID = c.id }
         currentFile = url.pathExtension.lowercased() == ShowArchive.fileExtension ? url : nil
+        engine.log.add(.file, "Opened \u{201C}\(url.lastPathComponent)\u{201D}: \(Self.count(cues.count, "cue")), \(Self.count(placed.count, "pad"))")
         let lostCues = cues.filter { !$0.fileIsThere }.count, lostPads = placed.filter { !$0.fileIsThere }.count
         let lost = [lostCues > 0 ? Self.count(lostCues, "cue") : nil, lostPads > 0 ? Self.count(lostPads, "pad") : nil].compactMap { $0 }
         engine.notice = lost.isEmpty ? nil : lost.joined(separator: " and ") + " came without a file."

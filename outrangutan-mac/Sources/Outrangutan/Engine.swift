@@ -22,6 +22,8 @@ final class Deck {
         self.slot = slot
         // Play on time: never wait to build a cushion, the files are local.
         player.automaticallyWaitsToMinimizeStalling = false
+        // Test mode never makes a sound.
+        player.isMuted = TestSnapshot.isOn
     }
 
     var current: Double {
@@ -144,6 +146,10 @@ final class Engine: ObservableObject {
 
     /// The sound effect board.
     let pads: PadBoard
+    /// What happened in the show, for the Show Log window.
+    let log = ShowLog()
+    /// Who asked for what is happening now, for the log.
+    private var source = ShowLog.thisMac
     private var windows: [Int: OutputWindowController] = [:]
     private var stillViews: [OutputView] = []
     private let fader = Fader()
@@ -199,12 +205,16 @@ final class Engine: ObservableObject {
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
+        pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
+        log.add(.file, "Outrangutan opened: \(ShowFiles.count(cues.count, "cue")), \(ShowFiles.count(pads.pads.count, "pad"))")
         save()
         loadDurations()
         if let point = RecoveryPoint.load(), let cue = cues.first(where: { $0.wireID == point.wireID }) {
             var p = point
             p.cueID = cue.id
             recovered = p
+            log.add(.problem, "Outrangutan had closed during the show. \u{201C}\(point.name)\u{201D} was on air"
+                    + (point.offset > 0 ? " at \(Timecode.short(point.offset))." : "."))
         }
         RecoveryPoint.clear()
         startClock()
@@ -255,6 +265,7 @@ final class Engine: ObservableObject {
     /// pre-wait count. Press again to carry on.
     func togglePause() {
         if paused {
+            log.add(.pause, "Carried on after a pause", from: source)
             paused = false
             for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play() }
             if let left = stillLeft { armStillTimer(left); stillLeft = nil }
@@ -264,6 +275,7 @@ final class Engine: ObservableObject {
             // re-anchors them.
             if let cue = countingCue { onClipStart?(cue, playLength(cue)) }
         } else if hasAnythingToPause {
+            log.add(.pause, "Paused", from: source)
             paused = true
             for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.player.pause() }
             if let ends = stillEndsAt, stillTimer != nil {
@@ -280,6 +292,7 @@ final class Engine: ObservableObject {
 
     /// Stop: stops the lane that fired last (picture or sound).
     func stop() {
+        log.add(.stop, "Stop", from: source)
         cancelPending()
         if lastLane == .audio && soundDeck != nil { stopSound() } else { stopPicture() }
         refresh()
@@ -287,13 +300,23 @@ final class Engine: ObservableObject {
 
     /// All Stop (PANIC): everything off at once, pads too, output to black.
     func allStop() {
-        stopCues()
+        log.add(.panic, "All Stop: every cue and pad off", from: source)
+        stopEverything()
+    }
+
+    private func stopEverything() {
+        stopCuesQuietly()
         pads.stopAll()
     }
 
     /// Stops every cue at once, but lets pads ring. What a remote Stop does,
     /// like the web app.
     func stopCues() {
+        log.add(.stop, "Stop every cue (pads keep ringing)", from: source)
+        stopCuesQuietly()
+    }
+
+    private func stopCuesQuietly() {
         fader.cancelAll()
         cancelPending()
         stopPicture()
@@ -306,7 +329,8 @@ final class Engine: ObservableObject {
     /// second, then everything stops.
     func fadeStopAll() {
         cancelPending()
-        guard pictureDeck != nil || soundDeck != nil || stillCue != nil else { return allStop() }
+        log.add(.stop, "Fade and stop everything", from: source)
+        guard pictureDeck != nil || soundDeck != nil || stillCue != nil else { return stopEverything() }
         if fader.isRunning("all") { return }
         if paused { paused = false; for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play() } }
         let decks = [pictureDeck, soundDeck].compactMap { $0 }
@@ -323,7 +347,7 @@ final class Engine: ObservableObject {
             }
             self.stillLevel = startStill * v
             self.applyStill()
-        }, done: { [weak self] in self?.allStop() })
+        }, done: { [weak self] in self?.stopEverything() })
     }
 
     func setGain(_ value: Double) {
@@ -339,10 +363,12 @@ final class Engine: ObservableObject {
     /// Fires one cue, with its pre-wait if it has one. Matches fireCue in
     /// the web app.
     @discardableResult
-    func fire(_ cue: Cue) -> WireResult {
+    func fire(_ cue: Cue, from: String? = nil) -> WireResult {
         cancelPending()
         guard cue.fileIsThere else { return refuse("Can't find the file for \"\(cue.name)\". It may have moved.") }
         notice = nil
+        let number = (cues.firstIndex { $0.id == cue.id } ?? 0) + 1
+        log.add(.cue, "\(number). \(cue.name)" + (cue.preWait > 0 ? ", waits \(Timecode.short(cue.preWait))" : ""), from: from ?? source)
         if cue.preWait > 0 {
             schedulePending(cue, in: cue.preWait)
             refresh()
@@ -520,7 +546,7 @@ final class Engine: ObservableObject {
             // other lane, this one does its end action first.
             if next.kind.hasPicture != cue.kind.hasPicture { endAction(deck, cue) }
             standbyID = nextArmed(after: next)?.id ?? next.id
-            fire(next)
+            fire(next, from: "Follow")
             return
         }
         endAction(deck, cue)
@@ -551,7 +577,7 @@ final class Engine: ObservableObject {
         stillHeld = true
         if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
             standbyID = nextArmed(after: next)?.id ?? next.id
-            fire(next)
+            fire(next, from: "Follow")
             return
         }
         if cue.endAction == .black {
@@ -577,7 +603,7 @@ final class Engine: ObservableObject {
     private func fireNext(after cue: Cue) {
         guard let next = nextArmed(after: cue) else { return }
         standbyID = nextArmed(after: next)?.id ?? next.id
-        fire(next)
+        fire(next, from: "Continue")
     }
 
     private func nextArmed(after cue: Cue) -> Cue? {
@@ -614,6 +640,8 @@ final class Engine: ObservableObject {
     /// Runs one command from the show's shared record and says how it went.
     /// The actions and refusals match applyRemoteCommand in the web app.
     func runRemote(_ cmd: WireCommand) -> WireResult {
+        source = cmd.by.isEmpty ? "Cueola" : "\(cmd.by), in Cueola"
+        defer { source = ShowLog.thisMac }
         var result = WireResult.done
         switch cmd.action {
         case "go": result = go()
@@ -642,6 +670,10 @@ final class Engine: ObservableObject {
         // TAKE-linked sound effects ride the same write.
         for id in cmd.pads where pads.fire(id).ok == false {
             notice = "The rundown fired a pad this Mac doesn't have."
+        }
+        // Refusals from refuse() are logged already; log the rest here.
+        if !result.ok, log.entries.last?.text != result.reason {
+            log.add(.problem, "Could not run \(cmd.action): \(result.reason)", from: source)
         }
         return result
     }
@@ -710,7 +742,7 @@ final class Engine: ObservableObject {
     /// Swaps in a whole show: a show file opened, or a new empty show.
     /// Everything on air stops first.
     func replaceShow(cues newCues: [Cue], pads newPads: [Pad], banks: [PadBank], multiTrigger: Bool?) {
-        allStop()
+        stopEverything()
         durations = [:]
         cues = newCues
         standbyID = newCues.first { $0.armed }?.id ?? newCues.first?.id
@@ -764,12 +796,14 @@ final class Engine: ObservableObject {
     func openOutput(_ id: Int) {
         guard let config = outputs.first(where: { $0.id == id }) else { return }
         window(id).open(on: config.screen, title: config.label)
+        if !openOutputs.contains(id) { log.add(.output, "\(config.label) opened", from: source) }
         openOutputs.insert(id)
         onTransport?()
     }
 
     func closeOutput(_ id: Int) {
         windows[id]?.close()
+        if openOutputs.contains(id) { log.add(.output, "\(outputLabel(id)) closed", from: source) }
         openOutputs.remove(id)
         onTransport?()
     }
@@ -822,6 +856,7 @@ final class Engine: ObservableObject {
     }
 
     private func refuse(_ reason: String) -> WireResult {
+        log.add(.problem, reason, from: source)
         notice = reason
         return .refused(reason)
     }
