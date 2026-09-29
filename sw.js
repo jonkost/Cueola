@@ -117,9 +117,9 @@ const SHELL_ASSETS = [
   'demo-media/demo-airhorn.wav',
   'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
-  'cueola-session-clone.js?v=4a94fe587e',
+  'cueola-session-clone.js?v=3e5916bd3c',
   'break-room-show.js?v=0d8b8b324b',
-  'cueola-export-model.js?v=75dc3942e7',
+  'cueola-export-model.js?v=bf11137a90',
   'cueola-prepro-sync.js?v=98291546f4',
   'cueola-pin.js?v=e599f35d21',
   'cueola-identity.js?v=7b1ee45cc7',
@@ -127,23 +127,23 @@ const SHELL_ASSETS = [
   'cueola-live-session.js?v=c28b5f25d0',
   'cueola-live-state.js?v=6314983dd7',
   'cueola-link-state.js?v=effa089bdc',
-  'cueola-keymap.js?v=ffb4fb0e1a',
+  'cueola-keymap.js?v=49533adade',
   'cueola-mac-link.js?v=5341af039a',
   'cueola-prompter-session.js?v=4e90f2af78',
   'cueola-script-operator-protocol.js?v=414e116aee',
   'cueola-scriptop-prefs.js?v=dfcf350611',
-  'script-operator.js?v=07d5af1057',
-  'script-operator.css?v=f7743fc234',
+  'script-operator.js?v=ccdb88c4fd',
+  'script-operator.css?v=76c28d0419',
   'outrangutan/output-protocol.js?v=1137628cc7',
   'outrangutan/output-command-queue.js?v=d3ef82b3a4',
   'outrangutan/kiosk-transport.js?v=bef496686a',
   'outrangutan/stream-deck-label.js?v=bef2fc8307',
-  'cueola-app.js?v=3d636f4ffb',
-  'outrangutan/outrangutan.css?v=3597876ad9',
-  'outrangutan/outrangutan.js?v=d75f53816e',
+  'cueola-app.js?v=d3a05c8638',
+  'outrangutan/outrangutan.css?v=c643a77857',
+  'outrangutan/outrangutan.js?v=e6d66161a1',
   'cueola-streamdeck-device.js?v=48990ed663',
   'cueola-obs.js?v=7ea9a03cd8',
-  'cueola-streamdeck.js?v=cbb1a63591',
+  'cueola-streamdeck.js?v=cfb0fab355',
 ];
 
 const versionSignature = SHELL_ASSETS
@@ -274,7 +274,10 @@ const versionSignature = SHELL_ASSETS
 // timer loop, the one-screen New show dialog, dead CSS and dead code removed:
 // index.html, dashboard.html, cueola-app.js and the new cueola-live-state.js
 // all changed; every window reloads.
-const WORKER_SCHEMA = '51';
+// 51->52: pre-class polish (Sept 29). Planda Bear saves whole pages again
+// (field-level saves off), about 200 fixes across every page and script;
+// every window reloads.
+const WORKER_SCHEMA = '52';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
@@ -311,6 +314,13 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     if (request.mode === 'navigate') {
+      // A stray trailing slash (/plandabear/) would load the shell with every
+      // relative script under /plandabear/, which does not exist, so the page
+      // comes up dead. Send it to the same address without the slash.
+      const scopePath = new URL('./', self.location.href).pathname;
+      if (url.pathname !== scopePath && url.pathname.endsWith('/')) {
+        return Response.redirect(url.origin + url.pathname.replace(/\/+$/, '') + url.search, 302);
+      }
       // Hosting serves clean URLs (firebase.json cleanUrls + rewrites), so the
       // address users actually hold is the SHORT one — match both spellings or
       // the dashboard/operator/output pages are unreachable offline. Bare

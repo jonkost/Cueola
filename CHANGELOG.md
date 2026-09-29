@@ -2,6 +2,117 @@
 
 ## Next release (not pushed yet)
 
+### Pre-class polish (Sept 29)
+
+A full sweep before class: over 200 fixes across every screen. Sign-in,
+sign-up, the PIN and the profile screens were left exactly as they were.
+
+**Planda Bear saves whole pages again.** Since 3.0 it saved one box at a
+time. In shows made before 3.0 that could erase the rest of a list in the
+cloud (call sheets, crew, patch rows, the Ready list), and rows without an
+id were copied over and over. It now saves each page whole, the way it did
+all summer. If two people type on the same page at the same moment, the
+later save wins. A window left open from before this update puts back a list
+it sees cut short. Previews, PDFs, the dashboard and Next Episode read lists
+saved either way.
+
+Rundown
+- Setting a row highlight back to None no longer stops that window from
+  saving the rundown.
+- Cmd+Z in Planda Bear, the stage plot or a cue card no longer also undoes
+  the rundown behind it. In the demo, Cmd+Z undoes one edit, not the show.
+- The top bar has its Notes and Planda Bear buttons back. Admin shows only
+  when an instructor is signed in. On a laptop or iPad the buttons with an
+  icon show just the icon, so no label is cut short.
+- Video, Audio and Lighting cues remember their picks, so Media wipe, Shot
+  and Close work when you reopen a cue. An older cue says "Pick the source
+  first." instead of doing nothing.
+- Save on a row a classmate deleted says so. Cancel clears your "Editing
+  now" face. 90 seconds saves as 1:30. + Add Row lands at the end after Esc
+  on a + Before / + After sheet. Blank Slate opens the First cue you pick.
+- The bottom bar never claims a row is ON AIR before the first TAKE, and it
+  is right after you leave Live.
+- A saved source stays when two people save one at the same moment, and a
+  new show no longer inherits the last show's sources.
+
+Live
+- TAKE unlocks after a second and a half when the Wi-Fi is slow, instead of
+  staying grey until the network is back.
+- After a mouse click on TAKE, Back, Start Show or Focus, the arrow keys
+  still work and Space no longer presses that button again.
+- Back, Cue to, or a TAKE onto another cue cancels a pre-roll still
+  counting, so a clip never rolls under the wrong cue.
+- A paused show clock survives a reload. Restart moves everyone back to the
+  first row. Leaving a show resets its clock for the next one.
+- A student who watched Live, left, and came back after rows were added no
+  longer gets an error on every TAKE.
+- The talent row says the talent screen stopped answering when it drops,
+  not "Talent connected" in red.
+- Go Live checks, the director hand-off sheet, Focus and the shortcut list
+  use plain words: director, TAKE, STANDBY, Back. The small row button in
+  the full grid says CUE.
+
+Prompter
+- Remote Op's Play from here starts where the talent is, not at the top.
+- Remote Op keys keep working after a mouse click; Cmd+R and Cmd+F go to
+  the browser. Held Up/Down let go when you click away.
+- Script Op in Live now really waits five seconds after Remote Op moves the
+  prompter.
+- The On air tab's Cue and More use the full width, so the Position slider
+  can be dragged. Tab and button names match in Live, Remote Op and the
+  pop-out.
+
+Planda Bear
+- Adding a call sheet after deleting one makes a real new day instead of
+  writing over another day.
+- The Rundown button next to Estimated Wrap saves the time.
+- Exporting from a preview shows the progress bar and Cancel on top.
+- "Who worked on what" lists only people who changed something. Opening a
+  page and pressing Back or Next no longer puts your name on it. Group work
+  shows in the log.
+- Next Episode carries the Audio Patch Sheet. Leaving and rejoining a
+  grouped show keeps groupmates' edits coming in.
+- On a phone the footer is one row and the header is shorter.
+- The new-note box is Attach and Post; the notes screen has one Export PDF.
+  Only your own notes can be edited on a shared computer. A note is not
+  posted twice on a fast double Enter.
+- Plain words everywhere: no database words, ids or revision numbers; the
+  same names on every preview; hints that match the page; example text
+  starts with "e.g.".
+
+Playback (Outrangutan)
+- Esc closes a menu or sheet. It no longer runs PANIC.
+- A refused show join can no longer wipe the show saved on that Mac.
+- Changing Fit on the next cue no longer changes the picture on air.
+- After Stop, Fade out or PANIC, GO rolls the clip the rundown is waiting
+  on. The last Follow cue ends like any cue.
+- A pad cannot take a key the show already uses. Show Lock locks the
+  inspector.
+
+Stream Deck (KeyWi Bird)
+- Tapping TEXT SIZE on the strip resets the text size. It used to stop the
+  prompter and send the talent to the top of the script.
+- A stray tap on the Rundown row zone no longer re-takes the ON AIR cue;
+  turning the dial skips segment headings.
+- TAKE or ABORT with nothing counting down says why. Reset this page asks
+  first. Renaming a page keeps the keys that jump to it. OBS errors show.
+
+Dashboard
+- Confirm and name boxes open on top of Session Setup instead of behind it.
+- Save Session saves while positions load; a typed show code is checked;
+  Enter twice makes one show; the Outrangutan theme works; Esc closes boxes.
+- The Planda Bear panel shows the audio patch rows and no longer marks empty
+  pages done. Sentence case and no dashes.
+
+Everywhere
+- Pop-up messages sit in the middle of the screen and wrap on a phone.
+- Tapping a field's name puts you in the box. Icon buttons have names for
+  screen readers.
+- An app address typed with a slash on the end (/plandabear/) works.
+- The contract check now reads every script the app loads.
+- Operator card, quick start, rehearsal checklist, crib sheet and the
+  KeyWi guide describe 3.0 as it is.
+
 ### KeyWi Bird straight to Outrangutan for Mac
 - New in KeyWi Bird's Deck settings: Outrangutan for Mac, On or Off. On
   the Mac that runs the Mac app, turn it On. Playback keys (and the
