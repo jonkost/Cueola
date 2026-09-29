@@ -328,6 +328,7 @@ final class ShowFiles: ObservableObject {
             return p
         }
         engine.replaceShow(cues: cues, pads: placed, banks: banks, multiTrigger: settings["multiTrigger"] as? Bool)
+        if let words = settings["standbyText"] as? String { engine.standbyText = words }
         if let selected = Wire.string(show["selectedId"]), let c = engine.cue(wireID: selected) { engine.standbyID = c.id }
         currentFile = url.pathExtension.lowercased() == ShowArchive.fileExtension ? url : nil
         engine.log.add(.file, "Opened \u{201C}\(url.lastPathComponent)\u{201D}: \(Self.count(cues.count, "cue")), \(Self.count(placed.count, "pad"))")

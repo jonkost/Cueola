@@ -105,6 +105,12 @@ struct OutputSettings: View {
                 }
             }
             Section {
+                TextField("Standby text", text: $engine.standbyText, prompt: Text("Empty shows black"))
+            } footer: {
+                Text("Words every output shows while nothing is on air, like the show's name or \u{201C}We'll be right back.\u{201D}")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 HStack {
                     Button("Add Output") { engine.addOutput() }
                         .disabled(engine.outputs.count >= OutputConfig.most)

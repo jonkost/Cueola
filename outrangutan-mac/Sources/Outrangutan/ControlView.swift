@@ -16,6 +16,7 @@ struct ControlView: View {
     @ObservedObject private var thumbs = Thumbnails.shared
     @ObservedObject private var keys = KeyMap.shared
     @AppStorage("clock.24hour") private var clock24 = true
+    @AppStorage("clock.countUp") private var countUp = false
     @State private var dropTargeted = false
     @State private var showConnect = false
     @State private var showCheck = false
@@ -186,7 +187,17 @@ struct ControlView: View {
                         .monospacedDigit()
                         .foregroundStyle(engine.remaining == nil && engine.status != .pre ? Color.secondary : clockColor)
                         .fixedSize()
-                        .accessibilityLabel("Time left")
+                        .contentShape(Rectangle())
+                        .onTapGesture { countUp.toggle() }
+                        .help(countUp ? "Counting up: time played. Click to count down." : "Counting down: time left. Click to count up.")
+                        .accessibilityLabel(countUp ? "Time played" : "Time left")
+                        .accessibilityAddTraits(.isButton)
+                        .overlay(alignment: .topTrailing) {
+                            Image(systemName: countUp ? "arrow.up" : "arrow.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .offset(x: 12, y: 6)
+                        }
                     timeOfDay
                 }
             }
@@ -446,12 +457,16 @@ struct ControlView: View {
 
     private var clockText: String {
         if engine.status == .pre, let p = engine.preRemaining { return Timecode.dropFrame(p) }
-        if let r = engine.remaining { return Timecode.dropFrame(r) }
+        if let r = engine.remaining {
+            if countUp, let length = engine.countingLength, length > 0 { return Timecode.dropFrame(max(0, length - r)) }
+            return Timecode.dropFrame(r)
+        }
         return engine.status == .holding ? "HOLD" : "00:00:00;00"
     }
 
     private var clockColor: Color {
         if engine.status == .pre { return .orange }
+        if countUp { return .green }
         guard let r = engine.remaining else { return .primary }
         return r <= 10 ? .red : (r <= 30 ? .yellow : .primary)
     }

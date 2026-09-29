@@ -178,6 +178,23 @@ final class Engine: ObservableObject {
     /// Called on every clock tick while something is counting.
     var onTick: (() -> Void)?
 
+    /// Words on every output while nothing is on air ("We'll be right
+    /// back"). Empty shows black.
+    @Published var standbyText = "" {
+        didSet {
+            guard standbyText != oldValue else { return }
+            windows.values.forEach { $0.pictureView.standbyText = standbyText }
+            monitor.standbyText = standbyText
+            save()
+        }
+    }
+
+    /// How long the counting cue runs, for a clock that counts up.
+    var countingLength: Double? {
+        guard let cue = countingCue else { return nil }
+        return cue.kind.holds ? cue.duration : playLength(cue)
+    }
+
     /// The program preview in the control window: a copy of one output,
     /// drawn by the same layers.
     let monitor = OutputView()
@@ -250,6 +267,7 @@ final class Engine: ObservableObject {
         outputs = (show.outputs?.isEmpty == false) ? show.outputs! : [OutputConfig(id: 1, screen: show.outputScreen)]
         audio = show.audio ?? AudioSettings()
         masterGain = show.masterGain ?? 1
+        standbyText = show.standbyText ?? ""
         standbyID = show.cues.first?.id
         pads = PadBoard(banks: show.banks, pads: show.pads, multiTrigger: show.multiTrigger)
         pads.setMaster(masterGain)
@@ -268,6 +286,7 @@ final class Engine: ObservableObject {
                     + (point.offset > 0 ? " at \(Timecode.short(point.offset))." : "."))
         }
         RecoveryPoint.clear()
+        monitor.standbyText = standbyText
         startClock()
         // A screen plugged in or out (a bumped HDMI cable): put every open
         // output where it belongs again, never over the controls.
@@ -358,6 +377,14 @@ final class Engine: ObservableObject {
             standbyID = cue.id
             go()
         }
+    }
+
+    /// Moves the standby up or down the list (the arrow keys). Picking what
+    /// stands by is not an edit, so it works while locked.
+    func moveStandby(_ step: Int) {
+        guard !cues.isEmpty else { return }
+        let i = cues.firstIndex { $0.id == standbyID } ?? (step > 0 ? -1 : cues.count)
+        standbyID = cues[min(cues.count - 1, max(0, i + step))].id
     }
 
     /// Runs a show key.
@@ -1189,7 +1216,8 @@ final class Engine: ObservableObject {
 
     private func save() {
         ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
-                                pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger))
+                                pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
+                                standbyText: standbyText.isEmpty ? nil : standbyText))
     }
 
     // MARK: Outputs and sound
@@ -1197,6 +1225,7 @@ final class Engine: ObservableObject {
     private func window(_ id: Int) -> OutputWindowController {
         if let w = windows[id] { return w }
         let w = OutputWindowController()
+        w.pictureView.standbyText = standbyText
         w.onClose = { [weak self] in self?.openOutputs.remove(id); self?.onTransport?() }
         windows[id] = w
         return w

@@ -75,6 +75,47 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "extras": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                var still = Cue(name: "Title", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID())
+                still.duration = 0
+                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 1))
+                let clap = Cue(name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID(offsetMs: 2))
+                engine.replaceShow(cues: [still, bars, clap], pads: [], banks: [], multiTrigger: nil)
+                engine.standbyText = "We\u{2019}ll be right back"
+                engine.openOutput()
+            }),
+            (0.6, {
+                note("a nothing on air: standby words showing = \(engine.monitor.standbyShowing)")
+                snap("x-standby")
+                engine.go()
+            }),
+            (0.6, { note("b a still is up: standby words showing = \(engine.monitor.standbyShowing)"); engine.allStop() }),
+            (0.6, {
+                note("c after All Stop: standby words showing = \(engine.monitor.standbyShowing)")
+                engine.standbyID = engine.cues[0].id
+                func press(_ code: UInt16) {
+                    if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code) {
+                        NSApp.postEvent(e, atStart: false)
+                    }
+                }
+                press(125); press(125); press(125); press(126)
+            }),
+            (0.5, {
+                note("d down, down, down, up: standby is \(engine.standbyCue?.name ?? "-") (the list has 3)")
+                engine.standbyID = engine.cues[1].id
+                engine.go()
+            }),
+            (1.0, {
+                let length = engine.countingLength ?? 0, left = engine.remaining ?? 0
+                note(String(format: "e the clock can count up: length %.1f s, left %.1f s, played %.1f s", length, left, length - left))
+                engine.allStop()
+                engine.standbyText = ""
+                note("f standby text cleared: showing = \(engine.monitor.standbyShowing)")
+            }),
+        ]
         case "screens": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

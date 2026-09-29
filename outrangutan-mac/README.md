@@ -79,6 +79,13 @@ the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 - The time of day sits under the big clock. Click it for a 12-hour or
   24-hour clock.
 
+- **Up and Down arrows** move the standby. **Command-1** and **Command-2**
+  switch between Cues and Pads.
+- Click the big clock to count **up** (time played, green) or **down** (time
+  left). The small arrow beside it shows which.
+- **Standby text** (Settings, Outputs): words every output shows while
+  nothing is on air, like the show's name or "We'll be right back".
+
 Sounds play on their own lane, so a sound effect never knocks the picture
 off air. A still holds until the next picture cue, or counts down when it has
 a time. While paused, GO carries on, like the web app.
@@ -257,6 +264,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `extras`: standby words on an empty output, the arrow keys moving the
+  standby, and the numbers behind the count-up clock.
 - `screens`: a pretend projector connects and is unplugged while a video
   plays; the video keeps playing and the output lands as a window.
 - `check`: Show Check with planted problems (a missing file, closed

@@ -253,6 +253,7 @@ struct ShowFile: Codable {
     var pads: [Pad]?
     var banks: [PadBank]?
     var multiTrigger: Bool?
+    var standbyText: String?        // words on the outputs while nothing is on air
 }
 
 /// Saves the show to this Mac only, in

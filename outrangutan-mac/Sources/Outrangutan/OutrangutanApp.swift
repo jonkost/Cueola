@@ -95,8 +95,12 @@ struct DuplicateButton: View {
 struct MonitorToggles: View {
     @AppStorage("ui.monitor") private var showMonitor = true
     @AppStorage("ui.scopes") private var showScopes = true
+    @AppStorage("ui.tab") private var tab = "cues"
 
     var body: some View {
+        Button("Cues") { tab = "cues" }.keyboardShortcut("1")
+        Button("Pads") { tab = "pads" }.keyboardShortcut("2")
+        Divider()
         Toggle("Program Preview", isOn: $showMonitor)
             .keyboardShortcut("p", modifiers: [.command, .option])
         Toggle("Scopes", isOn: $showScopes)
@@ -183,6 +187,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Holding a key down never fires it twice.
             if let action = KeyMap.shared.action(for: event) {
                 if !event.isARepeat { self.engine.perform(action) }
+                return nil
+            }
+            // Up and down arrows move the standby, unless a list, slider or
+            // menu has the keys (it uses the arrows itself).
+            if event.keyCode == 125 || event.keyCode == 126 {
+                if NSApp.keyWindow?.firstResponder is NSControl { return event }
+                self.engine.moveStandby(event.keyCode == 125 ? 1 : -1)
                 return nil
             }
             // A pad's hotkey hits it.

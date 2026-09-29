@@ -77,6 +77,10 @@ final class OutputView: NSView {
     private let still2 = CALayer()
     private var frames: [PictureSlot: Cue] = [:]
     private var identifyLayer: CALayer?
+    private let standbyLayer = CATextLayer()
+
+    /// Words shown while no picture is up. Empty shows black.
+    var standbyText = "" { didSet { updateStandby() } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -91,6 +95,27 @@ final class OutputView: NSView {
                            "opacity": NSNull(), "transform": NSNull(), "zPosition": NSNull(),
                            "backgroundColor": NSNull()]
             layer?.addSublayer(sub)
+        }
+        standbyLayer.isHidden = true
+        standbyLayer.alignmentMode = .center
+        standbyLayer.isWrapped = true
+        standbyLayer.foregroundColor = NSColor.white.cgColor
+        standbyLayer.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        standbyLayer.zPosition = -1
+        standbyLayer.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(), "fontSize": NSNull()]
+        layer?.addSublayer(standbyLayer)
+    }
+
+    /// The standby words show only while every picture layer is empty.
+    private func updateStandby() {
+        quietly {
+            let empty = PictureSlot.allCases.allSatisfy { layerFor($0).isHidden }
+            standbyLayer.string = standbyText
+            standbyLayer.isHidden = standbyText.isEmpty || !empty
+            standbyLayer.fontSize = max(12, bounds.height * 0.07)
+            standbyLayer.contentsScale = window?.backingScaleFactor ?? 2
+            let h = standbyLayer.fontSize * 3
+            standbyLayer.frame = CGRect(x: bounds.width * 0.08, y: (bounds.height - h) / 2, width: bounds.width * 0.84, height: h)
         }
     }
 
@@ -115,6 +140,7 @@ final class OutputView: NSView {
                 if let cue = frames[slot] { place(l, cue) }
             }
         }
+        updateStandby()
     }
 
     /// Puts a video player on a layer, on top of the others.
@@ -128,6 +154,7 @@ final class OutputView: NSView {
             l.isHidden = false
             raise(slot)
         }
+        updateStandby()
     }
 
     /// Shows a still picture or a matte color on a still layer, on top.
@@ -141,6 +168,7 @@ final class OutputView: NSView {
             l.isHidden = false
             raise(slot)
         }
+        updateStandby()
     }
 
     /// Applies a cue's framing to a layer that is already showing, for
@@ -176,9 +204,13 @@ final class OutputView: NSView {
             if let v = l as? AVPlayerLayer { v.player = nil }
             frames[slot] = nil
         }
+        updateStandby()
     }
 
     func black() { PictureSlot.allCases.forEach(hide) }
+
+    /// True while the standby words are showing, for tests.
+    var standbyShowing: Bool { !standbyLayer.isHidden }
 
     /// Names of what this output shows now, for tests.
     var showing: [String] {
