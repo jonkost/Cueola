@@ -20,6 +20,9 @@ struct ControlView: View {
     @State private var dropTargeted = false
     @State private var showConnect = false
     @State private var showCheck = false
+    /// Cues picked in the list. One pick stands that cue by; Shift- or
+    /// Command-click picks several, for Remove, Skip, Color and Duplicate.
+    @State private var picked: Set<UUID> = []
     @AppStorage("ui.inspector") private var showInspector = true
     @AppStorage("ui.tab") private var tab = "cues"
 
@@ -310,16 +313,27 @@ struct ControlView: View {
                     Button("Add Media") { chooseFiles() }
                 }
             } else {
-                List(selection: $engine.standbyID) {
+                List(selection: Binding(get: { picked }, set: { new in
+                    picked = new
+                    if new.count == 1, let id = new.first { engine.standbyID = id }
+                })) {
                     ForEach(Array(engine.cues.enumerated()), id: \.element.id) { index, cue in
                         row(cue, number: index + 1).tag(cue.id)
                     }
                     .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
+                .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
-                    if !engine.locked, let id = engine.standbyID { engine.remove(ids: [id]) }
+                    let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
+                    if !engine.locked, !ids.isEmpty { engine.remove(ids: ids) }
                 }
+                // GO moves the standby on: the list follows it.
+                .onChange(of: engine.standbyID) { _, id in
+                    guard let id, !(picked.count > 1 && picked.contains(id)) else { return }
+                    picked = [id]
+                }
+                .onAppear { if let id = engine.standbyID { picked = [id] } }
             }
         }
     }
@@ -374,18 +388,6 @@ struct ControlView: View {
         }
         .padding(.vertical, 3)
         .opacity(cue.armed ? 1 : 0.55)
-        .contextMenu {
-            if cue.kind != .matte {
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cue.url]) }
-            }
-            Button(cue.armed ? "Skip on GO" : "Fire on GO") { engine.update(cue.id) { $0.armed.toggle() } }
-                .disabled(engine.locked)
-            Button("Duplicate") { engine.duplicate(cue.id) }
-                .disabled(engine.locked)
-            Divider()
-            Button("Remove", role: .destructive) { engine.remove(ids: [cue.id]) }
-                .disabled(engine.locked)
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
     }
@@ -409,6 +411,38 @@ struct ControlView: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(onAir ? Color.red : Color.secondary.opacity(0.35), lineWidth: onAir ? 2 : 1))
         .accessibilityHidden(true)
+    }
+
+    /// The right-click menu for one cue or several picked ones.
+    @ViewBuilder
+    private func cueMenu(_ ids: Set<UUID>) -> some View {
+        let chosen = engine.cues.filter { ids.contains($0.id) }
+        let one = chosen.count == 1 ? chosen.first : nil
+        let noun = chosen.count == 1 ? "Cue" : "\(chosen.count) Cues"
+        if !chosen.isEmpty {
+            if let one, one.kind != .matte {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([one.url]) }
+            }
+            if let one {
+                Button("Stand By") { engine.standbyID = one.id }
+            }
+            let allArmed = chosen.allSatisfy(\.armed)
+            Button(allArmed ? "Skip on GO" : "Fire on GO") {
+                engine.updateAll(ids, allArmed ? "Skip on GO" : "Fire on GO") { $0.armed = !allArmed }
+            }
+            .disabled(engine.locked)
+            Menu("Color") {
+                ForEach(CueLabel.allCases, id: \.self) { l in
+                    Button(l.label) { engine.updateAll(ids, "Color") { $0.label = l } }
+                }
+            }
+            .disabled(engine.locked)
+            Button("Duplicate \(noun)") { engine.duplicate(ids: ids) }
+                .disabled(engine.locked)
+            Divider()
+            Button("Remove \(noun)", role: .destructive) { engine.remove(ids: ids) }
+                .disabled(engine.locked)
+        }
     }
 
     /// One icon column in a cue row: the symbol when the setting is on, an

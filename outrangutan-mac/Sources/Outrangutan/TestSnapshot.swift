@@ -75,6 +75,32 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "multi": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let um = testUndo
+                um.groupsByEvent = false
+                func step(_ body: () -> Void) { um.beginUndoGrouping(); body(); um.endUndoGrouping() }
+                func list() -> String { engine.cues.map { "\($0.name)\($0.armed ? "" : " SKIP")\($0.label == .none ? "" : " " + $0.label.rawValue)" }.joined(separator: ", ") }
+                engine.replaceShow(cues: ["A", "B", "C"].enumerated().map { i, n in
+                    Cue(name: n, path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: i))
+                }, pads: [], banks: [], multiTrigger: nil)
+                engine.undoManager = um
+                let ab: Set<UUID> = [engine.cues[0].id, engine.cues[1].id]
+                step { engine.updateAll(ab, "Skip on GO") { $0.armed = false } }
+                note("a skip A and B: [\(list())]")
+                step { engine.updateAll(ab, "Color") { $0.label = .green } }
+                note("b color them green: [\(list())]")
+                um.undo(); note("c one undo: [\(list())]")
+                um.undo(); note("d another: [\(list())]")
+                step { engine.duplicate(ids: ab) }
+                note("e duplicate A and B: [\(list())]")
+                um.undo(); note("f one undo: [\(list())]")
+                step { engine.remove(ids: ab) }
+                note("g remove A and B: [\(list())]")
+                um.undo(); note("h one undo: [\(list())]")
+            }),
+        ]
         case "help": steps = [
             (0.3, { picture(HelpView(), size: CGSize(width: 860, height: 560), to: dir.appendingPathComponent("help.png")) }),
             (1.0, {}),

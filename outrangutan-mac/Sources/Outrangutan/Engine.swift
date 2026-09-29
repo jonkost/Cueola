@@ -885,6 +885,26 @@ final class Engine: ObservableObject {
         cues.move(fromOffsets: offsets, toOffset: offset)
     }
 
+    /// The same change to several cues, as one Undo step.
+    func updateAll(_ ids: Set<UUID>, _ name: String, _ change: (inout Cue) -> Void) {
+        guard cues.contains(where: { ids.contains($0.id) }) else { return }
+        noteUndo(name)
+        restoring = true
+        defer { restoring = false; lastUndo = nil }
+        for cue in cues where ids.contains(cue.id) { update(cue.id, change) }
+    }
+
+    /// Copies of several cues, each right after itself, as one Undo step.
+    func duplicate(ids: Set<UUID>) {
+        let order = cues.filter { ids.contains($0.id) }.map(\.id)
+        guard !order.isEmpty else { return }
+        if order.count == 1 { return duplicate(order[0]) }
+        noteUndo("Duplicate Cues")
+        restoring = true
+        defer { restoring = false; lastUndo = nil }
+        order.forEach(duplicate)
+    }
+
     /// A copy of a cue right after it, with its own id, standing by.
     func duplicate(_ id: UUID) {
         guard let i = cues.firstIndex(where: { $0.id == id }) else { return }

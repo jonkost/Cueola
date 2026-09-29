@@ -33,6 +33,9 @@ for students running the show.
   the list, like any Mac app. While editing is locked, Undo waits.
 - **Edit, Duplicate Cue** (Command-D) copies the cue standing by, right
   after it.
+- Shift-click or Command-click to pick several cues. Right-click them to
+  Skip or Fire on GO, color, duplicate or remove them all at once (one Undo
+  step). Delete removes the picked cues.
 - The **Inspector** on the right (Command-I) holds every setting for the
   cue standing by. Its icon tabs show one group at a time:
   - **Cue:** name, notes, a color (a stripe on its row, the web app's six
@@ -267,6 +270,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `multi`: skip, color, duplicate and remove two cues at once, each undone
+  in one step.
 - `help`: a picture of the Help window.
 - `extras`: standby words on an empty output, the arrow keys moving the
   standby, and the numbers behind the count-up clock.
