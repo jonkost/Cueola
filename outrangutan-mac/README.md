@@ -150,6 +150,16 @@ Run only one Outrangutan on a show at a time: this app or the web one.
 Pads work from the rundown and the deck too: a pad key, a TAKE-linked sound
 effect, or a rundown row's sound effect hits the pad on this Mac.
 
+## The direct link (same Mac)
+
+When Cueola runs in Chrome on the same Mac as this app, turn on **Outrangutan
+for Mac** in KeyWi Bird's Deck settings. Its playback keys then come straight
+here over a private connection on this Mac (port 47810), in about a
+hundredth of a second, even with the internet down. A lightning bolt next to
+the connection light shows it is on. The cloud still carries every command
+as the backup, and each command plays once. Only Cueola's own pages, for
+the show this Mac is on, are let in.
+
 ## Check it
 
 ```
@@ -180,6 +190,11 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `timing`: pre-wait, a still timer that follows into a dissolve, a trimmed
   video that holds, Continue, a matte, a trimmed loop, Pause and Fade.
 - `connect`: saves a picture of the Connect window.
+- `direct`: a pretend Cueola page using the direct link, a page from another
+  website turned away, and a direct GO's cloud copy not playing twice. Run
+  it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `listen`: joins show WEBTEST and waits a minute, for trying the direct
+  link from a real browser.
 - `midi`: learning a button and a fader and using them, then a message from
   a pretend MIDI box through the Mac's own MIDI system.
 - `keys`: moved show keys, a held key, two keys swapping, the lock, and the
@@ -207,6 +222,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `DirectLink.swift` | The direct link from Cueola on this Mac |
 | `Midi.swift` | MIDI boxes and Settings, MIDI |
 | `Keys.swift` | The show keys and Settings, Keys |
 | `ShowLog.swift` | The show log and its window |

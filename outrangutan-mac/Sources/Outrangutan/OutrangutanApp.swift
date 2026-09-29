@@ -120,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var link = ShowLink(engine: engine, store: TestSnapshot.store)
     lazy var files = ShowFiles(engine: engine)
     lazy var midi = MidiInput(engine: engine)
+    lazy var direct = DirectLink(link: link)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -155,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         _ = link
         _ = midi
+        _ = direct
         if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi) }
         NSApp.activate(ignoringOtherApps: true)
 

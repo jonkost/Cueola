@@ -16,6 +16,12 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "listen": joins show WEBTEST with two cues and waits 60 seconds, for
+///   trying the direct link from a real browser; writes the log at the end.
+/// - "direct": a pretend Cueola page on this Mac using the direct link, a
+///   page from another website being turned away, and the cloud copy of a
+///   direct command not playing twice. Run with OUTRANGUTAN_DIRECT_PORT set
+///   to a spare port so it never meets the real app.
 /// - "midi": learning a button and a fader, then using them.
 /// - "keys": changed show keys, a held key, the lock, and the time of day.
 /// - "log": a short show from this Mac and from the rundown, then pictures
@@ -25,7 +31,7 @@ enum TestSnapshot {
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
 
     /// The pretend show record, only in the link test.
-    @MainActor static let fake: FakeRecordStore? = isOn && ["link", "pads", "log"].contains(scenario) ? FakeRecordStore() : nil
+    @MainActor static let fake: FakeRecordStore? = isOn && ["link", "pads", "log", "direct", "listen"].contains(scenario) ? FakeRecordStore() : nil
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
@@ -60,6 +66,8 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "listen": steps = listenSteps(engine: engine, link: link, note: note)
+        case "direct": steps = directSteps(engine: engine, link: link, note: note, state: state)
         case "midi": steps = midiSteps(engine: engine, midi: midi, dir: dir, note: note, state: state)
         case "keys": steps = keySteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
         case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
@@ -162,6 +170,133 @@ enum TestSnapshot {
     }
 
     private static var virtualBox = MIDIEndpointRef()
+    private static var sockets: [URLSessionWebSocketTask] = []
+
+    @MainActor private static func listenSteps(engine: Engine, link: ShowLink, note: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        return [
+            (0.5, {
+                var a = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: "og_web_bars")
+                a.volume = 0
+                let b = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: "og_web_still")
+                engine.replaceShow(cues: [a, b], pads: [], banks: [], multiTrigger: nil)
+                link.join(code: "WEBTEST")
+                note("listening on \(DirectLink.port) for show WEBTEST")
+            }),
+            (60, {
+                engine.log.entries.forEach { note("log: \($0.line)") }
+                engine.allStop()
+            }),
+        ]
+    }
+
+    @MainActor private static func directSteps(engine: Engine, link: ShowLink, note: @escaping (String) -> Void,
+                                               state: @escaping (String) -> Void) -> Steps {
+        guard let fake else { return [] }
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let url = URL(string: "ws://127.0.0.1:\(DirectLink.port)")!
+        func socket(origin: String) -> URLSessionWebSocketTask {
+            var request = URLRequest(url: url)
+            request.setValue(origin, forHTTPHeaderField: "Origin")
+            let task = URLSession.shared.webSocketTask(with: request)
+            task.resume()
+            sockets.append(task)
+            return task
+        }
+        func send(_ task: URLSessionWebSocketTask, _ object: [String: Any]) {
+            let text = String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)!
+            task.send(.string(text)) { _ in }
+        }
+        func listen(_ task: URLSessionWebSocketTask, _ label: String, sentAt: @escaping () -> Date? = { nil }) {
+            task.receive { result in
+                let heard = Date()
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(.string(let text)):
+                        let ms = sentAt().map { String(format: " (%.1f ms after sending)", heard.timeIntervalSince($0) * 1000) } ?? ""
+                        note("   \(label) heard: \(text)\(ms)")
+                        listen(task, label, sentAt: sentAt)
+                    case .failure(let e):
+                        note("   \(label) closed: \((e as NSError).code == 57 || (e as NSError).domain == NSPOSIXErrorDomain ? "connection refused or closed" : e.localizedDescription)")
+                    default:
+                        listen(task, label, sentAt: sentAt)
+                    }
+                }
+            }
+        }
+        func gos() -> Int { engine.log.entries.filter { $0.kind == .cue }.count }
+        var good: URLSessionWebSocketTask!
+        var sentAt: Date?
+        let t0 = ShowLink.now
+        let fire: [String: Any] = ["commandId": "out_D1", "origId": "out_D1", "ts": t0, "expiresAt": t0 + 8000,
+                                   "by": "Jon Kost", "sender": "flowmingo_test", "action": "cue", "cueId": ""]
+        return [
+            (1.0, {
+                let a = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                let b = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                engine.replaceShow(cues: [a, b], pads: [], banks: [], multiTrigger: nil)
+                link.join(code: "DIR1")
+                note("a listening on port \(DirectLink.port); joined DIR1")
+                let bad = socket(origin: "https://not-cueola.example")
+                listen(bad, "page from another website")
+                send(bad, ["type": "hello", "code": "DIR1"])
+                var sneaky = fire
+                sneaky["commandId"] = "out_BAD"; sneaky["origId"] = "out_BAD"; sneaky["cueId"] = engine.cues[0].wireID ?? ""
+                send(bad, ["type": "command", "code": "DIR1", "command": sneaky])
+            }),
+            (1.0, {
+                good = socket(origin: "https://cueola.live")
+                listen(good, "cueola.live page", sentAt: { sentAt })
+                send(good, ["type": "hello", "code": "DIR1"])
+            }),
+            (0.8, {
+                note("b browsers connected directly: \(link.directBrowsers); GOs from the other website: \(gos())")
+                var cmd = fire
+                cmd["cueId"] = engine.cues[0].wireID ?? ""
+                sentAt = Date()
+                send(good, ["type": "command", "code": "DIR1", "command": cmd])
+            }),
+            (0.8, {
+                note("c GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-")")
+                // The same command's cloud copy lands afterwards.
+                var cmd = fire
+                cmd["cueId"] = engine.cues[0].wireID ?? ""
+                fake.set(["outrangutan", "commandQueue"], [cmd])
+                fake.set(["outrangutan", "command"], cmd)
+            }),
+            (0.8, {
+                note("d after the cloud copy: GOs=\(gos()) (must still be 1)")
+                if let ack = fake.doc["outrangutan"].flatMap({ ($0 as? [String: Any])?["cmdAck"] }) { note("   cloud reply: \(ack)") }
+                var other = fire
+                other["commandId"] = "out_D2"; other["origId"] = "out_D2"; other["action"] = "go"
+                sentAt = Date()
+                send(good, ["type": "command", "code": "WRONG", "command": other])
+            }),
+            (0.5, {
+                send(good, ["type": "gain", "code": "DIR1", "v": 0.3, "id": "g_D1"])
+            }),
+            (0.4, {
+                note("e level after a direct volume change: \(engine.masterGain)")
+                let t = ShowLink.now
+                sentAt = Date()
+                send(good, ["type": "command", "code": "DIR1", "command": ["commandId": "out_D3", "origId": "out_D3", "ts": t, "expiresAt": t + 8000,
+                                                                           "by": "Jon Kost", "sender": "flowmingo_test", "action": "panic"]])
+            }),
+            (0.6, {
+                state("f after a direct PANIC")
+                link.leave(keepSignIn: true)
+            }),
+            (1.0, {
+                note("g after leaving the show the page was told (hello with no code above)")
+                engine.setGain(1)
+                engine.log.entries.filter { $0.kind == .link || $0.from.contains("Jon") }.forEach { note("   log: \($0.line)") }
+                sockets.forEach { $0.cancel(with: .goingAway, reason: nil) }
+            }),
+            (0.5, {}),
+        ]
+    }
 
     /// MIDI: learn a button and a fader, pick what they do, use them. The
     /// messages are pretend ones; no box is needed.

@@ -83,9 +83,13 @@ struct LinkBadge: View {
             HStack(spacing: 8) {
                 Circle().fill(color).frame(width: 9, height: 9)
                 Text(link.message).lineLimit(1)
+                if link.directBrowsers > 0 {
+                    Image(systemName: "bolt.fill").foregroundStyle(.yellow)
+                }
             }
         }
-        .help(link.message)
+        .help(link.message + (link.directBrowsers > 0
+              ? ". Cueola on this Mac is also connected directly: its keys arrive here without the internet." : ""))
     }
 
     private var color: Color {

@@ -31,6 +31,7 @@ export const ASSETS = [
   'cueola-live-state.js',
   'cueola-link-state.js',
   'cueola-keymap.js',
+  'cueola-mac-link.js',
   'cueola-prompter-session.js',
   'cueola-script-operator-protocol.js',
   'cueola-scriptop-prefs.js',

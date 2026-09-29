@@ -9143,7 +9143,9 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
       return true;
     }
   }
-  if (!(window._firebaseReady && session.code && !session.isDemo)) { toast('Outrangutan needs a live (non-demo) session.'); return false; }
+  const cloudReady = Boolean(window._firebaseReady && session.code && !session.isDemo);
+  const macDirect = window.CueolaMacLink && session.code && window.CueolaMacLink.status() === 'connected';
+  if (!cloudReady && !macDirect) { toast('Outrangutan needs a live (non-demo) session.'); return false; }
   _outCmdSeq += 1;
   const command = {
     commandId: `out_${CLIENT_ID}_${Date.now().toString(36)}_${_outCmdSeq}`,
@@ -9154,6 +9156,15 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   if (opts.armCueId) command.armCueId = String(opts.armCueId);
   if (Array.isArray(opts.pads) && opts.pads.length) command.pads = opts.pads.map(String);
   logShow(action === 'pad' ? 'sfx' : 'cue', 'Outrangutan command → ' + action + (targetId ? ' · ' + outrangutanTargetName(action, targetId) : ''));
+  // Outrangutan for Mac on THIS Mac: the command goes straight to it first
+  // (about 10 ms, and it works with the internet down). The cloud write below
+  // still happens as the backup; the Mac runs each origId once.
+  command.expiresAt = command.ts + OG_CMD_EXPIRES_MS;
+  const sentDirect = Boolean(macDirect && window.CueolaMacLink.send(command, session.code));
+  if (!cloudReady) {
+    if (sentDirect) { logShow('link', 'Sent straight to Outrangutan for Mac (the cloud is not connected)'); return true; }
+    toast('Outrangutan needs a live (non-demo) session.'); return false;
+  }
   // PANIC rides its OWN field too (proto 3): the single slot can be rewritten
   // by a pending pad retry or a rival GO before the Air's snapshot lands, and
   // a lost panic is the one loss a show cannot absorb. Nothing else ever
@@ -9166,7 +9177,6 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   // entry per origId) so a burst of fires can no longer overwrite each other
   // in the single slot before the Air's snapshot lands. Old Airs keep reading
   // the slot. expiresAt lets the Air drop a write that flushed late.
-  command.expiresAt = command.ts + OG_CMD_EXPIRES_MS;
   const payload = { 'outrangutan.command': command, 'outrangutan.commandQueue': _ogQueueUpsert(command) };
   if (command.action === 'panic') payload['outrangutan.panic'] = { id: command.commandId, origId: command.origId, ts: command.ts, by: command.by, sender: command.sender };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), payload)
@@ -9177,7 +9187,7 @@ function fireOutrangutanCommand(action, targetId, opts={}) {
   // and the command just sits in the slot. Say so (throttled) instead of
   // letting the operator discover it by dead air. Remote arrivals only: this
   // tab's own hidden instance echoing is not a listener.
-  if (!(_ogRemoteLiveSeenAt && Date.now() - _ogRemoteLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
+  if (!sentDirect && !(_ogRemoteLiveSeenAt && Date.now() - _ogRemoteLiveSeenAt < 12000) && Date.now() - _ogNoListenerToastAt > 20000) {
     _ogNoListenerToastAt = Date.now();
     toast('Sent, but no Outrangutan has checked in on this show. On the playout Mac: open Outrangutan, sign in, and Join Session with code ' + session.code + '.');
   }
@@ -9304,6 +9314,15 @@ function applyOutrangutanCmdAck(ack) {
   }
 }
 
+// Outrangutan for Mac on this same Mac (cueola-mac-link.js): its replies
+// settle pending commands exactly like a cloud cmdAck does.
+try {
+  window.CueolaMacLink?.configure({
+    getCode: () => session.code || '',
+    onAck: (ack) => applyOutrangutanCmdAck({ commandId: ack.commandId, origId: ack.origId, ts: ack.ts, ok: ack.ok, reason: ack.reason }),
+  });
+} catch {}
+
 // Remote master gain: its own doc field (never the single command slot — a
 // volume turn must not overwrite an unconsumed cue fire), trailing-throttled
 // so a dial spin is a couple of writes, with a short local echo for the dial
@@ -9318,7 +9337,12 @@ function fireOutrangutanGain(v) {
   _ogGainTimer = setTimeout(() => {
     _ogGainTimer = null;
     const send = _ogGainNext; _ogGainNext = null;
-    if (send == null || !(window._firebaseReady && session.code && !session.isDemo)) return;
+    if (send == null) return;
+    // Straight to Outrangutan for Mac on this Mac when it is there. Only one
+    // lane carries the level, so a late cloud write can never pull the dial
+    // back to an older value.
+    if (window.CueolaMacLink && session.code && window.CueolaMacLink.sendGain(send, `og_${CLIENT_ID}_${++_ogGainSeq}`, session.code)) return;
+    if (!(window._firebaseReady && session.code && !session.isDemo)) return;
     window._updateDoc(window._doc(window._db, 'sessions', session.code), {
       'outrangutan.gain': { v: send, id: `og_${CLIENT_ID}_${++_ogGainSeq}`, ts: Date.now(), sender: FLOWMINGO_ENDPOINT_ID },
     }).catch(() => {});
@@ -9977,6 +10001,7 @@ function maybeArmNextPlayout(fromIdx) {
     };
     command.origId = command.commandId;
     command.expiresAt = command.ts + OG_CMD_EXPIRES_MS;
+    try { window.CueolaMacLink?.send(command, session.code); } catch {}
     try {
       // The standby rides the queue too (proto 4): a queue-mode Air reads the
       // slot only for ids the queue does not carry.

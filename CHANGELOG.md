@@ -2,6 +2,16 @@
 
 ## Next release (not pushed yet)
 
+### KeyWi Bird straight to Outrangutan for Mac
+- New in KeyWi Bird's Deck settings: Outrangutan for Mac, On or Off. On
+  the Mac that runs the Mac app, turn it On. Playback keys (and the
+  rundown's playback fires in that window) then go straight to the Mac app,
+  in about a hundredth of a second, and keep working if the internet drops.
+- The cloud still gets every command as the backup; the Mac app plays each
+  one once. Only Cueola's own pages, and only for the show the Mac app is
+  on, can use the link.
+- Chrome asks once to let the page talk to apps on this Mac. Allow it.
+
 ### Cue cards
 - The video cue card says Video, and its first picker is Source.
 - New transition on the video card: Media wipe. It fills the TAKE line as

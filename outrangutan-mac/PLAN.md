@@ -69,7 +69,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Join a show by code, sign in, publish cues and what is on air | Built (step 5) | The rule above: same fields, same shape. |
 | Command queue, "got it" replies, panic lane, master volume from the deck | Built (step 5) | Every rule has its own test. |
 | Fix requests from the rundown, preflight report | Built (step 5) | Needs no clicks on the Mac: sound and outputs are always ready. |
-| KeyWi Bird playback keys and strip | Built (step 5, through the cloud). Step 6: direct, same Mac | |
+| KeyWi Bird playback keys and strip | Built (step 5 through the cloud, step 6 direct on the same Mac) | |
 | Show file save and open (.ogshow, opens in the web app too), crash recovery | Built (step 6) | Opened media is copied to Movies, Outrangutan. |
 | Show log, print cue sheet | Built (step 6) | Each day's log is also a text file. |
 | Keyboard shortcuts you can change, lock, wall clock | Built (step 6) | |

@@ -18,6 +18,8 @@ final class ShowLink: ObservableObject {
     @Published private(set) var phase: Phase = .off
     @Published private(set) var message = "Not connected to a show"
     @Published private(set) var code = ""
+    /// Browser windows on this Mac connected over the direct link.
+    @Published var directBrowsers = 0
 
     /// This app's name on the wire. The rundown uses it to tell playout
     /// Macs apart and to skip its own writes.
@@ -25,7 +27,7 @@ final class ShowLink: ObservableObject {
     let build = "mac-" + ((Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev")
 
     let cloud = CloudClient()
-    private let engine: Engine
+    let engine: Engine
     private let store: ShowRecordStore
     private let inbox: CommandInbox
     private var joined = false
@@ -144,6 +146,22 @@ final class ShowLink: ObservableObject {
         if phase != .trouble || message != text { engine.log.add(.problem, text) }
         phase = .trouble
         message = text
+    }
+
+    // MARK: The direct link
+
+    /// A command straight from a browser on this Mac. Same run-once rules
+    /// as the cloud, so its cloud copy never plays it twice.
+    func runDirect(_ cmd: WireCommand) -> WireAck {
+        inbox.direct(cmd, now: Self.now,
+                     run: { [engine] in engine.runRemote($0) },
+                     panic: { [engine] in
+                         engine.run(from: cmd.by.isEmpty ? "Cueola" : "\(cmd.by), in Cueola") { engine.allStop() }
+                     })
+    }
+
+    func directGain(id: String, value: Double) {
+        inbox.directGain(id: id, value: value) { [engine] in engine.setGain($0) }
     }
 
     // MARK: Reading

@@ -70,6 +70,10 @@ public struct WireAck: Equatable {
     public var origId: String
     public var result: WireResult
 
+    public init(commandId: String, origId: String, result: WireResult) {
+        self.commandId = commandId; self.origId = origId; self.result = result
+    }
+
     public func record(ts: Double, sender: String) -> [String: Any] {
         [
             "commandId": commandId,
@@ -183,6 +187,39 @@ public final class CommandInbox {
         return acks
     }
 
+    /// A command that came straight from a browser on this Mac (the direct
+    /// link), not through the shared record. It runs once by origId, so when
+    /// its cloud copy arrives later it is answered again, never run twice.
+    /// A panic also marks the panic lane's copy as done.
+    public func direct(_ cmd: WireCommand, now: Double,
+                       run: (WireCommand) -> WireResult,
+                       panic: () -> Void) -> WireAck {
+        // Same Mac, same clock: a command this late was given up on.
+        if cmd.expiresAt > 0 && now - cmd.expiresAt > 2_000 {
+            noteOrig(cmd.origId)
+            let result = WireResult.refused("arrived too late")
+            storeResult(cmd.origId, result)
+            return WireAck(commandId: cmd.commandId, origId: cmd.origId, result: result)
+        }
+        if cmd.action == "panic" {
+            if !isOrigSeen(cmd.origId) {
+                noteOrig(cmd.origId)
+                panic()
+                storeResult(cmd.origId, .done)
+            }
+            return WireAck(commandId: cmd.commandId, origId: cmd.origId, result: .done)
+        }
+        return runOnce(cmd, run: run)
+    }
+
+    /// A volume change from the direct link. Remembers its id, so the same
+    /// change arriving through the cloud is not applied again.
+    public func directGain(id: String, value: Double, gain: (Double) -> Void) {
+        guard !id.isEmpty, id != lastGainId, value.isFinite else { return }
+        lastGainId = id
+        gain(min(1.2, max(0, value)))
+    }
+
     // MARK: Inside
 
     private func consume(_ queue: [WireCommand], now: Double, panicTs: Double,
@@ -196,6 +233,12 @@ public final class CommandInbox {
             if q.expiresAt > 0 && senderClock - q.expiresAt > (clockOffset == nil ? 18_000 : 10_000) {
                 // The sender gave up on this one. A late fire would be wrong.
                 noteOrig(q.origId)
+                continue
+            }
+            // Already ran (the direct link got it first): answer with what
+            // happened, never "superseded".
+            if isOrigSeen(q.origId) {
+                acks.append(runOnce(q, run: run))
                 continue
             }
             if q.fires && q.ts < killTs {

@@ -3747,6 +3747,25 @@
     renderDeckSettings();
     toast(on ? 'Dials reversed: this deck reports turns backwards, KeyWi now flips them.' : 'Dials back to normal: clockwise turns forward.');
   }
+  // Outrangutan for Mac on this same Mac: keys reach it directly
+  // (cueola-mac-link.js). Off until switched on here, per browser.
+  function macLinkSection() {
+    var L = window.CueolaMacLink;
+    if (!L) return '';
+    var on = L.enabled(), st = L.status();
+    var line = !on ? 'Off. Playback keys reach Outrangutan through the cloud, as always.'
+      : st === 'connected' ? 'Connected. Playback keys go straight to Outrangutan for Mac on this Mac, and keep working if the internet drops.'
+      : st === 'other-show' ? 'Found Outrangutan for Mac, but it is on ' + (L.macShow() ? 'show ' + esc(L.macShow()) : 'no show') + '. Join this show there.'
+      : 'Looking for Outrangutan for Mac on this Mac. Open it and join this show.';
+    return '<div class="sd-set-sec">Outrangutan for Mac</div>'
+      + '<div class="sd-set-status"><span class="sd-obs-off">' + line + ' The cloud still gets every command as a backup. Turn this on only on the Mac that runs the Mac app; Chrome asks once to let this page talk to apps on this Mac.</span></div>'
+      + '<div class="sd-obs"><button class="sd-mini' + (on ? ' cur' : '') + '" id="sd-maclink-on">On</button><button class="sd-mini' + (on ? '' : ' cur') + '" id="sd-maclink-off">Off</button></div>';
+  }
+  function wireMacLink() {
+    bind('sd-maclink-on', function () { window.CueolaMacLink.setEnabled(true); renderDeckSettings(); });
+    bind('sd-maclink-off', function () { window.CueolaMacLink.setEnabled(false); renderDeckSettings(); toast('Direct link off. Keys go through the cloud.'); });
+  }
+  try { if (window.CueolaMacLink) window.CueolaMacLink.onChange(function () { if (settingsOpen) renderDeckSettings(); }); } catch (e) {}
   function renderDeckSettings() {
     if (!settingsOpen) return;
     var chips = Object.keys(DECK_THEMES).map(function (id) { return '<button class="sd-theme-chip sd-th-' + id + (id === deckTheme ? ' cur' : '') + '" data-set-theme="' + id + '" data-tip="Reskin the whole deck">' + esc(DECK_THEMES[id].name) + '</button>'; }).join('');
@@ -3757,6 +3776,7 @@
         + '<div class="sd-set-status"><span class="sd-obs-off">Clockwise turns forward: the prompter scrubs ahead, volume and speed go up. If this deck\'s dials run the opposite way, flip them here.</span></div>'
         + '<div class="sd-obs"><button class="sd-mini' + (overrides.dialFlip ? '' : ' cur') + '" id="sd-dialdir-n">Normal</button><button class="sd-mini' + (overrides.dialFlip ? ' cur' : '') + '" id="sd-dialdir-r">Reversed</button></div>' : '')
       + '<div class="sd-set-sec">OBS Studio</div>' + obsSection()
+      + macLinkSection()
       + (micoParked() ? '' : '<div class="sd-set-sec">Micochondria</div>' + micoBar())
       + '<div class="sd-set-sec">Clipboard</div>'
       + '<div class="sd-set-status"><span class="sd-obs-off">The PASTE key reads this machine\'s clipboard, and the browser only allows that after you approve it once. Approve it here so the key never stalls mid-show.</span></div>'
@@ -3770,6 +3790,7 @@
     bind('sd-set-done', closeOverlay);
     bind('sd-diag-settings', function () { closeOverlay(); runDiagnostics(); });
     wireRims();
+    wireMacLink();
     bind('sd-dialdir-n', function () { setDialFlip(false); });
     bind('sd-dialdir-r', function () { setDialFlip(true); });
     o.querySelectorAll('[data-set-theme]').forEach(function (chip) { chip.onclick = function () { setTheme(chip.getAttribute('data-set-theme')); }; });

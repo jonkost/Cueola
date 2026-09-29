@@ -139,3 +139,61 @@ final class CommandInboxTests: XCTestCase {
         XCTAssertEqual(look(inbox, ["commandQueue": [c]]).ran, [], "rejoining must not fire it again")
     }
 }
+
+final class DirectLinkRuleTests: XCTestCase {
+    private func cmd(_ id: String, _ action: String, ts: Double) -> WireCommand {
+        WireCommand(commandId: id, ts: ts, expiresAt: ts + 8000, sender: "flowmingo_x", action: action, cueId: "og_1")
+    }
+
+    func testADirectFireRunsOnceWhenItsCloudCopyArrives() {
+        let inbox = CommandInbox(sender: "mac")
+        var runs = 0
+        _ = inbox.handle([:], now: 1000, run: { _ in .done }, panic: {}, gain: { _ in })   // joined
+        let go = cmd("out_1", "cue", ts: 1000)
+        XCTAssertEqual(inbox.direct(go, now: 1010, run: { _ in runs += 1; return .done }, panic: {}).result, .done)
+        let acks = inbox.handle(["command": ["commandId": "out_1", "origId": "out_1", "ts": 1000.0, "sender": "flowmingo_x", "action": "cue", "cueId": "og_1"],
+                                 "commandQueue": [["commandId": "out_1", "origId": "out_1", "ts": 1000.0, "expiresAt": 9000.0, "sender": "flowmingo_x", "action": "cue", "cueId": "og_1"]]],
+                                now: 1300, run: { _ in runs += 1; return .done }, panic: {}, gain: { _ in })
+        XCTAssertEqual(runs, 1)
+        XCTAssertEqual(acks.map(\.origId), ["out_1"])
+        XCTAssertEqual(acks.first?.result, .done)
+    }
+
+    func testAFireThatAlreadyPlayedIsNeverCalledSuperseded() {
+        let inbox = CommandInbox(sender: "mac")
+        _ = inbox.handle([:], now: 1000, run: { _ in .done }, panic: {}, gain: { _ in })
+        _ = inbox.direct(cmd("out_1", "cue", ts: 1000), now: 1000, run: { _ in .done }, panic: {})
+        _ = inbox.direct(cmd("out_2", "stop", ts: 1100), now: 1100, run: { _ in .done }, panic: {})
+        let q: [[String: Any]] = [
+            ["commandId": "out_1", "origId": "out_1", "ts": 1000.0, "expiresAt": 9000.0, "sender": "flowmingo_x", "action": "cue", "cueId": "og_1"],
+            ["commandId": "out_2", "origId": "out_2", "ts": 1100.0, "expiresAt": 9100.0, "sender": "flowmingo_x", "action": "stop"],
+        ]
+        let acks = inbox.handle(["commandQueue": q], now: 1400, run: { _ in XCTFail("nothing runs twice"); return .done }, panic: {}, gain: { _ in })
+        XCTAssertEqual(acks.map(\.result), [.done, .done])
+    }
+
+    func testADirectPanicCoversThePanicLane() {
+        let inbox = CommandInbox(sender: "mac")
+        var panics = 0
+        _ = inbox.handle([:], now: 1000, run: { _ in .done }, panic: {}, gain: { _ in })
+        _ = inbox.direct(cmd("out_9", "panic", ts: 1000), now: 1000, run: { _ in .done }, panic: { panics += 1 })
+        _ = inbox.handle(["panic": ["id": "out_9", "origId": "out_9", "ts": 1000.0, "sender": "flowmingo_x"]],
+                         now: 1200, run: { _ in .done }, panic: { panics += 1 }, gain: { _ in })
+        XCTAssertEqual(panics, 1)
+    }
+
+    func testALateDirectCommandIsRefused() {
+        let inbox = CommandInbox(sender: "mac")
+        let ack = inbox.direct(cmd("out_3", "go", ts: 1000), now: 20_000, run: { _ in XCTFail("too late to run"); return .done }, panic: {})
+        XCTAssertFalse(ack.result.ok)
+    }
+
+    func testADirectVolumeIsNotAppliedAgainFromTheCloud() {
+        let inbox = CommandInbox(sender: "mac")
+        var levels: [Double] = []
+        _ = inbox.handle([:], now: 1000, run: { _ in .done }, panic: {}, gain: { _ in })
+        inbox.directGain(id: "g1", value: 0.4) { levels.append($0) }
+        _ = inbox.handle(["gain": ["id": "g1", "v": 0.4, "sender": "flowmingo_x"]], now: 1100, run: { _ in .done }, panic: {}, gain: { levels.append($0) })
+        XCTAssertEqual(levels, [0.4])
+    }
+}
