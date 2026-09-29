@@ -133,6 +133,7 @@ struct PlaybackCommands: Commands {
             Button("Fade and Stop All (\(keys.name(.fade)))") { engine.fadeStopAll() }
             Button("All Stop (\(keys.name(.allStop)))") { engine.allStop() }
             Divider()
+            Button("Show Check\u{2026}") { NotificationCenter.default.post(name: .showCheck, object: nil) }
             Toggle("Lock Editing", isOn: $engine.locked)
                 .keyboardShortcut("l", modifiers: [.command, .shift])
             Divider()

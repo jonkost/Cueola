@@ -83,6 +83,15 @@ a time. While paused, GO carries on, like the web app.
 The show saves itself after every change, to
 `~/Library/Application Support/Outrangutan/show.json`.
 
+## Show Check
+
+Before class, click **Show Check** in the toolbar (or Playback, Show Check).
+It checks everything that can bite mid-show and lists it in red, orange or
+green, each with a button to fix it where it can: missing media, pads that
+won't load, closed outputs, an unplugged program screen or sound device,
+battery power, Low Power Mode, a nearly full disk, the show link, OBS, and
+whether editing is locked.
+
 ## Show files
 
 The **File** menu makes a show file to carry to another Mac or to the web
@@ -245,6 +254,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `check`: Show Check with planted problems (a missing file, closed
+  outputs, an unplugged sound device, OBS off), then two fixes pressed.
 - `record`: a pretend microphone records onto a pad; a second take with
   the same name gets its own file.
 - `trim`: pictures of the trim bar for a video cue and a pad.
@@ -296,6 +307,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Obs.swift` | OBS Studio control and Settings, OBS |
 | `SoundTap.swift` | Listens to cue sound for the meter, without changing it |
 | `Thumbnails.swift` | The small pictures in the cue list |
+| `ShowCheck.swift` | Show Check: the before-the-show checklist |
 | `Recorder.swift` | Recording a sound effect onto a pad |
 | `TrimView.swift` | The trim bar: frames, sound wave, In and Out handles |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |

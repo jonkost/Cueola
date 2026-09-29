@@ -75,6 +75,32 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "check": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let ok = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                let lost = Cue(name: "Clip that moved", path: "/nowhere/clip.mov", kind: .video, wireID: Cue.newWireID(offsetMs: 1))
+                var obsCue = Cue(name: "Switch to wide", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 2))
+                obsCue.obs.action = .scene; obsCue.obs.scene = "Wide"
+                engine.replaceShow(cues: [ok, lost, obsCue], pads: [], banks: [], multiTrigger: nil)
+                engine.audio.cueDevice = "unplugged-interface-uid"
+                @MainActor func report(_ label: String) {
+                    let items = ShowCheck.run(engine: engine, link: link, obs: ObsClient.shared)
+                    note(label)
+                    items.forEach { note("   [\($0.level)] \($0.title)\($0.fix.map { " (fix: \($0.label))" } ?? "")") }
+                }
+                report("a first check:")
+                for item in ShowCheck.run(engine: engine, link: link, obs: ObsClient.shared) where ["Open All Outputs", "Lock Editing"].contains(item.fix?.label ?? "") {
+                    item.fix?.action()
+                }
+                engine.audio.cueDevice = nil
+                report("b after Open All Outputs, Lock Editing, and plugging the interface back:")
+                engine.locked = false
+                engine.audio.cueDevice = "unplugged-interface-uid"
+                picture(ShowCheckView(engine: engine, link: link), size: CGSize(width: 560, height: 560), to: dir.appendingPathComponent("show-check.png"))
+            }),
+            (1.0, { engine.audio.cueDevice = nil; engine.closeOutput(1) }),
+        ]
         case "record": steps = [
             (0.5, {
                 // A pretend microphone: a sound file fed in slices, the way

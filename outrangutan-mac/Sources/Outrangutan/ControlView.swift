@@ -18,6 +18,7 @@ struct ControlView: View {
     @AppStorage("clock.24hour") private var clock24 = true
     @State private var dropTargeted = false
     @State private var showConnect = false
+    @State private var showCheck = false
     @AppStorage("ui.inspector") private var showInspector = true
     @AppStorage("ui.tab") private var tab = "cues"
 
@@ -40,6 +41,8 @@ struct ControlView: View {
         .navigationTitle(files.currentFile?.deletingPathExtension().lastPathComponent ?? "Outrangutan")
         .navigationSubtitle(link.phase == .linked ? link.message : "")
         .sheet(isPresented: $showConnect) { ConnectView(link: link) }
+        .sheet(isPresented: $showCheck) { ShowCheckView(engine: engine, link: link) }
+        .onReceive(NotificationCenter.default.publisher(for: .showCheck)) { _ in showCheck = true }
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
@@ -118,6 +121,8 @@ struct ControlView: View {
             .help(engine.openOutputs.isEmpty ? "Open the outputs" : "Close the outputs")
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            Button { showCheck = true } label: { Label("Show Check", systemImage: "checkmark.seal") }
+                .help("Check everything before the show: media, outputs, sound, power, links")
             Toggle(isOn: $engine.locked) {
                 Label(engine.locked ? "Unlock Editing" : "Lock Editing", systemImage: engine.locked ? "lock.fill" : "lock.open")
             }
