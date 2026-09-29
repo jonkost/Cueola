@@ -17,6 +17,8 @@ import SwiftUI
 ///   sending the same commands the rundown and KeyWi Bird send.
 /// - "files": saves a show file, opens it again, opens one shaped like the
 ///   web app's, and picks up after a pretend crash.
+/// - "watch": a watched folder: a file that is still arriving waits, a
+///   finished one joins, a sound becomes a pad, and a lock holds new files.
 /// - "obs": a pretend OBS checks the password proof, takes a cue's scene
 ///   switch, and fires a cue with its own scene change.
 /// - "key": color bars with the green bar keyed to magenta, then a luma key
@@ -42,7 +44,7 @@ enum TestSnapshot {
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
-    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles, midi: MidiInput, scopes: Scopes) {
+    static func runIfAsked(engine: Engine, link: ShowLink, files: ShowFiles, midi: MidiInput, scopes: Scopes, watch: WatchFolder) {
         guard let folder = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] else { return }
         let dir = URL(fileURLWithPath: folder, isDirectory: true)
         var log: [String] = []
@@ -73,6 +75,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
+        case "watch": steps = watchSteps(engine: engine, watch: watch, dir: dir, note: note)
         case "obs": steps = obsSteps(engine: engine, dir: dir, note: note)
         case "key": steps = keySteps2(engine: engine, scopes: scopes, dir: dir, note: note, snap: snap)
         case "scopes": steps = scopeSteps(engine: engine, scopes: scopes, dir: dir, note: note, state: state, snap: snap)
@@ -183,6 +186,46 @@ enum TestSnapshot {
     private static var sockets: [URLSessionWebSocketTask] = []
 
     private static var fakeObs: FakeObs?
+
+    @MainActor private static func watchSteps(engine: Engine, watch: WatchFolder, dir: URL, note: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        let folder = dir.appendingPathComponent("Shared clips", isDirectory: true)
+        let fm = FileManager.default
+        func names() -> String { engine.cues.map(\.name).joined(separator: ", ") }
+        func pads() -> String { engine.pads.pads.map(\.name).joined(separator: ", ") }
+        return [
+            (0.5, {
+                try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+                try? fm.copyItem(at: media.appendingPathComponent("still-16x9.png"), to: folder.appendingPathComponent("Already here.png"))
+                engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
+                WatchFolder.every = 0.4
+                watch.soundsToPads = true
+                watch.watch(folder, takeWhatIsThere: false)
+                // A clip still arriving: the first half now, the rest later.
+                let clip = try! Data(contentsOf: media.appendingPathComponent("bars-4x3.mp4"))
+                try? clip.prefix(clip.count / 2).write(to: folder.appendingPathComponent("Arriving clip.mp4"))
+            }),
+            (2.5, {
+                note("a a half-copied clip that stopped changing is tested and waits: cues [\(names())]")
+                let clip = try! Data(contentsOf: media.appendingPathComponent("bars-4x3.mp4"))
+                try? clip.write(to: folder.appendingPathComponent("Arriving clip.mp4"))
+                try? fm.copyItem(at: media.appendingPathComponent("demo-rimshot.wav"), to: folder.appendingPathComponent("Rimshot.wav"))
+            }),
+            (2.5, {
+                note("b once finished: cues [\(names())], pads [\(pads())]; the file already there was left out")
+                engine.locked = true
+                try? fm.copyItem(at: media.appendingPathComponent("bars-16x9.mp4"), to: folder.appendingPathComponent("During the show.mp4"))
+            }),
+            (2.5, { note("c locked: the new file waits: cues [\(names())]"); engine.locked = false }),
+            (2.5, {
+                note("d unlocked: cues [\(names())]")
+                engine.log.entries.filter { $0.kind == .file }.forEach { note("   log: \($0.line)") }
+                picture(GeneralSettings(watch: watch), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("watch-settings.png"))
+            }),
+            (1.0, { watch.stop(); WatchFolder.every = 2 }),
+        ]
+    }
 
     /// Saves a picture of a SwiftUI view in its own dark window. `store`
     /// keeps remembered settings (like an Inspector tab) away from the real app's.

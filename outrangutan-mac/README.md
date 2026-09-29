@@ -153,6 +153,15 @@ Run only one Outrangutan on a show at a time: this app or the web one.
 Pads work from the rundown and the deck too: a pad key, a TAKE-linked sound
 effect, or a rundown row's sound effect hits the pad on this Mac.
 
+## Watch a folder
+
+**File, Watch a Folder** (or Settings, General) picks a folder. New videos,
+sounds and stills that land in it join the show on their own: point it at a
+shared Dropbox or Google Drive folder and the crew can send clips from
+anywhere. A file joins only once it has finished arriving (the same size
+three looks in a row, and it really opens). Sounds can become pads instead.
+While editing is locked, new files wait until it unlocks.
+
 ## OBS
 
 In **Settings, OBS**, enter OBS's address (localhost for OBS on this Mac),
@@ -219,6 +228,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `direct`: a pretend Cueola page using the direct link, a page from another
   website turned away, and a direct GO's cloud copy not playing twice. Run
   it with `OUTRANGUTAN_DIRECT_PORT=47819` so it never meets the real app.
+- `watch`: a watched folder: a half-copied clip waits, a finished one joins,
+  a sound becomes a pad, and the lock holds new files.
 - `obs`: a pretend OBS checks the password proof (against openssl), takes a
   cue's scene switch and a start recording, and fires a cue with its own
   scene change.
@@ -255,6 +266,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `PadBoardView.swift` | The pad board and the pad Inspector |
 | `OutputWindow.swift` | The output screen |
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
+| `WatchFolder.swift` | Watching a folder (Dropbox, Google Drive) for new media |
 | `Obs.swift` | OBS Studio control and Settings, OBS |
 | `Keyer.swift` | Chroma, luma and alpha keys on the graphics card |
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |

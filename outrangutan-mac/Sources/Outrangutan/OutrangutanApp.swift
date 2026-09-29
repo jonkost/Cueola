@@ -12,7 +12,7 @@ struct OutrangutanApp: App {
                 .frame(minWidth: 960, minHeight: 600)
         }
         .commands {
-            FileCommands(files: appDelegate.files)
+            FileCommands(files: appDelegate.files, watch: appDelegate.watch)
             CommandGroup(after: .sidebar) {
                 Button("Show or Hide Inspector") {
                     NotificationCenter.default.post(name: .toggleInspector, object: nil)
@@ -34,7 +34,7 @@ struct OutrangutanApp: App {
         .defaultSize(width: 720, height: 480)
 
         Settings {
-            SettingsView(engine: appDelegate.engine, midi: appDelegate.midi)
+            SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch)
         }
     }
 }
@@ -42,6 +42,7 @@ struct OutrangutanApp: App {
 /// The File menu: show files, and connecting to a show in the cloud.
 struct FileCommands: Commands {
     @ObservedObject var files: ShowFiles
+    let watch: WatchFolder
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -51,6 +52,7 @@ struct FileCommands: Commands {
             Button("Open Show\u{2026}") { files.chooseAndOpen() }
                 .keyboardShortcut("o")
                 .disabled(files.engine.locked)
+            Button("Watch a Folder\u{2026}") { watch.choose() }
             Divider()
             Button("Connect to a Show\u{2026}") {
                 NotificationCenter.default.post(name: .showConnect, object: nil)
@@ -138,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var direct = DirectLink(link: link)
     lazy var scopes = Scopes(engine: engine)
     let obs = ObsClient.shared
+    lazy var watch = WatchFolder(engine: engine)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -174,10 +177,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = link
         _ = midi
         _ = direct
+        _ = watch
         obs.onScene = { [weak self] scene in self?.engine.obsSceneChanged(scene) }
         obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
         engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes) }
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes, watch: watch) }
         NSApp.activate(ignoringOtherApps: true)
 
         // Tell macOS a show is running: never nap this app, never slow its

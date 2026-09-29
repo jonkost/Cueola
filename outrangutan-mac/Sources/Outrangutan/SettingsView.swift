@@ -6,10 +6,11 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var engine: Engine
     let midi: MidiInput
+    let watch: WatchFolder
 
     var body: some View {
         TabView {
-            GeneralSettings()
+            GeneralSettings(watch: watch)
                 .tabItem { Label("General", systemImage: "gearshape") }
             OutputSettings(engine: engine)
                 .tabItem { Label("Outputs", systemImage: "rectangle.on.rectangle") }
@@ -49,6 +50,7 @@ enum Appearance: String, CaseIterable {
 
 struct GeneralSettings: View {
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
+    let watch: WatchFolder
 
     var body: some View {
         Form {
@@ -61,6 +63,7 @@ struct GeneralSettings: View {
             } footer: {
                 Text("Dark is easiest on the eyes in a control room.").foregroundStyle(.secondary)
             }
+            WatchFolderSection(watch: watch)
         }
         .formStyle(.grouped)
     }
