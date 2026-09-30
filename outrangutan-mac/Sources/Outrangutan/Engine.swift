@@ -2,6 +2,7 @@ import OutrangutanCore
 import AppKit
 import AVFoundation
 import Combine
+import QuartzCore
 
 /// One player: a video or a sound, with its own fade levels.
 final class Deck {
@@ -21,12 +22,18 @@ final class Deck {
     /// Hands over frames for the scopes; only there while the scopes are on.
     var frames: AVPlayerItemVideoOutput?
     var lastFrame: CIImage?
+    /// This deck's line into the cue sound engine.
+    let lane: SoundLane
+    /// True while the cue on this deck plays its sound through the engine
+    /// (a channel pair other than 1 and 2). The player is then muted.
+    private(set) var viaLane = false
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
 
-    init(name: String, slot: PictureSlot?) {
+    init(name: String, slot: PictureSlot?, lane: SoundLane) {
         self.name = name
         self.slot = slot
+        self.lane = lane
         // Play on time: never wait to build a cushion, the files are local.
         player.automaticallyWaitsToMinimizeStalling = false
         // Test mode never makes a sound.
@@ -48,13 +55,22 @@ final class Deck {
     var remaining: Double? { end.map { max(0, $0 - current) } }
 
     /// Loads a cue and calls `ended` when it reaches its end (or trim out).
-    func load(_ cue: Cue, device: String?, ended: @escaping () -> Void) {
+    /// With `viaLane` the sound goes to the cue sound engine instead of out
+    /// of the player.
+    func load(_ cue: Cue, device: String?, viaLane: Bool = false, ended: @escaping () -> Void) {
         clearWatchers()
         self.cue = cue
         held = false
         fadingOut = false
-        // Which sound output this player uses. nil is the Mac's default.
+        self.viaLane = viaLane
+        lane.ring.flush()
+        lane.clock.stop()
+        // Which sound output this player uses. nil is the Mac's default. On
+        // the lane path the player's own sound is turned down to nothing
+        // (not muted: a muted player stops keeping time with its sound),
+        // and it still runs on the same device, so the two clocks agree.
         player.audioOutputDeviceUniqueID = device
+        player.isMuted = TestSnapshot.isOn && !viaLane
         let item = AVPlayerItem(url: cue.url)
         frames = nil
         lastFrame = nil
@@ -62,7 +78,7 @@ final class Deck {
         if cue.kind == .video && cue.key.mode != .off { key(item, cue.key) }
         let box = PeakBox()
         peaks = box
-        Task { await SoundTap.attach(to: item, box: box) }
+        Task { await SoundTap.attach(to: item, box: box, lane: viaLane ? lane : nil) }
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
@@ -85,15 +101,28 @@ final class Deck {
     func start(at offset: Double? = nil) {
         guard let cue else { return }
         let from = max(cue.trimIn, offset ?? 0)
+        lane.ring.flush()
         if from > 0 {
             player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
         player.play()
+        syncLane()
     }
 
     func rewindAndPlay() {
+        lane.ring.flush()
         player.seek(to: CMTime(seconds: cue?.trimIn ?? 0, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         player.play()
+        syncLane()
+    }
+
+    /// Tells the lane where the player is and whether it is moving, so the
+    /// engine plays exactly the frames that are due. Called every tick and
+    /// after each play, pause and seek.
+    func syncLane() {
+        guard viaLane else { return }
+        let moving = player.timeControlStatus == .playing ? Double(player.rate) : 0
+        lane.clock.note(position: current, speed: moving, host: CACurrentMediaTime())
     }
 
     func clear() {
@@ -103,6 +132,9 @@ final class Deck {
         cue = nil
         held = false
         fadingOut = false
+        viaLane = false
+        lane.ring.flush()
+        lane.clock.stop()
         pictureLevel = 1
         soundLevel = 1
     }
@@ -220,8 +252,10 @@ final class Engine: ObservableObject {
     private var windows: [Int: OutputWindowController] = [:]
     private var stillViews: [OutputView] = []
     private let fader = Fader()
-    private let videoDecks = [Deck(name: "a", slot: .a), Deck(name: "b", slot: .b)]
-    private let soundDecks = [Deck(name: "sa", slot: nil), Deck(name: "sb", slot: nil)]
+    /// Cue sound on a chosen channel pair; off while pair 1 and 2 is picked.
+    let cueSound = CueSoundEngine()
+    private let videoDecks: [Deck]
+    private let soundDecks: [Deck]
     private var pictureDeck: Deck?
     private var soundDeck: Deck?
     private var lastLane: CueKind = .video
@@ -247,6 +281,8 @@ final class Engine: ObservableObject {
     private var recoveryNoted = false
 
     init() {
+        videoDecks = [Deck(name: "a", slot: .a, lane: cueSound.lanes[0]), Deck(name: "b", slot: .b, lane: cueSound.lanes[1])]
+        soundDecks = [Deck(name: "sa", slot: nil, lane: cueSound.lanes[2]), Deck(name: "sb", slot: nil, lane: cueSound.lanes[3])]
         var show = ShowStore.load()
         // Cues saved before the rundown link had no lasting id, and ids made
         // before 9/29 sorted backwards. Give them new ones, in list order.
@@ -273,6 +309,7 @@ final class Engine: ObservableObject {
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
+        cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
         pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
         log.add(.file, "Outrangutan opened: \(ShowFiles.count(cues.count, "cue")), \(ShowFiles.count(pads.pads.count, "pad"))")
@@ -415,7 +452,7 @@ final class Engine: ObservableObject {
         if paused {
             log.add(.pause, "Carried on after a pause", from: source)
             paused = false
-            for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play() }
+            for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play(); d.syncLane() }
             if let left = stillLeft { armStillTimer(left); stillLeft = nil }
             if let left = pendingLeft, let p = pending { schedulePending(p.cue, in: left); pendingLeft = nil }
             refresh()
@@ -425,7 +462,7 @@ final class Engine: ObservableObject {
         } else if hasAnythingToPause {
             log.add(.pause, "Paused", from: source)
             paused = true
-            for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.player.pause() }
+            for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.player.pause(); d.syncLane() }
             if let ends = stillEndsAt, stillTimer != nil {
                 stillLeft = max(0, ends.timeIntervalSinceNow)
                 stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil
@@ -552,7 +589,7 @@ final class Engine: ObservableObject {
     private func beginVideo(_ cue: Cue) -> WireResult {
         let deck = videoDecks.first { $0 !== pictureDeck } ?? videoDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue, device: soundDevice(for: cue)) { [weak self, weak deck] in
+        deck.load(cue, device: soundDevice(for: cue), viaLane: usesLane(for: cue)) { [weak self, weak deck] in
             guard let self, let deck, deck.cue?.id == cue.id else { return }
             self.reachedEnd(deck)
         }
@@ -580,7 +617,7 @@ final class Engine: ObservableObject {
     private func beginSound(_ cue: Cue) -> WireResult {
         let deck = soundDecks.first { $0 !== soundDeck } ?? soundDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue, device: audio.cueDevice) { [weak self, weak deck] in
+        deck.load(cue, device: audio.cueDevice, viaLane: usesLane(for: cue)) { [weak self, weak deck] in
             guard let self, let deck, deck.cue?.id == cue.id else { return }
             self.reachedEnd(deck)
         }
@@ -1112,7 +1149,10 @@ final class Engine: ObservableObject {
     }
 
     private func apply(_ d: Deck) {
-        d.player.volume = Float(min(1, masterGain) * (d.cue?.volume ?? 1) * d.soundLevel)
+        let level = Float(min(1, masterGain) * (d.cue?.volume ?? 1) * d.soundLevel)
+        // On the lane path the engine sets the level; the player stays silent.
+        d.player.volume = d.viaLane ? 0 : level
+        if d.viaLane { d.lane.gain.outputVolume = level }
         if let slot = d.slot { d.views.forEach { $0.setOpacity(slot, Float(d.pictureLevel)) } }
     }
 
@@ -1195,6 +1235,7 @@ final class Engine: ObservableObject {
         else { left = nil }
         if left != remaining { remaining = left }
         if left != nil || pending != nil { onTick?() }
+        (videoDecks + soundDecks).forEach { $0.syncLane() }
         readCueMeter()
         noteRecoveryPoint()
     }
@@ -1204,7 +1245,8 @@ final class Engine: ObservableObject {
         var l: Float = 0, r: Float = 0
         for d in videoDecks + soundDecks where d.cue != nil && d.player.rate > 0 {
             guard let (pl, pr) = d.peaks?.take() else { continue }
-            l = max(l, pl * d.player.volume); r = max(r, pr * d.player.volume)
+            let level = d.viaLane ? d.lane.gain.outputVolume : d.player.volume
+            l = max(l, pl * level); r = max(r, pr * level)
         }
         if l > 0.0005 || r > 0.0005 || cueMeter.left > 0.0005 || cueMeter.right > 0.0005 { cueMeter.take(l, r) }
     }
@@ -1306,6 +1348,26 @@ final class Engine: ObservableObject {
         return audio.cueDevice
     }
 
+    /// Which path each playing cue's sound takes, for test mode and Show
+    /// Check: "player" straight out of its player, "engine" through the cue
+    /// sound engine.
+    var soundRoutes: String {
+        (videoDecks + soundDecks).filter { $0.cue != nil }
+            .map { "\($0.cue?.name ?? "-") via \($0.viaLane ? "engine" : "player") rate \($0.player.rate) at \(String(format: "%.3f", $0.current - ($0.cue?.trimIn ?? 0))) s" }.joined(separator: ", ")
+    }
+
+    /// Where the player on a lane is, in seconds into its file; for test mode.
+    func soundPosition(lane: Int) -> Double? {
+        (videoDecks + soundDecks).first { $0.lane === cueSound.lanes[lane] && $0.cue != nil }?.current
+    }
+
+    /// A cue's sound goes through the cue sound engine when a pair other
+    /// than 1 and 2 is picked and the cue plays to the cue sound device (not
+    /// to an output's own sound device).
+    private func usesLane(for cue: Cue) -> Bool {
+        cueSound.isOn && soundDevice(for: cue) == audio.cueDevice
+    }
+
     private func outputsChanged() {
         save()
         // Move open windows to a newly picked screen, and keep titles current.
@@ -1318,5 +1380,6 @@ final class Engine: ObservableObject {
     private func audioChanged() {
         save()
         pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
+        cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
     }
 }

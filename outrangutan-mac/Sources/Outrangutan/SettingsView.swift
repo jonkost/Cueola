@@ -143,10 +143,16 @@ struct SoundSettings: View {
                     Text("The Mac's sound output").tag(String?.none)
                     ForEach(devices) { Text($0.name).tag(String?.some($0.uid)) }
                 }
+                Picker("Channels", selection: $engine.audio.cueFirstChannel) {
+                    ForEach(pairs(for: engine.audio.cueDevice), id: \.self) { first in
+                        Text("\(first + 1) and \(first + 2)").tag(first)
+                    }
+                }
+                .disabled(pairs(for: engine.audio.cueDevice).count < 2)
             } header: {
                 Text("Cue sound")
             } footer: {
-                Text("Sound cues, and the sound of videos whose output has no sound device of its own. Plays on the device's first two channels.")
+                Text("Sound cues, and the sound of videos whose output has no sound device of its own. On an audio interface, cue sound can take its own pair, for its own fader on the board. A change of pair takes effect with the next cue.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -155,11 +161,11 @@ struct SoundSettings: View {
                     ForEach(devices) { Text($0.name).tag(String?.some($0.uid)) }
                 }
                 Picker("Channels", selection: $engine.audio.padFirstChannel) {
-                    ForEach(pairs, id: \.self) { first in
+                    ForEach(pairs(for: engine.audio.padDevice), id: \.self) { first in
                         Text("\(first + 1) and \(first + 2)").tag(first)
                     }
                 }
-                .disabled(pairs.count < 2)
+                .disabled(pairs(for: engine.audio.padDevice).count < 2)
             } header: {
                 Text("Pads")
             } footer: {
@@ -173,9 +179,9 @@ struct SoundSettings: View {
         .formStyle(.grouped)
     }
 
-    /// Channel pairs the pad device offers: 0 is 1 and 2, 2 is 3 and 4, and so on.
-    private var pairs: [Int] {
-        let device = AudioDevices.device(uid: engine.audio.padDevice) ?? AudioDevices.defaultOutput()
+    /// Channel pairs a device offers: 0 is 1 and 2, 2 is 3 and 4, and so on.
+    private func pairs(for uid: String?) -> [Int] {
+        let device = AudioDevices.device(uid: uid) ?? AudioDevices.defaultOutput()
         let channels = device?.channels ?? 2
         return stride(from: 0, to: max(2, channels) - 1, by: 2).map { $0 }
     }

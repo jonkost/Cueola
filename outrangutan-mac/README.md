@@ -290,6 +290,10 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   show clearing the history.
 - `meter`: the cue sound meter at full and quarter volume, a dozen fast cue
   swaps, and the meter falling after All Stop.
+- `cuepair`: cue sound on channels 3 and 4, by way of the cue sound engine:
+  a 44.1 kHz mono file, a 48 kHz stereo one and a video, each measured
+  against the player's own clock, a pause that hands out nothing, All Stop,
+  and back to channels 1 and 2 straight from the player.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.

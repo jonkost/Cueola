@@ -123,6 +123,17 @@ Everywhere
   on, can use the link.
 - Chrome asks once to let the page talk to apps on this Mac. Allow it.
 
+### Outrangutan for Mac: cue sound on any channel pair
+- Settings, Sound now has a Channels choice for cue sound, like the one
+  pads already had. On an audio interface, sound cues and video sound can
+  take their own pair (3 and 4, say) for their own fader on the board.
+- Pairs other than 1 and 2 go by way of a cue sound engine. It plays
+  exactly the frames the player's clock says are due, so the sound stays in
+  step with the picture, holds through a pause, and stops dead on All Stop.
+  A change of pair takes effect with the next cue.
+- Show Check names the pair when one is picked. Test mode has a `cuepair`
+  run that measures the sound against the player's clock.
+
 ### Cue cards
 - The video cue card says Video, and its first picker is Source.
 - New transition on the video card: Media wipe. It fills the TAKE line as

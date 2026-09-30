@@ -21,6 +21,18 @@ struct OutputConfig: Identifiable, Codable, Equatable {
 /// Where sound goes, for the whole show.
 struct AudioSettings: Codable, Equatable {
     var cueDevice: String?          // sound cues and video sound; nil is the Mac's default output
+    var cueFirstChannel = 0         // cue sound plays on this channel and the next (0 is 1 and 2)
     var padDevice: String?          // pads; nil is the Mac's default output
     var padFirstChannel = 0         // pads play on this channel and the next (0 is 1 and 2)
+
+    init() {}
+
+    // Shows saved before a setting existed still open.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cueDevice = try c.decodeIfPresent(String.self, forKey: .cueDevice)
+        cueFirstChannel = try c.decodeIfPresent(Int.self, forKey: .cueFirstChannel) ?? 0
+        padDevice = try c.decodeIfPresent(String.self, forKey: .padDevice)
+        padFirstChannel = try c.decodeIfPresent(Int.self, forKey: .padFirstChannel) ?? 0
+    }
 }

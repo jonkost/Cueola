@@ -70,7 +70,7 @@ enum ShowCheck {
         let missing = Set(lostDevices.filter { AudioDevices.device(uid: $0) == nil })
         items.append(missing.isEmpty
             ? CheckItem(level: .good, title: "Sound devices are connected",
-                        detail: "Cues play to \(AudioDevices.device(uid: engine.audio.cueDevice)?.name ?? AudioDevices.defaultOutput()?.name ?? "the Mac")")
+                        detail: "Cues play to \(engine.cueSound.isOn ? engine.cueSound.note : (AudioDevices.device(uid: engine.audio.cueDevice)?.name ?? AudioDevices.defaultOutput()?.name ?? "the Mac"))")
             : CheckItem(level: .problem, title: "A sound device is missing",
                         detail: "\(missing.count == 1 ? "A device" : "\(missing.count) devices") picked in Settings, Sound or Outputs is unplugged. That sound goes to the Mac's own output instead."))
         if engine.masterGain < 0.05 {
