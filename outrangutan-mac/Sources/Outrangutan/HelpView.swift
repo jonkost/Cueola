@@ -36,6 +36,7 @@ struct HelpView: View {
                 "The Up and Down arrows move the standby.",
                 "The big clock counts down what is left. Click it to count up instead. Under it is the time of day.",
                 "The strip under the buttons shows the program picture, its brightness (waveform) and color (vectorscope), and how loud the cues are.",
+                "Window, Multiview (Shift-Command-M) is a monitor wall for the director's screen: Program, a preview of the standby cue (Roll plays a video silently between its trim points), the clock and the next cues. Full screen with the green button.",
                 "Lock Editing (the lock in the toolbar) keeps a stray click from changing the show. GO and the keys still work.",
             ]),
             Topic(id: "pads", title: "Sound Effect Pads", symbol: "square.grid.3x3.fill", lines: [
