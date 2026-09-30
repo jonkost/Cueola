@@ -87,6 +87,9 @@ final class OutputView: NSView {
     /// Words shown while no picture is up. Empty shows black.
     var standbyText = "" { didSet { updateStandby() } }
 
+    /// The picture slots with something showing; for test mode.
+    var visibleSlots: [PictureSlot] { PictureSlot.allCases.filter { !layerFor($0).isHidden } }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true

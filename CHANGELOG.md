@@ -134,6 +134,16 @@ Everywhere
 - Show Check names the pair when one is picked. Test mode has a `cuepair`
   run that measures the sound against the player's clock.
 
+### Outrangutan for Mac: Multiview
+- A monitor-wall window for the director's screen (Window menu, or
+  Shift-Command-M): Program with a red tally while something is on air,
+  a live Preview of the standby cue with a green tally, the count-out
+  clock, the time of day, and the next cues. Full screen on any screen
+  with the green button.
+- The Preview shows a video parked on its first frame; Roll plays it
+  silently round and round between its trim points, so a clip can be
+  checked before it goes to air. Stills, mattes and sound cues show too.
+
 ### Cue cards
 - The video cue card says Video, and its first picker is Source.
 - New transition on the video card: Media wipe. It fills the TAKE line as

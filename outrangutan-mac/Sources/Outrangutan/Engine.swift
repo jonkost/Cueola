@@ -275,7 +275,7 @@ final class Engine: ObservableObject {
         didSet {
             guard standbyText != oldValue else { return }
             windows.values.forEach { $0.pictureView.standbyText = standbyText }
-            monitor.standbyText = standbyText
+            monitors.forEach { $0.standbyText = standbyText }
             save()
         }
     }
@@ -289,9 +289,12 @@ final class Engine: ObservableObject {
     /// The program preview in the control window: a copy of one output,
     /// drawn by the same layers.
     let monitor = OutputView()
+    /// The Program box of the Multiview window: the same layer calls again.
+    let multiviewProgram = OutputView()
+    private var monitors: [OutputView] { [monitor, multiviewProgram] }
     /// Which output the preview shows.
     @Published var monitorOutput = 1 {
-        didSet { if monitorOutput != oldValue { monitor.black() } }
+        didSet { if monitorOutput != oldValue { monitors.forEach { $0.black() } } }
     }
     /// True while the scopes want frames.
     var wantsFrames = false {
@@ -381,7 +384,7 @@ final class Engine: ObservableObject {
                     + (point.offset > 0 ? " at \(Timecode.short(point.offset))." : "."))
         }
         RecoveryPoint.clear()
-        monitor.standbyText = standbyText
+        monitors.forEach { $0.standbyText = standbyText }
         startClock()
         // A screen plugged in or out (a bumped HDMI cable): put every open
         // output where it belongs again, never over the controls.
@@ -1236,7 +1239,7 @@ final class Engine: ObservableObject {
         if let leaving = stillCue { pads.cueLeftAir(leaving.id) }
         stillCue = nil
         for w in windows.values { w.pictureView.hide(.s1); w.pictureView.hide(.s2) }
-        monitor.hide(.s1); monitor.hide(.s2)
+        monitors.forEach { $0.hide(.s1); $0.hide(.s2) }
         stillViews = []
     }
 
@@ -1375,9 +1378,9 @@ final class Engine: ObservableObject {
     /// A cue pointed at an output that was removed uses the first output.
     private func views(for cue: Cue) -> [OutputView] {
         let preview = outputs.contains { $0.id == monitorOutput } ? monitorOutput : outputs[0].id
-        if cue.output == 0 { return outputs.map { window($0.id).pictureView } + [monitor] }
+        if cue.output == 0 { return outputs.map { window($0.id).pictureView } + monitors }
         let id = outputs.contains { $0.id == cue.output } ? cue.output : outputs[0].id
-        return [window(id).pictureView] + (id == preview ? [monitor] : [])
+        return [window(id).pictureView] + (id == preview ? monitors : [])
     }
 
     /// What is on the program picture now, for the scopes: the newest video

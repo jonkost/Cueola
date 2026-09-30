@@ -294,6 +294,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   a 44.1 kHz mono file, a 48 kHz stereo one and a video, each measured
   against the player's own clock, a pause that hands out nothing, All Stop,
   and back to channels 1 and 2 straight from the player.
+- `multiview`: the Multiview window with bars on air and a still on
+  standby, the preview following the standby down the list, a preview
+  roll between trim points, and a picture of the window.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.

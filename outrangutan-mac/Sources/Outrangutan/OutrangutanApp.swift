@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct OutrangutanApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var preview = PreviewPlayer()
 
     var body: some Scene {
         // One show, one control window.
@@ -29,6 +30,7 @@ struct OutrangutanApp: App {
             CommandGroup(replacing: .help) { HelpButton() }
             CommandGroup(before: .windowList) {
                 OpenLogButton()
+                OpenMultiviewButton()
                 Divider()
             }
         }
@@ -42,6 +44,14 @@ struct OutrangutanApp: App {
         // Help, in plain words (Help menu, Command-?).
         Window("Outrangutan Help", id: "help") { HelpView() }
             .defaultSize(width: 860, height: 560)
+
+        // The Multiview: Program, Preview, the clock and the next cues, for
+        // the director's screen (Window menu, Shift-Command-M).
+        Window("Multiview", id: "multiview") {
+            MultiviewView(engine: appDelegate.engine, preview: preview)
+                .frame(minWidth: 640, minHeight: 360)
+        }
+        .defaultSize(width: 1280, height: 720)
 
         Settings {
             SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch)

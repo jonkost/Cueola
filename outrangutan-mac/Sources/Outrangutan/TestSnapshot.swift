@@ -37,6 +37,8 @@ import SwiftUI
 ///   of the Show Log, and the cue sheet and log printed to PDF.
 /// - "cuepair": cue sound on channels 3 and 4 through the cue sound engine,
 ///   measured against the player's clock, through a pause and All Stop.
+/// - "multiview": the Multiview window with a video on air and a still on
+///   standby, the preview following the standby, and a preview roll.
 enum TestSnapshot {
     static var isOn: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
@@ -279,6 +281,7 @@ enum TestSnapshot {
             (1.2, { note("d after All Stop the meter falls: \(String(format: "%.3f", max(engine.cueMeter.left, engine.cueMeter.right)))") }),
         ]
         case "cuepair": steps = cuePairSteps(engine: engine, dir: dir, note: note)
+        case "multiview": steps = multiviewSteps(engine: engine, dir: dir, note: note, state: state)
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
