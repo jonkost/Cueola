@@ -81,7 +81,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Dropbox folder sync | Built (step 7) as Watch a Folder | The Dropbox app syncs the folder; Outrangutan watches it. No token to paste. |
 | Convert on upload | Not needed | The Mac plays the pro formats as they are. |
 | Kiosk helper and kiosk windows | Not needed | Native outputs replace them. |
-| Multiview | Built | Not in the web app. A monitor-wall window for the director's screen: Program with a red tally, a live Preview of the standby cue with a green tally (a video parks on its first frame and can roll silently between its trim points), the count-out clock, the time of day, and the next cues. Window menu, Shift-Command-M; full screen on any screen with the green button. The preview shows the whole picture; a cue's fit, scale and position are not applied there yet. |
+| Multiview | Built | Not in the web app. A monitor-wall window for the director's screen: Program with a red tally, a live Preview of the standby cue with a green tally (a video parks on its first frame and can roll silently between its trim points), the count-out clock, the time of day, and the next cues. Window menu, Shift-Command-M; full screen on any screen with the green button. The preview frames a cue exactly as the output will (fit, scale, position). |
+| Ducking | Built | Not in the web app. Settings, Sound: cue sound dips 6, 12 or 20 dB while any pad sounds (a music bed under a stinger) and comes back over about a second. |
 | Not possible on the web | Step 8 | SDI out through a Blackmagic card, NDI to the switcher, key and fill. Until the cards are in: OBS on the same Mac can capture the output window and send NDI. |
 
 ## How we test each step

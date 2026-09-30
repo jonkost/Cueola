@@ -24,6 +24,8 @@ struct AudioSettings: Codable, Equatable {
     var cueFirstChannel = 0         // cue sound plays on this channel and the next (0 is 1 and 2)
     var padDevice: String?          // pads; nil is the Mac's default output
     var padFirstChannel = 0         // pads play on this channel and the next (0 is 1 and 2)
+    var duckUnderPads = false       // cue sound dips while a pad sounds
+    var duckDb: Double = 12         // by this much
 
     init() {}
 
@@ -34,5 +36,7 @@ struct AudioSettings: Codable, Equatable {
         cueFirstChannel = try c.decodeIfPresent(Int.self, forKey: .cueFirstChannel) ?? 0
         padDevice = try c.decodeIfPresent(String.self, forKey: .padDevice)
         padFirstChannel = try c.decodeIfPresent(Int.self, forKey: .padFirstChannel) ?? 0
+        duckUnderPads = try c.decodeIfPresent(Bool.self, forKey: .duckUnderPads) ?? false
+        duckDb = try c.decodeIfPresent(Double.self, forKey: .duckDb) ?? 12
     }
 }

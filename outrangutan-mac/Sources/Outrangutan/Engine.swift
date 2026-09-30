@@ -370,6 +370,8 @@ final class Engine: ObservableObject {
         pads = PadBoard(banks: show.banks, pads: show.pads, multiTrigger: show.multiTrigger)
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
+        // Ducking: cue sound dips while any pad sounds, and comes back after.
+        duckWatch = pads.$sounding.map { !$0.isEmpty }.removeDuplicates().sink { [weak self] busy in self?.setDuck(busy) }
         applySoundRoutes()
         pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
@@ -1210,7 +1212,7 @@ final class Engine: ObservableObject {
     }
 
     private func apply(_ d: Deck) {
-        let level = Float(min(1, masterGain) * (d.cue?.volume ?? 1) * d.soundLevel)
+        let level = Float(min(1, masterGain) * (d.cue?.volume ?? 1) * d.soundLevel * duck)
         // On the lane path the engine sets the level; the player stays silent.
         d.player.volume = d.viaLane ? 0 : level
         if d.viaLane { d.lane.gain.outputVolume = level }
@@ -1422,6 +1424,13 @@ final class Engine: ObservableObject {
     /// How many clock ticks have run; for test mode.
     private var ticks = 0
 
+    /// The level the playing cues' sound is at (volume times fades times
+    /// ducking), for test mode. 0 with nothing playing.
+    var cueLevel: Double {
+        (videoDecks + soundDecks).filter { $0.cue != nil }
+            .map { Double($0.viaLane ? $0.lane.gain.outputVolume : $0.player.volume) }.max() ?? 0
+    }
+
     /// Which path each playing cue's sound takes, for test mode and Show
     /// Check: "player" straight out of its player, "engine" through the cue
     /// sound engine.
@@ -1463,6 +1472,24 @@ final class Engine: ObservableObject {
     private func audioChanged() {
         save()
         applySoundRoutes()
+        setDuck(!pads.sounding.isEmpty)
+    }
+
+    /// How much cue sound is turned down while pads sound: 1 is not at all.
+    private(set) var duck: Double = 1
+    private var duckWatch: AnyCancellable?
+
+    /// Turns cue sound down while pads sound (Settings, Sound), fast on the
+    /// way down and gently on the way back, like a board operator's hand.
+    private func setDuck(_ busy: Bool) {
+        let target = audio.duckUnderPads && busy ? pow(10, -audio.duckDb / 20) : 1
+        guard target != duck else { return }
+        let from = duck
+        fader.run("duck", from: 0, to: 1, seconds: target < from ? 0.15 : 0.8) { [weak self] v in
+            guard let self else { return }
+            self.duck = from + (target - from) * v
+            (self.videoDecks + self.soundDecks).forEach(self.apply)
+        }
     }
 
     private var padsRoute: (device: String?, channel: Int)?

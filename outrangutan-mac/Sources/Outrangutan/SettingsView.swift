@@ -167,10 +167,17 @@ struct SoundSettings: View {
                     }
                 }
                 .disabled(pairs(for: engine.audio.padDevice, picked: engine.audio.padFirstChannel).count < 2)
+                Toggle("Duck cue sound under pads", isOn: $engine.audio.duckUnderPads)
+                Picker("By", selection: $engine.audio.duckDb) {
+                    Text("6 dB (a little)").tag(6.0)
+                    Text("12 dB (half as loud)").tag(12.0)
+                    Text("20 dB (well under)").tag(20.0)
+                }
+                .disabled(!engine.audio.duckUnderPads)
             } header: {
                 Text("Pads")
             } footer: {
-                Text("On an audio interface with more than two outputs, pads can play on their own pair, for their own fader on the board.")
+                Text("On an audio interface with more than two outputs, pads can play on their own pair, for their own fader on the board. Ducking turns the cue sound down while any pad sounds (a music bed under a stinger), and brings it back up over about a second.")
                     .foregroundStyle(.secondary)
             }
             Section {

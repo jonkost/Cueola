@@ -39,6 +39,8 @@ import SwiftUI
 ///   measured against the player's clock, through a pause and All Stop.
 /// - "multiview": the Multiview window with a video on air and a still on
 ///   standby, the preview following the standby, and a preview roll.
+/// - "duck": a video's sound dipping while a pad sounds and coming back
+///   after, and staying put with ducking off.
 enum TestSnapshot {
     static var isOn: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
@@ -282,6 +284,7 @@ enum TestSnapshot {
         ]
         case "cuepair": steps = cuePairSteps(engine: engine, dir: dir, note: note)
         case "multiview": steps = multiviewSteps(engine: engine, dir: dir, note: note, state: state)
+        case "duck": steps = duckSteps(engine: engine, note: note)
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

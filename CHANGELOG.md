@@ -144,6 +144,11 @@ Everywhere
   silently round and round between its trim points, so a clip can be
   checked before it goes to air. Stills, mattes and sound cues show too.
 
+### Outrangutan for Mac: ducking
+- Settings, Sound: "Duck cue sound under pads". While any pad sounds, the
+  cue sound dips by 6, 12 or 20 dB (a music bed under a stinger) and
+  comes back up over about a second once the pads are quiet.
+
 ### Cue cards
 - The video cue card says Video, and its first picker is Source.
 - New transition on the video card: Media wipe. It fills the TAKE line as

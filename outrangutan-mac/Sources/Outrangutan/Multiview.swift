@@ -21,23 +21,23 @@ final class PreviewPlayer: ObservableObject {
     init() {
         player.isMuted = true
         player.automaticallyWaitsToMinimizeStalling = false
-        surface.video.player = player
     }
 
-    /// Loads the standby cue. The same cue again is left as it is (its
-    /// name still refreshes).
+    /// Loads the standby cue. The same file again only refreshes its
+    /// framing and name, so a slider drag in the Inspector does not reload.
     func show(_ cue: Cue?) {
-        if let cue, cue.id == self.cue?.id && cue.trimIn == self.cue?.trimIn && cue.trimOut == self.cue?.trimOut
-            && cue.path == self.cue?.path && cue.color == self.cue?.color {
+        if let cue, let old = self.cue, cue.id == old.id, cue.path == old.path, cue.kind == old.kind,
+           cue.trimIn == old.trimIn, cue.trimOut == old.trimOut {
             self.cue = cue
             caption = cue.name
+            surface.picture.restyle(cue.kind.holds ? .s1 : .a, cue)
             return
         }
         stopRoll()
         self.cue = cue
+        surface.clear()
         guard let cue else {
             player.replaceCurrentItem(with: nil)
-            surface.clear()
             caption = "Nothing on standby"
             return
         }
@@ -46,13 +46,13 @@ final class PreviewPlayer: ObservableObject {
         case .video:
             player.replaceCurrentItem(with: AVPlayerItem(url: cue.url))
             player.seek(to: CMTime(seconds: cue.trimIn, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-            surface.showVideo()
+            surface.picture.showVideo(player, in: .a, cue: cue, opacity: 1)
         case .still:
             player.replaceCurrentItem(with: nil)
-            surface.showImage(NSImage(contentsOf: cue.url))
+            surface.picture.showStill(NSImage(contentsOf: cue.url), in: .s1, cue: cue, opacity: 1)
         case .matte:
             player.replaceCurrentItem(with: nil)
-            surface.showColor(Self.color(cue.color))
+            surface.picture.showStill(nil, in: .s1, cue: cue, opacity: 1)
         case .audio:
             player.replaceCurrentItem(with: nil)
             surface.showSymbol("speaker.wave.2.fill")
@@ -105,66 +105,51 @@ final class PreviewPlayer: ObservableObject {
         let t = player.currentTime().seconds
         return "\(cue.name) (\(cue.kind)) \(surface.showing)\(cue.kind == .video ? String(format: " at %.1f s, %@", t.isFinite ? t : 0, rolling ? "rolling" : "parked") : "")"
     }
-
-    static func color(_ hex: String) -> NSColor {
-        var s = hex.trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("#") { s.removeFirst() }
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return .black }
-        return NSColor(red: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1)
-    }
 }
 
-/// The preview picture: a video layer, an image layer and a color, one
-/// showing at a time.
+/// The preview picture: an output view, so a cue's fit, scale and position
+/// look exactly as they will on air, plus a symbol for sound cues.
 final class PreviewSurface: NSView {
-    let video = AVPlayerLayer()
-    private let image = CALayer()
+    let picture = OutputView()
     private let symbol = CALayer()
-    private(set) var showing = "nothing"
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer = CALayer()
         layer?.backgroundColor = NSColor.black.cgColor
-        video.videoGravity = .resizeAspect
-        image.contentsGravity = .resizeAspect
+        picture.frame = bounds
+        picture.autoresizingMask = [.width, .height]
+        addSubview(picture)
         symbol.contentsGravity = .center
-        for l in [video, image, symbol] {
-            l.isHidden = true
-            l.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
-            layer?.addSublayer(l)
-        }
+        symbol.isHidden = true
+        symbol.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(symbol)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func layout() {
         super.layout()
-        for l in [video, image, symbol] { l.frame = bounds }
+        symbol.frame = bounds
         symbol.contentsScale = window?.backingScaleFactor ?? 2
     }
 
-    func clear() { hideAll(); layer?.backgroundColor = NSColor.black.cgColor; showing = "nothing" }
-    func showVideo() { hideAll(); video.isHidden = false; showing = "video" }
-    func showImage(_ img: NSImage?) {
-        hideAll()
-        image.contents = img.flatMap { $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }
-        image.isHidden = false
-        showing = img == nil ? "missing image" : "image"
+    /// What is showing, for test mode.
+    var showing: String {
+        if !symbol.isHidden { return "sound" }
+        let slots = picture.visibleSlots
+        if slots.isEmpty { return "nothing" }
+        return slots.contains(.a) ? "video" : "picture"
     }
-    func showColor(_ color: NSColor) { hideAll(); layer?.backgroundColor = color.cgColor; showing = "color" }
+
+    func clear() { picture.black(); symbol.isHidden = true }
+
     func showSymbol(_ name: String) {
-        hideAll()
         let config = NSImage.SymbolConfiguration(pointSize: 96, weight: .regular)
         symbol.contents = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(config)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         symbol.isHidden = false
-        showing = "sound"
-    }
-    private func hideAll() {
-        layer?.backgroundColor = NSColor.black.cgColor
-        for l in [video, image, symbol] { l.isHidden = true }
     }
 }
 

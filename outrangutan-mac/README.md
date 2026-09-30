@@ -313,6 +313,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `multiview`: the Multiview window with bars on air and a still on
   standby, the preview following the standby down the list, a preview
   roll between trim points, and a picture of the window.
+- `duck`: a video's sound dipping 12 dB while a pad sounds, coming back
+  after, staying put with ducking off, and dipping when it is switched on
+  mid-pad.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.
