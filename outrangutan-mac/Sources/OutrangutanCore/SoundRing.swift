@@ -12,22 +12,29 @@ public final class SoundClock {
     private var position: Double = 0        // seconds into the cue's file
     private var speed: Double = 0           // 1 playing, 0 paused or stopped
     private var at: Double = 0              // host seconds when noted
-    private var lock = os_unfair_lock()
+    // The lock lives at one fixed address, never copied with the object.
+    private let lock: UnsafeMutablePointer<os_unfair_lock>
 
-    public init(rate: Double = 48000) { self.rate = rate }
+    public init(rate: Double = 48000) {
+        self.rate = rate
+        lock = .allocate(capacity: 1)
+        lock.initialize(to: os_unfair_lock())
+    }
+
+    deinit { lock.deallocate() }
 
     /// Notes that the cue was at `position` seconds, going at `speed`, at
     /// host time `host` (seconds on a clock that never jumps).
     public func note(position: Double, speed: Double, host: Double) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         self.position = position; self.speed = speed; self.at = host
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
     }
 
     /// The frame of the cue's file that is due right now, at host time
     /// `host`, counted at the ring's rate.
     public func dueFrame(host: Double) -> Int {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         let seconds = position + max(0, host - at) * speed
         return Int((seconds * rate).rounded(.down))
     }
@@ -61,13 +68,13 @@ public final class SoundRing {
     private var lastGave = 0
     private var restarts = 0
     private var lastStamp = 0
-    private var lock = os_unfair_lock()
+    private let lock: UnsafeMutablePointer<os_unfair_lock>
 
     /// For checking the stamps: the last chunk's file frame, and how many
     /// times the ring started over because a chunk landed far from the
     /// last one (a seek, or bad stamps).
     public var stamps: (last: Int, restarts: Int) {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return (lastStamp, restarts)
     }
 
@@ -77,11 +84,15 @@ public final class SoundRing {
         self.seekTolerance = max(0, seekTolerance)
         left = [Float](repeating: 0, count: self.capacity)
         right = [Float](repeating: 0, count: self.capacity)
+        lock = .allocate(capacity: 1)
+        lock.initialize(to: os_unfair_lock())
     }
+
+    deinit { lock.deallocate() }
 
     /// Frames waiting to be read.
     public var available: Int {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return count
     }
 
@@ -89,15 +100,15 @@ public final class SoundRing {
     /// frames handed out, and frames that were due but had not arrived
     /// (silence went out instead: a dropout, if it happens mid-cue).
     public var tally: (pushed: Int, delivered: Int, dry: Int) {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return (pushed, delivered, dry)
     }
 
     /// Forgets everything waiting.
     public func flush() {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         head = 0; count = 0; hasData = false; lastGave = 0
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
     }
 
     /// Drops `frames` frames in, the first of them belonging at file frame
@@ -106,7 +117,7 @@ public final class SoundRing {
     @discardableResult
     public func push(left l: UnsafePointer<Float>, right r: UnsafePointer<Float>, frames: Int, at frame: Int) -> Int {
         guard frames > 0 else { return 0 }
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         let expected = headFrame + count
         lastStamp = frame
         var skip = 0
@@ -156,7 +167,7 @@ public final class SoundRing {
     @discardableResult
     public func pop(left l: UnsafeMutablePointer<Float>, right r: UnsafeMutablePointer<Float>, frames: Int, due: Int) -> Int {
         guard frames > 0 else { return 0 }
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         let wanted = hasData ? max(0, min(frames, due - headFrame)) : 0
         let n = min(wanted, count)
         var done = 0
@@ -174,7 +185,7 @@ public final class SoundRing {
         // Counted once per gap, not once per call while the gap lasts.
         if wanted > n && (n > 0 || lastGave > 0) { dry += wanted - n }
         lastGave = n
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         if n < frames {
             l.advanced(by: n).update(repeating: 0, count: frames - n)
             r.advanced(by: n).update(repeating: 0, count: frames - n)
@@ -188,10 +199,12 @@ public final class SoundRing {
 /// two pass through, and more than two use the first two (the left and
 /// right of surround sound).
 public enum Downmix {
-    public static func stereo(channels: [UnsafePointer<Float>], frames: Int,
+    /// `first` is the first channel; `second` is the second, or nil for a
+    /// one-channel sound. Nothing is allocated: it runs on the sound thread.
+    public static func stereo(first: UnsafePointer<Float>, second: UnsafePointer<Float>?, frames: Int,
                               left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>) {
-        guard frames > 0, let first = channels.first else { return }
+        guard frames > 0 else { return }
         left.update(from: first, count: frames)
-        right.update(from: channels.count > 1 ? channels[1] : first, count: frames)
+        right.update(from: second ?? first, count: frames)
     }
 }

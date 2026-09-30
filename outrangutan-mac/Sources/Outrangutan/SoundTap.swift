@@ -38,6 +38,15 @@ private final class TapContext {
     var converter: AVAudioConverter?        // only when the file is not 48 kHz
     var inBuffer: AVAudioPCMBuffer?
     var outBuffer: AVAudioPCMBuffer?
+    var feedInput: AVAudioConverterInputBlock?
+    var given = false                       // the converter has had this call's sound
+    var inputRate: Double = 0
+    /// On the resampled path the stamps run on their own count, because the
+    /// converter's output does not land on the input chunk's exact frame.
+    var nextInStamp: Int?                   // where the next input chunk should start
+    var outStamp = 0                        // the file frame of the next output frame
+    /// A chunk landing this far from where the last ended is a seek.
+    static let seekTolerance = 12000
 
     init(box: PeakBox, lane: SoundLane?) {
         self.box = box
@@ -50,59 +59,74 @@ private final class TapContext {
         left = .allocate(capacity: maxFrames)
         right = .allocate(capacity: maxFrames)
         let rate = format.sampleRate
+        inputRate = rate
+        nextInStamp = nil
         if rate != SoundLane.format.sampleRate, rate > 0,
            let from = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2),
            let conv = AVAudioConverter(from: from, to: SoundLane.format) {
             converter = conv
-            inBuffer = AVAudioPCMBuffer(pcmFormat: from, frameCapacity: AVAudioFrameCount(maxFrames))
+            let input = AVAudioPCMBuffer(pcmFormat: from, frameCapacity: AVAudioFrameCount(maxFrames))
+            inBuffer = input
             let outFrames = Int(Double(maxFrames) * SoundLane.format.sampleRate / rate) + 64
             outBuffer = AVAudioPCMBuffer(pcmFormat: SoundLane.format, frameCapacity: AVAudioFrameCount(outFrames))
+            // Made once here, not on every call on the sound thread.
+            feedInput = { [unowned self] _, status in
+                if self.given { status.pointee = .noDataNow; return nil }
+                self.given = true
+                status.pointee = .haveData
+                return input
+            }
         }
     }
 
     func unprepare() {
         left?.deallocate(); right?.deallocate()
         left = nil; right = nil
-        converter = nil; inBuffer = nil; outBuffer = nil
+        converter = nil; inBuffer = nil; outBuffer = nil; feedInput = nil
     }
 
     /// Hands one call's sound to the lane, as 48 kHz stereo, stamped with
     /// the file frame (at the lane's rate) its first sample belongs to.
     func feed(_ buffers: UnsafeMutableAudioBufferListPointer, frames n: Int, interleaved: Bool, at frame: Int) {
-        guard let lane, let left, let right, n > 0, n <= frames else { return }
-        if interleaved, let first = buffers.first, let data = first.mData?.assumingMemoryBound(to: Float.self) {
+        guard let lane, let left, let right, n > 0, n <= frames, buffers.count > 0,
+              let first = buffers[0].mData?.assumingMemoryBound(to: Float.self) else { return }
+        if interleaved {
             // One buffer with the channels side by side: pick out the first two.
-            let stride = vDSP_Length(first.mNumberChannels)
-            vDSP_mmov(data, left, 1, vDSP_Length(n), stride, 1)
-            if first.mNumberChannels > 1 {
-                vDSP_mmov(data.advanced(by: 1), right, 1, vDSP_Length(n), stride, 1)
+            let stride = vDSP_Length(buffers[0].mNumberChannels)
+            vDSP_mmov(first, left, 1, vDSP_Length(n), stride, 1)
+            if buffers[0].mNumberChannels > 1 {
+                vDSP_mmov(first.advanced(by: 1), right, 1, vDSP_Length(n), stride, 1)
             } else {
                 right.update(from: left, count: n)
             }
         } else {
-            var channels: [UnsafePointer<Float>] = []
-            for b in buffers { if let d = b.mData?.assumingMemoryBound(to: Float.self) { channels.append(UnsafePointer(d)) } }
-            Downmix.stereo(channels: channels, frames: n, left: left, right: right)
+            let second = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float.self) : nil
+            Downmix.stereo(first: first, second: second, frames: n, left: left, right: right)
         }
-        guard let converter, let inBuffer, let outBuffer else {
+        guard let converter, let inBuffer, let outBuffer, let feedInput else {
             lane.ring.push(left: left, right: right, frames: n, at: frame)
             return
         }
+        // A jump in the input stamps is a seek: the converter starts fresh
+        // and the output count starts at the new place.
+        if let expected = nextInStamp, abs(frame - expected) <= Self.seekTolerance {
+            // Carry on counting.
+        } else {
+            converter.reset()
+            outStamp = frame
+        }
+        nextInStamp = frame + Int((Double(n) * SoundLane.format.sampleRate / inputRate).rounded())
         inBuffer.floatChannelData?[0].update(from: left, count: n)
         inBuffer.floatChannelData?[1].update(from: right, count: n)
         inBuffer.frameLength = AVAudioFrameCount(n)
         outBuffer.frameLength = 0
-        var given = false
+        given = false
         var error: NSError?
-        converter.convert(to: outBuffer, error: &error) { _, status in
-            if given { status.pointee = .noDataNow; return nil }
-            given = true
-            status.pointee = .haveData
-            return inBuffer
-        }
+        converter.convert(to: outBuffer, error: &error, withInputFrom: feedInput)
         let out = Int(outBuffer.frameLength)
         if out > 0, let l = outBuffer.floatChannelData?[0], let r = outBuffer.floatChannelData?[1] {
-            lane.ring.push(left: l, right: r, frames: out, at: frame)
+            lane.ring.push(left: l, right: r, frames: out, at: outStamp)
+            outStamp += out
         }
     }
 }
@@ -112,8 +136,8 @@ private final class TapContext {
 /// processing tap); the sound itself goes out exactly as before.
 ///
 /// Given a lane, the same listener also hands the sound to the cue sound
-/// engine, for playing on a chosen channel pair; the player itself is then
-/// muted by the deck.
+/// engine, for playing on a chosen channel pair; the player's own sound is
+/// then turned down to nothing by the deck.
 enum SoundTap {
     static func attach(to item: AVPlayerItem, box: PeakBox, lane: SoundLane? = nil) async {
         guard let track = try? await item.asset.loadTracks(withMediaType: .audio).first else { return }
@@ -150,7 +174,7 @@ enum SoundTap {
                 }
                 if left >= 0 { context.box.store(left, right >= 0 ? right : left) }
                 if context.lane != nil {
-                    let interleaved = list.count == 1 && (list.first?.mNumberChannels ?? 1) > 1
+                    let interleaved = list.count == 1 && list[0].mNumberChannels > 1
                     let start = range.start.isNumeric ? range.start.seconds : 0
                     context.feed(list, frames: Int(framesOut.pointee), interleaved: interleaved,
                                  at: Int((start * SoundLane.format.sampleRate).rounded(.down)))

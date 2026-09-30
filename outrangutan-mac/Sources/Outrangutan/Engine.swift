@@ -33,6 +33,9 @@ final class Deck {
     private var listening = true
     var isListening: Bool { listening }
     private var startWhenListening: (() -> Void)?
+    /// Pause pressed while the cue was still waiting for its listener: the
+    /// start then parks on its first frame instead of playing.
+    private var heldWhileWaiting = false
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
 
@@ -86,6 +89,7 @@ final class Deck {
         peaks = box
         listening = !viaLane
         startWhenListening = nil
+        heldWhileWaiting = false
         Task { [weak self] in
             await SoundTap.attach(to: item, box: box, lane: viaLane ? lane : nil)
             await MainActor.run {
@@ -123,16 +127,49 @@ final class Deck {
         if from > 0 {
             player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
+        if heldWhileWaiting { noteLane(position: from, moving: false); return }
         player.play()
-        syncLane()
+        // Noted with the seek's target: the player may still report the old
+        // place for a moment.
+        noteLane(position: from, moving: true)
     }
 
     func rewindAndPlay() {
         guard listening else { startWhenListening = { [weak self] in self?.rewindAndPlay() }; return }
         lane.ring.flush()
-        player.seek(to: CMTime(seconds: cue?.trimIn ?? 0, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        let from = cue?.trimIn ?? 0
+        player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         player.play()
+        noteLane(position: from, moving: true)
+    }
+
+    /// Holds the cue where it is. One still waiting for its listener stays
+    /// parked when the listener arrives.
+    func pause() {
+        player.pause()
+        heldWhileWaiting = !listening
         syncLane()
+    }
+
+    /// Carries on after a pause.
+    func resume() {
+        heldWhileWaiting = false
+        if listening { player.play() }
+        syncLane()
+    }
+
+    /// Leaves the engine path mid-cue (the pair went back to 1 and 2): the
+    /// sound comes out of the player again from here on.
+    func leaveLane() {
+        guard viaLane else { return }
+        viaLane = false
+        lane.ring.flush()
+        lane.clock.stop()
+    }
+
+    private func noteLane(position: Double, moving: Bool) {
+        guard viaLane else { return }
+        lane.clock.note(position: position, speed: moving ? 1 : 0, host: CACurrentMediaTime())
     }
 
     /// Tells the lane where the player is and whether it is moving, so the
@@ -154,6 +191,7 @@ final class Deck {
         viaLane = false
         listening = true
         startWhenListening = nil
+        heldWhileWaiting = false
         lane.ring.flush()
         lane.clock.stop()
         pictureLevel = 1
@@ -329,8 +367,7 @@ final class Engine: ObservableObject {
         pads = PadBoard(banks: show.banks, pads: show.pads, multiTrigger: show.multiTrigger)
         pads.setMaster(masterGain)
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
-        pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
-        cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
+        applySoundRoutes()
         pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
         log.add(.file, "Outrangutan opened: \(ShowFiles.count(cues.count, "cue")), \(ShowFiles.count(pads.pads.count, "pad"))")
@@ -473,7 +510,7 @@ final class Engine: ObservableObject {
         if paused {
             log.add(.pause, "Carried on after a pause", from: source)
             paused = false
-            for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play(); d.syncLane() }
+            for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.resume() }
             if let left = stillLeft { armStillTimer(left); stillLeft = nil }
             if let left = pendingLeft, let p = pending { schedulePending(p.cue, in: left); pendingLeft = nil }
             refresh()
@@ -483,7 +520,7 @@ final class Engine: ObservableObject {
         } else if hasAnythingToPause {
             log.add(.pause, "Paused", from: source)
             paused = true
-            for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.player.pause(); d.syncLane() }
+            for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.pause() }
             if let ends = stillEndsAt, stillTimer != nil {
                 stillLeft = max(0, ends.timeIntervalSinceNow)
                 stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil
@@ -538,7 +575,7 @@ final class Engine: ObservableObject {
         log.add(.stop, "Fade and stop everything", from: source)
         guard pictureDeck != nil || soundDeck != nil || stillCue != nil else { return stopEverything() }
         if fader.isRunning("all") { return }
-        if paused { paused = false; for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.player.play() } }
+        if paused { paused = false; for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.resume() } }
         let decks = [pictureDeck, soundDeck].compactMap { $0 }
         let startPicture = decks.map { $0.pictureLevel }, startSound = decks.map { $0.soundLevel }
         let startStill = stillLevel
@@ -766,7 +803,7 @@ final class Engine: ObservableObject {
     private func endAction(_ deck: Deck, _ cue: Cue) {
         switch cue.endAction {
         case .hold where cue.kind == .video:
-            deck.player.pause()
+            deck.pause()
             deck.held = true
         case .black:
             let p = deck.pictureLevel, s = deck.soundLevel
@@ -1395,7 +1432,7 @@ final class Engine: ObservableObject {
                 default: status = "waiting: \(d.player.reasonForWaitingToPlay?.rawValue ?? "?")"
                 }
                 let item = d.player.currentItem.map { "\($0.status.rawValue)\($0.error.map { " " + $0.localizedDescription } ?? "") timebase \($0.timebase.map { CMTimebaseGetRate($0) } ?? -1) keepUp \($0.isPlaybackLikelyToKeepUp) listening \(d.isListening) ticks \(self.ticks)" } ?? "no item"
-                return "\(d.cue?.name ?? "-") via \(d.viaLane ? "engine" : "player") rate \(d.player.rate) \(status) item \(item) at \(String(format: "%.3f", d.current - (d.cue?.trimIn ?? 0))) s"
+                return "\(d.cue?.name ?? "-") via \(d.viaLane ? "engine" : "player") vol \(d.player.volume) rate \(d.player.rate) \(status) item \(item) at \(String(format: "%.3f", d.current - (d.cue?.trimIn ?? 0))) s"
             }.joined(separator: ", ")
     }
 
@@ -1422,7 +1459,28 @@ final class Engine: ObservableObject {
 
     private func audioChanged() {
         save()
-        pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
-        cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
+        applySoundRoutes()
+    }
+
+    private var padsRoute: (device: String?, channel: Int)?
+    private var cueRoute: (device: String?, channel: Int)?
+
+    /// Sends the pads and cue sound where Settings says, but only the part
+    /// that changed: re-routing stops sounding pads and restarts the cue
+    /// engine, so touching one picker must not disturb the other.
+    private func applySoundRoutes() {
+        if padsRoute == nil || padsRoute! != (audio.padDevice, audio.padFirstChannel) {
+            pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
+            padsRoute = (audio.padDevice, audio.padFirstChannel)
+        }
+        if cueRoute == nil || cueRoute! != (audio.cueDevice, audio.cueFirstChannel) {
+            cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
+            cueRoute = (audio.cueDevice, audio.cueFirstChannel)
+            if !cueSound.isOn {
+                // Back to 1 and 2: cues on the engine path come out of
+                // their players again, at their level.
+                for d in videoDecks + soundDecks where d.viaLane { d.leaveLane(); apply(d) }
+            }
+        }
     }
 }

@@ -119,23 +119,19 @@ final class SoundRingTests: XCTestCase {
 
     func testDownmix() {
         let mono: [Float] = [1, 2, 3]
-        let five: [[Float]] = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
+        let second: [Float] = [7, 8, 9]
         var l = [Float](repeating: 0, count: 3), r = [Float](repeating: 0, count: 3)
         mono.withUnsafeBufferPointer { m in
             l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in
-                Downmix.stereo(channels: [m.baseAddress!], frames: 3, left: lp.baseAddress!, right: rp.baseAddress!)
+                Downmix.stereo(first: m.baseAddress!, second: nil, frames: 3, left: lp.baseAddress!, right: rp.baseAddress!)
             } }
         }
-        XCTAssertEqual(l, [1, 2, 3]); XCTAssertEqual(r, [1, 2, 3])
-        let ptrs: [UnsafeMutablePointer<Float>] = five.map { values in
-            let p = UnsafeMutablePointer<Float>.allocate(capacity: 2)
-            p[0] = values[0]; p[1] = values[1]
-            return p
-        }
-        defer { ptrs.forEach { $0.deallocate() } }
-        l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in
-            Downmix.stereo(channels: ptrs.map { UnsafePointer($0) }, frames: 2, left: lp.baseAddress!, right: rp.baseAddress!)
+        XCTAssertEqual(l, [1, 2, 3]); XCTAssertEqual(r, [1, 2, 3], "one channel plays on both sides")
+        mono.withUnsafeBufferPointer { m in second.withUnsafeBufferPointer { s in
+            l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in
+                Downmix.stereo(first: m.baseAddress!, second: s.baseAddress!, frames: 3, left: lp.baseAddress!, right: rp.baseAddress!)
+            } }
         } }
-        XCTAssertEqual(Array(l[0..<2]), [1, 2]); XCTAssertEqual(Array(r[0..<2]), [3, 4])
+        XCTAssertEqual(l, [1, 2, 3]); XCTAssertEqual(r, [7, 8, 9])
     }
 }

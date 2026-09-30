@@ -71,21 +71,42 @@ extension TestSnapshot {
             }),
             (1.0, {
                 note("f bars video: \(engine.soundRoutes); lane 0 \(tally(0)) \(lag(0)); meter \(meter())")
+                // Back to channels 1 and 2 while both play: their sound must
+                // come out of the players again, at their level.
+                engine.audio.cueFirstChannel = 0
+                stoppedAt = engine.cueSound.lanes[0].ring.tally.delivered
+                note("f2 pair changed to 1 and 2 mid-cue: engine on=\(engine.cueSound.isOn); \(engine.soundRoutes)")
             }),
-            (0.3, {
+            (0.5, {
+                note("f3 half a second on: \(engine.soundRoutes); lane 0 handed out \(engine.cueSound.lanes[0].ring.tally.delivered - stoppedAt) more; meter \(meter())")
                 engine.allStop()
                 stoppedAt = engine.cueSound.lanes.map { $0.ring.tally.delivered }.reduce(0, +)
             }),
             (0.5, {
                 let now = engine.cueSound.lanes.map { $0.ring.tally.delivered }.reduce(0, +)
                 note("g after All Stop: waiting frames \(engine.cueSound.lanes.map { $0.ring.available }), handed out since \(now - stoppedAt)")
+                // Pause pressed right after GO, before the listener is on:
+                // the cue must park, not play under a PAUSED status.
+                engine.audio.cueFirstChannel = 2
+                engine.standbyID = engine.cues[0].id
+                engine.go()
+                engine.togglePause()
+                note("h GO then Pause at once on the engine path: status=\(engine.status.rawValue)")
+            }),
+            (0.6, {
+                note("h2 0.6 s later: status=\(engine.status.rawValue); \(engine.soundRoutes); lane 2 \(tally(2))")
+                engine.togglePause()
+            }),
+            (0.6, {
+                note("h3 resumed: status=\(engine.status.rawValue); \(engine.soundRoutes); lane 2 \(tally(2)) \(lag(2)); meter \(meter())")
+                engine.allStop()
                 engine.audio.cueFirstChannel = 0
-                note("h channels 1 and 2 picked: engine on=\(engine.cueSound.isOn)")
+                note("i channels 1 and 2 picked: engine on=\(engine.cueSound.isOn)")
                 engine.standbyID = engine.cues[0].id
                 engine.go()
             }),
             (0.8, {
-                note("i applause again: \(engine.soundRoutes); lane 2 \(tally(2)); meter \(meter())")
+                note("i2 applause again: \(engine.soundRoutes); lane 2 \(tally(2)); meter \(meter())")
                 engine.allStop()
             }),
             (0.3, {

@@ -93,8 +93,11 @@ final class ShowFiles: ObservableObject {
     /// the show keeps running while it saves.
     @discardableResult
     func write(to url: URL) async -> Bool {
-        await engine.loadDurationsNow()
+        // Taken before the first wait, so two quick Saves cannot both run.
         guard working == nil else { return false }
+        working = "Reading clip lengths"
+        await engine.loadDurationsNow()
+        working = nil
         let pack: Pack
         do { pack = try makePack() } catch {
             alert("Could not save the show.", error.localizedDescription)
