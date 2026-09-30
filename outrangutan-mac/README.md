@@ -17,6 +17,22 @@ it to Applications.
 Xcode must be installed. You do not need to switch Xcode on first, because
 the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 
+## Put it on the other Mac
+
+After building, make a disk image to carry across:
+
+```
+./package-app.sh
+```
+
+The image lands in `build/Outrangutan.dmg`. AirDrop it or copy it on a
+stick, open it on the other Mac, and drag Outrangutan into Applications.
+The first time it opens, the Mac may say it cannot check the app for
+malware: open System Settings, Privacy & Security, scroll down, click
+"Open Anyway" next to Outrangutan, and open it again. The app is signed
+for your own Macs, not through Apple's notary (that needs the paid
+developer account). A "Read me first" file in the image says the same.
+
 ## Use it
 
 **Help, Outrangutan Help** (Command-?) explains all of this in plain words,
