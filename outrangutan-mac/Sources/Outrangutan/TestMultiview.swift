@@ -40,19 +40,31 @@ extension TestSnapshot {
                 note("4 standby on the matte: preview \(preview.describe)")
                 engine.standbyID = engine.cues[4].id
                 preview.show(engine.standbyCue)
-                note("5 standby on a trimmed video: preview \(preview.describe)")
+            }),
+            (0.4, {
+                note("5 standby on a trimmed video: preview \(preview.describe); parked at 2.0 s: \(preview.seconds == 2 ? "PASS" : "FAIL")")
                 preview.toggleRoll()
             }),
             (1.2, {
-                note("6 rolling 1.2 s later: preview \(preview.describe) (should be past 2 s and under 5 s)")
+                let t = preview.seconds
+                note("6 rolling 1.2 s later: preview \(preview.describe); between 2 and 5 s: \(t > 2 && t < 5 ? "PASS" : "FAIL")")
                 preview.toggleRoll()
             }),
             (0.3, {
-                note("7 stopped: preview \(preview.describe) (back at 2.0 s)")
+                note("7 stopped: preview \(preview.describe); back at 2.0 s: \(preview.seconds == 2 ? "PASS" : "FAIL")")
+                // A short clip with no trim out rolls round at the end of the file.
+                engine.updateAll([engine.cues[4].id], "Trim") { $0.trimIn = 99; $0.trimOut = nil }
+                preview.show(engine.standbyCue)
+                preview.toggleRoll()
+            }),
+            (2.0, {
+                let t = preview.seconds
+                note("8 rolling from 99 s of a 100 s clip, 2 s later: preview \(preview.describe); went round (under 100 s, still rolling): \(t < 100 && preview.rolling ? "PASS" : "FAIL")")
+                preview.toggleRoll()
                 engine.allStop()
             }),
             (0.5, {
-                state("8 after All Stop")
+                state("9 after All Stop")
                 note("   program box shows \(engine.multiviewProgram.visibleSlots.map { "\($0)" })")
             }),
         ]

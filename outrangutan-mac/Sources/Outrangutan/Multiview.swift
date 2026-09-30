@@ -16,6 +16,7 @@ final class PreviewPlayer: ObservableObject {
     private let player = AVPlayer()
     private var cue: Cue?
     private var loopToken: Any?
+    private var endToken: NSObjectProtocol?
 
     init() {
         player.isMuted = true
@@ -23,10 +24,15 @@ final class PreviewPlayer: ObservableObject {
         surface.video.player = player
     }
 
-    /// Loads the standby cue. The same cue again is left as it is.
+    /// Loads the standby cue. The same cue again is left as it is (its
+    /// name still refreshes).
     func show(_ cue: Cue?) {
-        if cue?.id == self.cue?.id && cue?.trimIn == self.cue?.trimIn && cue?.trimOut == self.cue?.trimOut
-            && cue?.path == self.cue?.path && cue?.color == self.cue?.color { return }
+        if let cue, cue.id == self.cue?.id && cue.trimIn == self.cue?.trimIn && cue.trimOut == self.cue?.trimOut
+            && cue.path == self.cue?.path && cue.color == self.cue?.color {
+            self.cue = cue
+            caption = cue.name
+            return
+        }
         stopRoll()
         self.cue = cue
         guard let cue else {
@@ -58,19 +64,20 @@ final class PreviewPlayer: ObservableObject {
     func toggleRoll() {
         guard let cue, cue.kind == .video else { return }
         if rolling { stopRoll(); return }
+        guard let item = player.currentItem else { return }
         rolling = true
         let start = CMTime(seconds: cue.trimIn, preferredTimescale: 600)
+        let back: @Sendable () -> Void = { [weak self] in
+            Task { @MainActor in self?.player.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero) }
+        }
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
-            loopToken = player.addBoundaryTimeObserver(forTimes: [at], queue: .main) { [weak self] in
-                self?.player.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero)
-            }
-        } else {
-            player.actionAtItemEnd = .none
-            NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { [weak self] _ in
-                self?.player.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero)
-            }
+            loopToken = player.addBoundaryTimeObserver(forTimes: [at], queue: .main, using: back)
         }
+        // The end of the file also goes round: a trim out past the end, or
+        // no trim out at all, must not leave the roll stuck on the last frame.
+        player.actionAtItemEnd = .none
+        endToken = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in back() }
         player.play()
     }
 
@@ -78,10 +85,18 @@ final class PreviewPlayer: ObservableObject {
         guard rolling else { return }
         rolling = false
         player.pause()
+        player.actionAtItemEnd = .pause
         if let loopToken { player.removeTimeObserver(loopToken) }
         loopToken = nil
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        if let endToken { NotificationCenter.default.removeObserver(endToken) }
+        endToken = nil
         if let cue { player.seek(to: CMTime(seconds: cue.trimIn, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+    }
+
+    /// Where the preview video is, in seconds, rounded to a tenth; for test mode.
+    var seconds: Double {
+        let t = player.currentTime().seconds
+        return t.isFinite ? (t * 10).rounded() / 10 : 0
     }
 
     /// What the preview holds, for test mode.
@@ -174,11 +189,10 @@ struct MultiviewView: View {
                 HStack(spacing: unit) {
                     box(title: "PROGRAM", name: onAirName, tally: onAir ? .red : nil, unit: unit) {
                         ProgramPreview(view: engine.multiviewProgram)
-                    }
+                    } corner: { EmptyView() }
                     box(title: "PREVIEW", name: preview.caption, tally: engine.standbyCue == nil ? nil : .green, unit: unit) {
                         PreviewBox(view: preview.surface)
-                    }
-                    .overlay(alignment: .topTrailing) { rollButton(unit) }
+                    } corner: { rollButton(unit) }
                 }
                 HStack(alignment: .top, spacing: unit) {
                     clock(unit)
@@ -191,6 +205,8 @@ struct MultiviewView: View {
         .background(Color.black)
         .preferredColorScheme(.dark)
         .onAppear { preview.show(engine.standbyCue) }
+        // A closed window holds no file open and rolls nothing.
+        .onDisappear { preview.show(nil) }
         .onChange(of: engine.standbyID) { _, _ in preview.show(engine.standbyCue) }
         .onChange(of: engine.cues) { _, _ in preview.show(engine.standbyCue) }
     }
@@ -207,12 +223,14 @@ struct MultiviewView: View {
     }
 
     @ViewBuilder
-    private func box<Content: View>(title: String, name: String, tally: Color?, unit: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+    private func box<Content: View, Corner: View>(title: String, name: String, tally: Color?, unit: CGFloat,
+                                                  @ViewBuilder content: () -> Content, @ViewBuilder corner: () -> Corner) -> some View {
         VStack(spacing: unit * 0.4) {
             content()
                 .aspectRatio(16 / 9, contentMode: .fit)
-                .overlay(RoundedRectangle(cornerRadius: unit * 0.5).stroke(tally ?? Color.white.opacity(0.15), lineWidth: tally == nil ? 1 : unit * 0.35))
                 .clipShape(RoundedRectangle(cornerRadius: unit * 0.5))
+                .overlay(RoundedRectangle(cornerRadius: unit * 0.5).strokeBorder(tally ?? Color.white.opacity(0.15), lineWidth: tally == nil ? 1 : unit * 0.35))
+                .overlay(alignment: .topTrailing) { corner() }
             HStack(spacing: unit * 0.6) {
                 Text(title)
                     .font(.system(size: unit * 1.6, weight: .bold))
@@ -249,7 +267,7 @@ struct MultiviewView: View {
                 Text(engine.status.rawValue)
                     .font(.system(size: unit * 2, weight: .bold))
                     .foregroundStyle(clockColor)
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970)), by: 1)) { context in
                     Text(context.date, format: .dateTime.hour().minute().second())
                         .font(.system(size: unit * 2, weight: .medium))
                         .monospacedDigit()
