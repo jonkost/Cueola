@@ -1297,6 +1297,15 @@ final class Engine: ObservableObject {
         RecoveryPoint.clear()
     }
 
+    /// Loads any clip lengths still unknown, so a show file written right
+    /// after clips were added carries their lengths for the web app.
+    @MainActor
+    func loadDurationsNow() async {
+        for cue in cues where !cue.kind.holds && durations[cue.id] == nil && cue.fileIsThere {
+            if let time = try? await AVURLAsset(url: cue.url).load(.duration), time.isNumeric { durations[cue.id] = time.seconds }
+        }
+    }
+
     private func loadDurations() {
         for cue in cues where !cue.kind.holds && durations[cue.id] == nil && cue.fileIsThere {
             let asset = AVURLAsset(url: cue.url)

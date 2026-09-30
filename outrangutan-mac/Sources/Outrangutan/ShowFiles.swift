@@ -93,6 +93,7 @@ final class ShowFiles: ObservableObject {
     /// the show keeps running while it saves.
     @discardableResult
     func write(to url: URL) async -> Bool {
+        await engine.loadDurationsNow()
         guard working == nil else { return false }
         let pack: Pack
         do { pack = try makePack() } catch {

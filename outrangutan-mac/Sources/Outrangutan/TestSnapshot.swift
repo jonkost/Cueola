@@ -1126,7 +1126,9 @@ enum TestSnapshot {
                     let payload = try ShowFiles.readManifest(showURL)
                     let show = payload["show"] as? [String: Any] ?? [:]
                     note("c the file holds: \(zip.names.sorted().joined(separator: ", "))")
-                    note("   show.json: \((show["cues"] as? [Any])?.count ?? 0) cues, \((show["pads"] as? [Any])?.count ?? 0) pads, \((payload["mediaIndex"] as? [String: Any])?.count ?? 0) media")
+                    let index = (payload["mediaIndex"] as? [String: Any]) ?? [:]
+                    let lengths = index.values.compactMap { ($0 as? [String: Any])?["duration"] as? Double }.filter { $0 > 0 }.count
+                    note("   show.json: \((show["cues"] as? [Any])?.count ?? 0) cues, \((show["pads"] as? [Any])?.count ?? 0) pads, \(index.count) media, \(lengths) with a length (stills and mattes have none)")
                     let size = (try? FileManager.default.attributesOfItem(atPath: showURL.path)[.size] as? NSNumber)?.intValue ?? 0
                     note("   size: \(size / 1024) KB")
                 } catch { note("c could not read the file back: \(error)") }
