@@ -27,6 +27,12 @@ final class Deck {
     /// True while the cue on this deck plays its sound through the engine
     /// (a channel pair other than 1 and 2). The player is then muted.
     private(set) var viaLane = false
+    /// On the lane path, the sound listener must be on before the cue
+    /// starts, or its first frames never reach the engine. A start asked
+    /// for before then waits here.
+    private var listening = true
+    var isListening: Bool { listening }
+    private var startWhenListening: (() -> Void)?
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
 
@@ -78,7 +84,18 @@ final class Deck {
         if cue.kind == .video && cue.key.mode != .off { key(item, cue.key) }
         let box = PeakBox()
         peaks = box
-        Task { await SoundTap.attach(to: item, box: box, lane: viaLane ? lane : nil) }
+        listening = !viaLane
+        startWhenListening = nil
+        Task { [weak self] in
+            await SoundTap.attach(to: item, box: box, lane: viaLane ? lane : nil)
+            await MainActor.run {
+                guard let self, self.player.currentItem === item else { return }
+                self.listening = true
+                let start = self.startWhenListening
+                self.startWhenListening = nil
+                start?()
+            }
+        }
         player.replaceCurrentItem(with: item)
         if let out = cue.trimOut, out > cue.trimIn {
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
@@ -100,6 +117,7 @@ final class Deck {
     /// show left off.
     func start(at offset: Double? = nil) {
         guard let cue else { return }
+        guard listening else { startWhenListening = { [weak self] in self?.start(at: offset) }; return }
         let from = max(cue.trimIn, offset ?? 0)
         lane.ring.flush()
         if from > 0 {
@@ -110,6 +128,7 @@ final class Deck {
     }
 
     func rewindAndPlay() {
+        guard listening else { startWhenListening = { [weak self] in self?.rewindAndPlay() }; return }
         lane.ring.flush()
         player.seek(to: CMTime(seconds: cue?.trimIn ?? 0, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         player.play()
@@ -133,6 +152,8 @@ final class Deck {
         held = false
         fadingOut = false
         viaLane = false
+        listening = true
+        startWhenListening = nil
         lane.ring.flush()
         lane.clock.stop()
         pictureLevel = 1
@@ -1235,6 +1256,7 @@ final class Engine: ObservableObject {
         else { left = nil }
         if left != remaining { remaining = left }
         if left != nil || pending != nil { onTick?() }
+        ticks += 1
         (videoDecks + soundDecks).forEach { $0.syncLane() }
         readCueMeter()
         noteRecoveryPoint()
@@ -1348,12 +1370,24 @@ final class Engine: ObservableObject {
         return audio.cueDevice
     }
 
+    /// How many clock ticks have run; for test mode.
+    private var ticks = 0
+
     /// Which path each playing cue's sound takes, for test mode and Show
     /// Check: "player" straight out of its player, "engine" through the cue
     /// sound engine.
     var soundRoutes: String {
         (videoDecks + soundDecks).filter { $0.cue != nil }
-            .map { "\($0.cue?.name ?? "-") via \($0.viaLane ? "engine" : "player") rate \($0.player.rate) at \(String(format: "%.3f", $0.current - ($0.cue?.trimIn ?? 0))) s" }.joined(separator: ", ")
+            .map { d in
+                let status: String
+                switch d.player.timeControlStatus {
+                case .playing: status = "playing"
+                case .paused: status = "paused"
+                default: status = "waiting: \(d.player.reasonForWaitingToPlay?.rawValue ?? "?")"
+                }
+                let item = d.player.currentItem.map { "\($0.status.rawValue)\($0.error.map { " " + $0.localizedDescription } ?? "") timebase \($0.timebase.map { CMTimebaseGetRate($0) } ?? -1) keepUp \($0.isPlaybackLikelyToKeepUp) listening \(d.isListening) ticks \(self.ticks)" } ?? "no item"
+                return "\(d.cue?.name ?? "-") via \(d.viaLane ? "engine" : "player") rate \(d.player.rate) \(status) item \(item) at \(String(format: "%.3f", d.current - (d.cue?.trimIn ?? 0))) s"
+            }.joined(separator: ", ")
     }
 
     /// Where the player on a lane is, in seconds into its file; for test mode.

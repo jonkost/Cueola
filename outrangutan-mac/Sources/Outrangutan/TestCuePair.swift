@@ -53,7 +53,7 @@ extension TestSnapshot {
                 engine.go()
             }),
             (1.0, {
-                note("c tone (48 kHz stereo): \(engine.soundRoutes); lane 3 \(tally(3)) \(lag(3)); meter \(meter())")
+                note("c tone (48 kHz stereo): \(engine.soundRoutes); lane 3 \(tally(3)) \(lag(3)); lane 2 now \(tally(2)); meter \(meter())")
                 engine.togglePause()
             }),
             (0.6, {
@@ -88,6 +88,13 @@ extension TestSnapshot {
                 note("i applause again: \(engine.soundRoutes); lane 2 \(tally(2)); meter \(meter())")
                 engine.allStop()
             }),
+            (0.3, {
+                // The Sound settings, with channels 3 and 4 picked on a Mac
+                // whose speakers only have 1 and 2.
+                engine.audio.cueFirstChannel = 2
+                picture(SoundSettings(engine: engine), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("sound-settings.png"))
+            }),
+            (1.0, { engine.audio.cueFirstChannel = 0 }),
         ]
     }
 }

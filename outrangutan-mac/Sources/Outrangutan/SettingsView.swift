@@ -135,6 +135,7 @@ struct OutputSettings: View {
 struct SoundSettings: View {
     @ObservedObject var engine: Engine
     @State private var devices = AudioDevices.outputs()
+    @State private var fallback = AudioDevices.defaultOutput()
 
     var body: some View {
         Form {
@@ -144,11 +145,11 @@ struct SoundSettings: View {
                     ForEach(devices) { Text($0.name).tag(String?.some($0.uid)) }
                 }
                 Picker("Channels", selection: $engine.audio.cueFirstChannel) {
-                    ForEach(pairs(for: engine.audio.cueDevice), id: \.self) { first in
-                        Text("\(first + 1) and \(first + 2)").tag(first)
+                    ForEach(pairs(for: engine.audio.cueDevice, picked: engine.audio.cueFirstChannel), id: \.self) { first in
+                        Text(pairName(first, on: engine.audio.cueDevice)).tag(first)
                     }
                 }
-                .disabled(pairs(for: engine.audio.cueDevice).count < 2)
+                .disabled(pairs(for: engine.audio.cueDevice, picked: engine.audio.cueFirstChannel).count < 2)
             } header: {
                 Text("Cue sound")
             } footer: {
@@ -161,11 +162,11 @@ struct SoundSettings: View {
                     ForEach(devices) { Text($0.name).tag(String?.some($0.uid)) }
                 }
                 Picker("Channels", selection: $engine.audio.padFirstChannel) {
-                    ForEach(pairs(for: engine.audio.padDevice), id: \.self) { first in
-                        Text("\(first + 1) and \(first + 2)").tag(first)
+                    ForEach(pairs(for: engine.audio.padDevice, picked: engine.audio.padFirstChannel), id: \.self) { first in
+                        Text(pairName(first, on: engine.audio.padDevice)).tag(first)
                     }
                 }
-                .disabled(pairs(for: engine.audio.padDevice).count < 2)
+                .disabled(pairs(for: engine.audio.padDevice, picked: engine.audio.padFirstChannel).count < 2)
             } header: {
                 Text("Pads")
             } footer: {
@@ -173,16 +174,30 @@ struct SoundSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section {
-                Button("Check Sound Devices Again") { devices = AudioDevices.outputs() }
+                Button("Check Sound Devices Again") { devices = AudioDevices.outputs(); fallback = AudioDevices.defaultOutput() }
             }
         }
         .formStyle(.grouped)
     }
 
     /// Channel pairs a device offers: 0 is 1 and 2, 2 is 3 and 4, and so on.
-    private func pairs(for uid: String?) -> [Int] {
-        let device = AudioDevices.device(uid: uid) ?? AudioDevices.defaultOutput()
-        let channels = device?.channels ?? 2
-        return stride(from: 0, to: max(2, channels) - 1, by: 2).map { $0 }
+    /// The pair already picked is always listed, even when the device that
+    /// offered it is unplugged, so the choice shows and can be changed.
+    private func pairs(for uid: String?, picked: Int) -> [Int] {
+        let channels = device(uid)?.channels ?? 2
+        var pairs = stride(from: 0, to: max(2, channels) - 1, by: 2).map { $0 }
+        if !pairs.contains(picked) { pairs.append(picked) }
+        return pairs
+    }
+
+    private func pairName(_ first: Int, on uid: String?) -> String {
+        let missing = first + 2 > (device(uid)?.channels ?? 2)
+        return "\(first + 1) and \(first + 2)" + (missing ? " (not on this device)" : "")
+    }
+
+    /// From the list already fetched: asking the Mac for its sound devices
+    /// on every redraw is slow enough to hold up a cue starting.
+    private func device(_ uid: String?) -> AudioDevice? {
+        devices.first { $0.uid == uid } ?? fallback
     }
 }
