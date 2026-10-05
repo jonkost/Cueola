@@ -174,3 +174,5 @@ There is almost no dead JavaScript: 9 of 1,720 top-level functions in `cueola-ap
 
 **P1-2 Time field defaults to 12:30.** "12:30" appears nowhere in the tree, any branch's history, or seed data, and every hydrate path writes `''` for unset. The most likely origin is by design: new and fill-from-roster crew rows on the call sheet inherit the sheet's Call Time into their per-person time cell (31297-31307, 31329, 31342); the schedule's Doors auto-links from the call sheet (29771, 29794, 22049); and iPadOS commits a native time picker's initial value on first touch. Fix direction: never copy a time into a new row, store `null`, show a placeholder, and add a regression test that every new show, cue, call-sheet and schedule entry hydrates blank.
 
+Update Oct 5: wrong for Safari. Safari paints 12:30 PM into an empty time box by itself; nothing in the saved data does it. See cueola-blank-time.js and the rule in CLAUDE.md.
+

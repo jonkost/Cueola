@@ -1,5 +1,6 @@
-// P1-2 regression guard: a time field that was never set stays blank.
-// Source-text contract over cueola-app.js (no build step, no DOM in node).
+// Data guard: the app never writes a time into a box nobody filled in.
+// It reads source text only, so it cannot see what a browser paints.
+// blank-time.test.mjs and blank-time-safari.browser.mjs check the screen.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';

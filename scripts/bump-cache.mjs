@@ -18,6 +18,7 @@
  */
 
 export const ASSETS = [
+  'cueola-blank-time.js',
   'cueola-avatar-profile.js',
   'cueola-assignment-model.js',
   'cueola-session-clone.js',

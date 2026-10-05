@@ -17,6 +17,7 @@ Cueola is a classroom TV-production app built by Jon, an instructor. Students us
 - The "Who worked on what" log in Planda Bear stays.
 - The frame-rate setting stays. The house standard is 1080i at 29.97, so the clocks count 29.97 drop-frame by default.
 - Lesson text is read aloud by recorded narration. Do not change lesson words; the recordings are made from them on Jon's machine.
+- An empty time or date box shows dashes (--:--), never a time. Safari on a Mac paints "12:30 PM" (or today's date) into an empty box by itself. Chrome does not, and the preview pane and the smoke tests are Chrome, so a check there proves nothing. `cueola-blank-time.js` covers it on every page that has a time box. A new page with a time or date box must load that file. Do not use a combined date-and-time box: Safari paints into those too and the file does not cover them. To see what Safari shows, run `BLANK_TIME_SHOTS=/tmp/shots node scripts/tests/blank-time-safari.browser.mjs` on a Mac and look at the pictures. Not on a Mac? Tell Jon; do not call a time-box change done.
 
 ## How the app is built
 
@@ -34,6 +35,7 @@ for f in scripts/tests/*.test.mjs; do node "$f"; done
 node scripts/tests/live-smoke.browser.mjs
 node scripts/tests/cue-editor-smoke.browser.mjs
 node scripts/tests/join-smoke.browser.mjs   # a signed-in join by code, the path the demo never takes
+node scripts/tests/blank-time-safari.browser.mjs   # Mac only: empty time boxes in Safari's own engine
 node scripts/bump-cache.mjs              # after any change to a script file
 ```
 

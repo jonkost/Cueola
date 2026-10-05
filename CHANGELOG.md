@@ -2,6 +2,31 @@
 
 ## Next release (not pushed yet)
 
+### Empty time boxes in Safari (Oct 5)
+
+**An empty time box shows --:-- in Safari, never 12:30 PM.** Safari paints
+"12:30 PM" into every empty time box and today's date into every empty date
+box. Nothing was saved, but it read like a real call time. Chrome paints
+dashes, and every earlier fix was checked in Chrome, so it looked fixed and
+then "came back". The app now draws the dashes itself in Safari.
+
+- Every time and date box is covered: the call sheet (and its crew rows), the
+  production schedule, the Start Time in Settings and on the dashboard, and
+  the prompter's Count to box.
+- An empty date box shows --/--/---- instead of today's date.
+- A half-typed time shows what you typed and dashes for the rest (09:15 --).
+  Safari used to show a made-up "PM" there, and the time was not saved until
+  you picked AM or PM yourself. Now you can see it is not finished.
+- A box set to N/A shows dashes, even if a time was half typed in it. So
+  does a new call sheet.
+- On an iPad an empty time box used to be blank. It shows the same dashes.
+  Tapping it still opens the wheel, and the wheel still fills in the time
+  right now: the iPad does that itself.
+- New check that runs the app in Safari's own engine. It runs on a Mac,
+  before a push. It is on the list in CLAUDE.md.
+- After this update, reload the front page twice on each Mac and iPad, then
+  reopen the other Cueola windows.
+
 ### Pre-class polish (Sept 29)
 
 A full sweep before class: over 200 fixes across every screen. Sign-in,

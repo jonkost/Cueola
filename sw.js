@@ -115,6 +115,7 @@ const SHELL_ASSETS = [
   'demo-media/demo-aww.wav',
   'demo-media/demo-rimshot.wav',
   'demo-media/demo-airhorn.wav',
+  'cueola-blank-time.js?v=624f0ce4df',
   'cueola-avatar-profile.js?v=564c2fe2eb',
   'cueola-assignment-model.js?v=d81e0cf353',
   'cueola-session-clone.js?v=3e5916bd3c',
@@ -277,7 +278,10 @@ const versionSignature = SHELL_ASSETS
 // 51->52: pre-class polish (Sept 29). Planda Bear saves whole pages again
 // (field-level saves off), about 200 fixes across every page and script;
 // every window reloads.
-const WORKER_SCHEMA = '52';
+// 52->53: an empty time or date box shows dashes in Safari instead of the
+// 12:30 PM (or today's date) Safari paints by itself. New cueola-blank-time.js
+// on index.html, dashboard.html and script-operator.html; every window reloads.
+const WORKER_SCHEMA = '53';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

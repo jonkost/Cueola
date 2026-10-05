@@ -451,6 +451,8 @@ where prod-schedule 'Doors Open' is type=text (index.html:4934) vs the call shee
 (:4805) — migrate to type=time with a text-fallback read. Rundown Start column already prints '—'
 via clock() (:1313) — leave.
 
+Update Oct 5: wrong for Safari. Safari paints 12:30 PM into an empty time box by itself; nothing in the saved data does it. See cueola-blank-time.js and the rule in CLAUDE.md.
+
 ### D9.7 Industry-standard fields (add/alter) + pass-through
 Gaps verified against a standard film/TV call sheet. ADD: day-of-days ("Day 2 of 5"); key-contacts
 block (Producer / Director / TD / Instructor with phones); **nearest-hospital box on the call

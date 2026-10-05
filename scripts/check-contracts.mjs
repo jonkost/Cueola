@@ -158,10 +158,10 @@ export function checkContracts(pages, allowlist = {}) {
 
 /* Which scripts serve which page. Outrangutan rides index.html. */
 export const PAGE_CONFIG = [
-  { name: 'index', html: ['index.html'], js: ['cueola-avatar-profile.js', 'cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-export-model.js', 'cueola-prepro-sync.js', 'cueola-pin.js', 'cueola-identity.js', 'cueola-admin-auth.js', 'cueola-live-session.js', 'cueola-live-state.js', 'cueola-link-state.js', 'cueola-keymap.js', 'cueola-mac-link.js', 'cueola-prompter-session.js', 'cueola-script-operator-protocol.js', 'outrangutan/output-protocol.js', 'outrangutan/kiosk-transport.js', 'outrangutan/stream-deck-label.js', 'cueola-app.js', 'outrangutan/outrangutan.js', 'cueola-streamdeck-device.js', 'cueola-obs.js', 'assets/keywi-art/manifest.js', 'cueola-streamdeck.js'] },
-  { name: 'script-operator', html: ['script-operator.html'], js: ['cueola-keymap.js', 'cueola-script-operator-protocol.js', 'cueola-scriptop-prefs.js', 'script-operator.js'] },
+  { name: 'index', html: ['index.html'], js: ['cueola-blank-time.js', 'cueola-avatar-profile.js', 'cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-export-model.js', 'cueola-prepro-sync.js', 'cueola-pin.js', 'cueola-identity.js', 'cueola-admin-auth.js', 'cueola-live-session.js', 'cueola-live-state.js', 'cueola-link-state.js', 'cueola-keymap.js', 'cueola-mac-link.js', 'cueola-prompter-session.js', 'cueola-script-operator-protocol.js', 'outrangutan/output-protocol.js', 'outrangutan/kiosk-transport.js', 'outrangutan/stream-deck-label.js', 'cueola-app.js', 'outrangutan/outrangutan.js', 'cueola-streamdeck-device.js', 'cueola-obs.js', 'assets/keywi-art/manifest.js', 'cueola-streamdeck.js'] },
+  { name: 'script-operator', html: ['script-operator.html'], js: ['cueola-blank-time.js', 'cueola-keymap.js', 'cueola-script-operator-protocol.js', 'cueola-scriptop-prefs.js', 'script-operator.js'] },
   { name: 'outrangutan-output', html: ['outrangutan/output.html'], js: ['outrangutan/output-protocol.js', 'outrangutan/output-command-queue.js', 'outrangutan/kiosk-transport.js'] },
-  { name: 'dashboard', html: ['dashboard.html'], js: ['cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-pin.js', 'cueola-admin-auth.js'] },
+  { name: 'dashboard', html: ['dashboard.html'], js: ['cueola-blank-time.js', 'cueola-assignment-model.js', 'cueola-session-clone.js', 'break-room-show.js', 'cueola-pin.js', 'cueola-admin-auth.js'] },
 ];
 
 /* A script a page loads but PAGE_CONFIG does not list is never checked, so

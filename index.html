@@ -2951,6 +2951,8 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-clock-fields label>span,.flow-wrap-custom>span{display:inline-flex;align-items:center;gap:5px;min-width:0}
 .flow-clock-fields b,.flow-wrap-custom b{font:inherit}
 .flow-clock-fields input,.flow-wrap-custom input{min-width:0;width:100%;background:transparent;border:0;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:14px;outline:none}
+/* An empty "Count to" box draws its dashes in the prompter's colours (cueola-blank-time.js). */
+.flow-clock-fields input{--blank-time-ink:var(--pt-text,#f0ead6);--blank-time-hint:color-mix(in srgb,var(--pt-text,#f0ead6) 55%,var(--pt-bg,#08090f))}
 .flow-clock-fields input:focus-visible,.flow-wrap-custom input:focus-visible{outline:2px solid color-mix(in srgb,var(--pt-accent,#7eb8c8) 78%,white);outline-offset:2px}
 .flow-wrap-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .pt-wrap-btn{border-color:transparent;background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);color:color-mix(in srgb,var(--red,#f05252) 82%,var(--pt-text,var(--text)))}
@@ -7286,6 +7288,7 @@ input.pt-range::-moz-range-thumb,
   <div id="sd-toast"></div>
 </div>
 
+<script src="cueola-blank-time.js?v=624f0ce4df"></script>
 <script src="cueola-avatar-profile.js?v=564c2fe2eb"></script>
 <script src="cueola-assignment-model.js?v=d81e0cf353"></script>
 <script src="cueola-session-clone.js?v=3e5916bd3c"></script>
