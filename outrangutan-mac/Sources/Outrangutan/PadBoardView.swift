@@ -129,7 +129,10 @@ struct PadBoardView: View {
 
     private func bar(compact: Bool, flexBanks: Bool) -> some View {
         HStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            // A plain row, never a scroll view: a scroll view inside the
+            // fit-or-shrink measuring above sent the window into an endless
+            // layout loop (the launch crash of Oct 8).
+            Group {
                 HStack(spacing: 6) {
                     ForEach(board.banks) { bank in
                         let on = bank.id == board.currentBankID
@@ -153,8 +156,9 @@ struct PadBoardView: View {
                 }
             }
             // The banks hug their names so the + sits right after them;
-            // only with too many banks to fit does the row scroll.
+            // with too many banks to fit, the last names give way.
             .fixedSize(horizontal: !flexBanks, vertical: false)
+            .clipped()
             // Outside the scrolling row of banks, so it is never squeezed.
             Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
                 .labelStyle(.iconOnly)
