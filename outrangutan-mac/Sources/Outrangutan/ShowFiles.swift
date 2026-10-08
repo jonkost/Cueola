@@ -359,7 +359,8 @@ final class ShowFiles: ObservableObject {
             let id = Wire.string(c["id"]).flatMap { $0.isEmpty ? nil : $0 } ?? Cue.newWireID(offsetMs: i)
             var cue = Cue(name: Wire.string(c["name"]) ?? "Untitled", path: path, kind: kind, wireID: id)
             if kind == .matte { cue.color = (mac?["color"] as? String).flatMap { NSColor(hex: $0)?.hexString } ?? "#000000" }
-            cue.hotkey = (mac?["hotkey"] as? String) ?? ""
+            let key = ((mac?["hotkey"] as? String) ?? "").lowercased()
+            cue.hotkey = PadBoard.keys.contains(key) ? key : ""
             cue.preWait = max(0, Wire.number(c["preWait"]) ?? 0)
             cue.continueMode = ContinueMode(rawValue: Wire.string(c["continueMode"]) ?? "") ?? .manual
             if let end = EndAction(rawValue: Wire.string(c["endAction"]) ?? "") { cue.endAction = end }

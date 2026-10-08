@@ -126,6 +126,10 @@ final class PadBoard: ObservableObject {
     @Published var selectedPadID: String?
     /// Editing is locked for the show: pads still play.
     @Published var locked = false
+    /// Counts up each time a pad is clicked, so the window knows the pads
+    /// were touched last (the Inspector follows).
+    @Published private(set) var touches = 0
+    func touched() { touches += 1 }
     /// Pads sounding now: when each started and how long it runs (nil loops).
     @Published private(set) var sounding: [String: (start: Date, length: Double?)] = [:] {
         didSet {

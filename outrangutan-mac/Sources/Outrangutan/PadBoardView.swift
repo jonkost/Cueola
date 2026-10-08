@@ -212,6 +212,7 @@ struct PadTile: View {
         }
         .onTapGesture {
             board.selectedPadID = pad.id
+            board.touched()
             board.fire(pad.id)
         }
         .contextMenu {

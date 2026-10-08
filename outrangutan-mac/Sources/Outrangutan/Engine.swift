@@ -372,6 +372,7 @@ final class Engine: ObservableObject {
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         // Ducking: cue sound dips while any pad sounds, and comes back after.
         duckWatch = pads.$sounding.map { !$0.isEmpty }.removeDuplicates().sink { [weak self] busy in self?.setDuck(busy) }
+        watchShowKeys()
         applySoundRoutes()
         pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
@@ -612,6 +613,7 @@ final class Engine: ObservableObject {
     /// the web app.
     @discardableResult
     func fire(_ cue: Cue, from: String? = nil) -> WireResult {
+        if let p = pending { log.add(.problem, "\u{201C}\(p.cue.name)\u{201D} was waiting and never fired: \u{201C}\(cue.name)\u{201D} came first", from: from ?? source) }
         cancelPending()
         guard cue.fileIsThere else { return refuse("Can't find the file for \"\(cue.name)\". It may have moved.") }
         notice = nil
@@ -1027,6 +1029,7 @@ final class Engine: ObservableObject {
         copy.id = UUID()
         copy.wireID = Cue.newWireID()
         copy.name += " copy"
+        copy.hotkey = ""        // one key, one cue
         cues.insert(copy, at: i + 1)
         standbyID = copy.id
     }
@@ -1451,6 +1454,31 @@ final class Engine: ObservableObject {
     /// The cue a hotkey fires, if any cue has that key.
     func cue(forHotkey key: String) -> Cue? {
         key.isEmpty ? nil : cues.first { $0.hotkey == key }
+    }
+
+    /// Gives a cue a hotkey. A key belongs to one cue at a time, so any
+    /// other cue that had it lets go. "" takes the key away.
+    func setHotkey(_ id: UUID, _ key: String) {
+        let k = key.lowercased()
+        guard cues.contains(where: { $0.id == id }), cues.first(where: { $0.id == id })?.hotkey != k else { return }
+        noteUndo("Hotkey", key: "hotkey:\(id)")
+        for i in cues.indices {
+            if cues[i].id == id { cues[i].hotkey = k } else if !k.isEmpty && cues[i].hotkey == k { cues[i].hotkey = "" }
+        }
+    }
+
+    /// A show key (GO, Pause...) always wins, so a cue hotkey it takes is
+    /// cleared, the way a pad's is.
+    private var showKeyWatch: AnyCancellable?
+    private func watchShowKeys() {
+        showKeyWatch = KeyMap.shared.$keys.sink { [weak self] keys in
+            guard let self else { return }
+            let taken = Set(keys.values.map(\.padName).filter { !$0.isEmpty })
+            let clashing = self.cues.filter { !$0.hotkey.isEmpty && taken.contains($0.hotkey) }
+            guard !clashing.isEmpty else { return }
+            for c in clashing { self.log.add(.problem, "\u{201C}\(c.name)\u{201D} lost its hotkey \(c.hotkey.uppercased()): a show key took it") }
+            for i in self.cues.indices where taken.contains(self.cues[i].hotkey) { self.cues[i].hotkey = "" }
+        }
     }
 
     /// Where the player on a lane is, in seconds into its file; for test mode.

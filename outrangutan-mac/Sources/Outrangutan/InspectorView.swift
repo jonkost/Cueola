@@ -75,7 +75,7 @@ struct InspectorView: View {
             InspectorRow("Fire on GO") { Toggle("", isOn: bind(cue, \.armed)).labelsHidden().toggleStyle(.switch) }
                 .help("Off: GO skips this cue. The rundown and the deck can still fire it.")
             InspectorRow("Hotkey") {
-                Picker("Hotkey", selection: bind(cue, \.hotkey)) {
+                Picker("Hotkey", selection: Binding(get: { live(cue).hotkey }, set: { engine.setHotkey(cue.id, $0) })) {
                     Text("None").tag("")
                     ForEach(PadBoard.keys, id: \.self) { k in
                         Text(k.uppercased() + hotkeyNote(k, for: cue)).tag(k)
@@ -115,6 +115,7 @@ struct InspectorView: View {
 
     /// Who else has a hotkey, so a clash is seen before it is picked.
     private func hotkeyNote(_ k: String, for cue: Cue) -> String {
+        if let action = KeyMap.Action.allCases.first(where: { KeyMap.shared.key($0).padName == k }) { return " (show key: \(action.label))" }
         if let pad = engine.pads.pad(forKey: k) { return " (pad \u{201C}\(pad.name)\u{201D})" }
         if let other = engine.cues.first(where: { $0.hotkey == k && $0.id != cue.id }) { return " (cue \u{201C}\(other.name)\u{201D})" }
         return ""

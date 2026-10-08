@@ -50,8 +50,8 @@ struct ControlView: View {
                     }
                 } else {
                     HSplitView {
-                        cueList.frame(minWidth: 420)
-                        PadBoardView(board: engine.pads).frame(minWidth: 360)
+                        cueList.frame(minWidth: 380)
+                        PadBoardView(board: engine.pads).frame(minWidth: 300)
                     }
                 }
             default: cueList
@@ -75,12 +75,10 @@ struct ControlView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
-        .onChange(of: engine.pads.selectedPadID) { _, id in if id != nil { touchedPads = true } }
-        .onChange(of: picked) { _, _ in touchedPads = false }
-        .onChange(of: engine.standbyID) { _, _ in touchedPads = false }
+        .onChange(of: engine.pads.touches) { _, _ in touchedPads = true }
         .dropDestination(for: URL.self) { urls, _ in
             guard !engine.locked else { return false }
-            if inspectorShowsPads { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
+            if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
             return true
         } isTargeted: { dropTargeted = $0 }
         .overlay {
@@ -119,7 +117,7 @@ struct ControlView: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { chooseFiles() } label: { Label("Add Media", systemImage: "plus") }
-                .help(tab == "pads" ? "Add sounds to the SFX pads" : "Add videos, sounds or stills to the cue list")
+                .help(inspectorShowsPads ? "Add sounds to the SFX pads" : "Add videos, sounds or stills to the cue list")
                 .disabled(engine.locked)
             if tab == "cues" {
                 Menu {
@@ -473,6 +471,7 @@ struct ControlView: View {
                 .frame(width: 56, alignment: .trailing)
         }
         .padding(.vertical, 3)
+        .simultaneousGesture(TapGesture().onEnded { touchedPads = false })
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
@@ -568,10 +567,11 @@ struct ControlView: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = tab == "pads" ? [.audio] : [.movie, .audio, .image]
+        let toPads = inspectorShowsPads
+        panel.allowedContentTypes = toPads ? [.audio] : [.movie, .audio, .image]
         panel.prompt = "Add"
         guard panel.runModal() == .OK else { return }
-        if inspectorShowsPads { engine.pads.add(urls: panel.urls) } else { engine.add(urls: panel.urls) }
+        if toPads { engine.pads.add(urls: panel.urls) } else { engine.add(urls: panel.urls) }
     }
 
     // MARK: Words and colors

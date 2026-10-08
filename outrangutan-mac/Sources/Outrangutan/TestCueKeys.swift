@@ -14,6 +14,7 @@ extension TestSnapshot {
                                            isARepeat: false, keyCode: code) else { return }
             NSApp.postEvent(e, atStart: false)
         }
+        var roundTrip: String?
         return [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -64,10 +65,18 @@ extension TestSnapshot {
                     guard let payload = try? ShowFiles.readManifest(url) else { return note("7 could not read the file back") }
                     let opened = await files.load(url, payload: payload, mediaFolder: dir.appendingPathComponent("opened"))
                     let keys = engine.cues.map { $0.hotkey.isEmpty ? "-" : $0.hotkey }
-                    note("7 saved \(saved), opened \(opened): hotkeys \(keys) \(keys == ["-", "t", "q", "w"] ? "PASS" : "FAIL")")
+                    roundTrip = "7 saved \(saved), opened \(opened): hotkeys \(keys) \(keys == ["-", "t", "q", "w"] ? "PASS" : "FAIL")"
                 }
             }),
-            (3.0, { note("8 done") }),
+            (3.0, {
+                note(roundTrip ?? "7 the show file round trip never finished: FAIL")
+                // One key, one cue: giving W to the title card takes it off Bars 4x3.
+                engine.setHotkey(engine.cues[1].id, "w")
+                let keys = engine.cues.map { $0.hotkey.isEmpty ? "-" : $0.hotkey }
+                note("8 W moved to the title card: \(keys) \(keys == ["-", "w", "q", "-"] ? "PASS" : "FAIL")")
+                engine.duplicate(engine.cues[1].id)
+                note("9 a copy has no key: \(engine.cues[2].hotkey.isEmpty ? "PASS" : "FAIL")")
+            }),
         ]
     }
 }
