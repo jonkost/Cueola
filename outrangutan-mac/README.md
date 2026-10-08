@@ -322,6 +322,10 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `strip`: pictures of the monitor row, the control window in all three
   layouts (Cues, Both side by side, Both stacked without the transport)
   and the Go to Cue sheet.
+- `gallery`: a picture of every other screen (SFX board and its
+  Inspector, each Settings tab, Connect, Show Check, Show Log, Help, the
+  cue Inspector), for looking at the design. Test pictures cannot draw
+  Liquid Glass; that needs eyes on the real app.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.

@@ -234,6 +234,11 @@ Everywhere
   (These landed partly inside the "Save File in Settings is red too"
   commit, which swept them up from the working tree.)
 
+### Outrangutan for Mac: Liquid Glass
+- The show's buttons, the SFX pads and bank pills, the Record and Stop
+  SFX buttons, the status capsules and the Multiview's Roll button draw
+  in Apple's Liquid Glass on macOS 26. Older Macs keep the plain look.
+
 ### Outrangutan for Mac: cue hotkeys and Go to Cue
 - A cue can have a hotkey (Inspector, Cue tab). Press it and the cue
   fires from anywhere, wherever the standby is. The key shows on the
