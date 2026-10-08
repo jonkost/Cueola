@@ -20,6 +20,7 @@ struct ControlView: View {
     @State private var dropTargeted = false
     @State private var showConnect = false
     @State private var showCheck = false
+    @State private var showGoTo = false
     /// Cues picked in the list. One pick stands that cue by; Shift- or
     /// Command-click picks several, for Remove, Skip, Color and Duplicate.
     @State private var picked: Set<UUID> = []
@@ -68,6 +69,8 @@ struct ControlView: View {
         .navigationSubtitle(link.phase == .linked ? link.message : "")
         .sheet(isPresented: $showConnect) { ConnectView(link: link) }
         .sheet(isPresented: $showCheck) { ShowCheckView(engine: engine, link: link) }
+        .sheet(isPresented: $showGoTo) { GoToCueView(engine: engine) }
+        .onReceive(NotificationCenter.default.publisher(for: .goToCue)) { _ in showGoTo = true }
         .onReceive(NotificationCenter.default.publisher(for: .showCheck)) { _ in showCheck = true }
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onAppear { engine.undoManager = undoManager }
@@ -428,6 +431,7 @@ struct ControlView: View {
                 .frame(width: 28, alignment: .trailing)
             icon(cue, onAir: onAir)
             Text(cue.name).font(.body).lineLimit(1)
+            if !cue.hotkey.isEmpty { keycap(cue.hotkey) }
             if !cue.fileIsThere {
                 Label("File missing", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption.weight(.semibold))
@@ -537,6 +541,19 @@ struct ControlView: View {
             .opacity(on ? 1 : 0)
             .help(on ? help : "")
             .accessibilityHidden(!on)
+    }
+
+    /// A cue's hotkey, drawn like a key.
+    private func keycap(_ key: String) -> some View {
+        Text(key.uppercased())
+            .font(.caption2.weight(.bold))
+            .monospaced()
+            .frame(minWidth: 18)
+            .padding(.horizontal, 4).padding(.vertical, 1)
+            .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.secondary.opacity(0.4)))
+            .foregroundStyle(.secondary)
+            .help("Press \(key.uppercased()) to fire this cue")
     }
 
     private func chip(_ text: String, _ color: Color, solid: Bool = false) -> some View {

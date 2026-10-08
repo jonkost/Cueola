@@ -195,6 +195,7 @@ final class ShowFiles: ObservableObject {
             } else if let id = media(path: cue.path, kind: cue.kind.wireType, duration: engine.durations[cue.id] ?? 0) {
                 mediaId = id
             }
+            if !cue.hotkey.isEmpty { mac["hotkey"] = cue.hotkey }
             let web: [CueKind: String] = [.video: "var(--video)", .audio: "var(--green)", .still: "var(--yellow)", .matte: "var(--yellow)"]
             cues.append([
                 "id": cue.wireID ?? Cue.newWireID(offsetMs: i), "num": i + 1, "name": cue.name,
@@ -358,6 +359,7 @@ final class ShowFiles: ObservableObject {
             let id = Wire.string(c["id"]).flatMap { $0.isEmpty ? nil : $0 } ?? Cue.newWireID(offsetMs: i)
             var cue = Cue(name: Wire.string(c["name"]) ?? "Untitled", path: path, kind: kind, wireID: id)
             if kind == .matte { cue.color = (mac?["color"] as? String).flatMap { NSColor(hex: $0)?.hexString } ?? "#000000" }
+            cue.hotkey = (mac?["hotkey"] as? String) ?? ""
             cue.preWait = max(0, Wire.number(c["preWait"]) ?? 0)
             cue.continueMode = ContinueMode(rawValue: Wire.string(c["continueMode"]) ?? "") ?? .manual
             if let end = EndAction(rawValue: Wire.string(c["endAction"]) ?? "") { cue.endAction = end }

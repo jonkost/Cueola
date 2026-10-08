@@ -195,6 +195,8 @@ struct PlaybackCommands: Commands {
             Button("Fade and Stop All (\(keys.name(.fade)))") { engine.fadeStopAll() }
             Button("All Stop (\(keys.name(.allStop)))") { engine.allStop() }
             Divider()
+            Button("Go to Cue\u{2026}") { NotificationCenter.default.post(name: .goToCue, object: nil) }
+                .keyboardShortcut("j")
             Button("Show Check\u{2026}") { NotificationCenter.default.post(name: .showCheck, object: nil) }
             Toggle("Lock Editing", isOn: $engine.locked)
                 .keyboardShortcut("l", modifiers: [.command, .shift])
@@ -258,6 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
             if let pad = self.engine.pads.pad(forKey: key) {
                 if !event.isARepeat { self.engine.pads.fire(pad.id) }
+                return nil
+            }
+            // A cue's hotkey fires it, wherever the standby is.
+            if let cue = self.engine.cue(forHotkey: key) {
+                if !event.isARepeat { _ = self.engine.fire(cue, from: "Hotkey \(key.uppercased())") }
                 return nil
             }
             return event

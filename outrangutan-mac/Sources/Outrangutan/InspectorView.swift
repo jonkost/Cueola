@@ -74,6 +74,16 @@ struct InspectorView: View {
             }
             InspectorRow("Fire on GO") { Toggle("", isOn: bind(cue, \.armed)).labelsHidden().toggleStyle(.switch) }
                 .help("Off: GO skips this cue. The rundown and the deck can still fire it.")
+            InspectorRow("Hotkey") {
+                Picker("Hotkey", selection: bind(cue, \.hotkey)) {
+                    Text("None").tag("")
+                    ForEach(PadBoard.keys, id: \.self) { k in
+                        Text(k.uppercased() + hotkeyNote(k, for: cue)).tag(k)
+                    }
+                }
+                .labelsHidden().frame(width: 150)
+            }
+            .help("A key that fires this cue from anywhere, wherever the standby is. A pad with the same key wins.")
         }
         InspectorSection(title: "Sound effect with this cue",
                          note: "The pad fires when the cue starts (after the wait), plays through it, and fades out when the cue leaves air.") {
@@ -101,6 +111,13 @@ struct InspectorView: View {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cue.url]) }
             }
         }
+    }
+
+    /// Who else has a hotkey, so a clash is seen before it is picked.
+    private func hotkeyNote(_ k: String, for cue: Cue) -> String {
+        if let pad = engine.pads.pad(forKey: k) { return " (pad \u{201C}\(pad.name)\u{201D})" }
+        if let other = engine.cues.first(where: { $0.hotkey == k && $0.id != cue.id }) { return " (cue \u{201C}\(other.name)\u{201D})" }
+        return ""
     }
 
     @ViewBuilder

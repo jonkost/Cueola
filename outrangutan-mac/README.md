@@ -316,6 +316,12 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `duck`: a video's sound dipping 12 dB while a pad sounds, coming back
   after, staying put with ducking off, and dipping when it is switched on
   mid-pad.
+- `cuekeys`: a cue's hotkey fires it from anywhere, a pad with the same
+  key wins, a show key wins over both, the key rides in a show file, and
+  Go to Cue finds cues by number and by words.
+- `strip`: pictures of the monitor row, the control window in all three
+  layouts (Cues, Both side by side, Both stacked without the transport)
+  and the Go to Cue sheet.
 - `padsearch`: pictures of the pad search, with matches and with none.
 - `watch`: a watched folder: a half-copied clip waits, a finished one joins,
   a sound becomes a pad, and the lock holds new files.

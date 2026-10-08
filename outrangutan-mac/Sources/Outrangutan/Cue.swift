@@ -146,6 +146,7 @@ struct Cue: Identifiable, Codable, Equatable {
     var obs = CueObs()                          // what OBS does when this cue starts
     var obsTriggerScene = ""                    // OBS switching to this scene fires this cue
     var label: CueLabel = .none                 // a color to group cues by
+    var hotkey = ""                             // a key that fires this cue from anywhere, "" for none
 
     init(name: String, path: String, kind: CueKind, wireID: String? = nil) {
         self.name = name
@@ -188,6 +189,7 @@ struct Cue: Identifiable, Codable, Equatable {
         sfxDelay = try c.decodeIfPresent(Double.self, forKey: .sfxDelay) ?? 0
         notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         armed = try c.decodeIfPresent(Bool.self, forKey: .armed) ?? true
+        hotkey = try c.decodeIfPresent(String.self, forKey: .hotkey) ?? ""
         key = (try? c.decodeIfPresent(VideoKey.self, forKey: .key)) ?? VideoKey()
         obs = (try? c.decodeIfPresent(CueObs.self, forKey: .obs)) ?? CueObs()
         obsTriggerScene = try c.decodeIfPresent(String.self, forKey: .obsTriggerScene) ?? ""

@@ -288,7 +288,7 @@ enum TestSnapshot {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
                 let bars = Cue(name: "Open: bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
                 var still = Cue(name: "Title card", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
-                still.preWait = 2; still.continueMode = .autoFollow; still.duration = 5
+                still.preWait = 2; still.continueMode = .autoFollow; still.duration = 5; still.hotkey = "t"
                 var applause = Cue(name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID(offsetMs: 2))
                 applause.loop = true; applause.label = .green
                 var matte = Cue.matte(named: "Red matte", color: "#C8102E")
@@ -318,11 +318,13 @@ enum TestSnapshot {
                 let stacked = UserDefaults(suiteName: "live.cueola.outrangutan.test.stacked")!
                 stacked.set("both", forKey: "ui.tab"); stacked.set("stacked", forKey: "ui.layout"); stacked.set(false, forKey: "ui.inspector"); stacked.set(false, forKey: "ui.transport")
                 picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control-stacked.png"), store: stacked)
+                picture(GoToCueView(engine: engine), size: CGSize(width: 460, height: 380), to: dir.appendingPathComponent("go-to-cue.png"))
             }),
             (1.0, { engine.allStop() }),
         ]
         case "multiview": steps = multiviewSteps(engine: engine, dir: dir, note: note, state: state)
         case "duck": steps = duckSteps(engine: engine, note: note)
+        case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

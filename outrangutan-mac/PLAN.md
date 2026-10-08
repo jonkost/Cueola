@@ -82,6 +82,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Convert on upload | Not needed | The Mac plays the pro formats as they are. |
 | Kiosk helper and kiosk windows | Not needed | Native outputs replace them. |
 | Multiview | Built | Not in the web app. A monitor-wall window for the director's screen: Program with a red tally, a live Preview of the standby cue with a green tally (a video parks on its first frame and can roll silently between its trim points), the count-out clock, the time of day, and the next cues. Window menu, Shift-Command-M; full screen on any screen with the green button. The preview frames a cue exactly as the output will (fit, scale, position). |
+| Layouts: Cues, SFX, or both | Built | Not in the web app. View, Both (Command-3) shows the SFX pads beside the cues or under them, divider draggable; the transport row can be hidden for key and deck drivers. |
+| Cue hotkeys and Go to Cue | Built | Not in the web app. A cue can have a key that fires it from anywhere (Inspector); the key shows on its row and rides in the show file. Go to Cue (Command-J) jumps the standby by number or name. |
 | Ducking | Built | Not in the web app. Settings, Sound: cue sound dips 6, 12 or 20 dB while any pad sounds (a music bed under a stinger) and comes back over about a second. |
 | Not possible on the web | Step 8 | SDI out through a Blackmagic card, NDI to the switcher, key and fill. Until the cards are in: OBS on the same Mac can capture the output window and send NDI. |
 

@@ -219,6 +219,29 @@ Everywhere
   silently round and round between its trim points, so a clip can be
   checked before it goes to air. Stills, mattes and sound cues show too.
 
+### Outrangutan for Mac: SFX, layouts, and a pro cue list
+- The pad board is called SFX everywhere people see it. One tile is
+  still a pad.
+- View has three ways to work: Cues, SFX, or Both (Command-3), with
+  Layout picking SFX beside the cues or under them; the divider drags.
+  Transport Buttons can be hidden for people who drive by keys or deck.
+- The cue list has quiet column names (number, cue, wait, state,
+  length), a WAIT column, and the standby cue marked in green apart from
+  the blue selection.
+- The control window: GO is the one big button, All Stop stands apart,
+  what is on air is the lead text, the count direction is a word under
+  the clock, and the monitor boxes keep their true shapes.
+  (These landed partly inside the "Save File in Settings is red too"
+  commit, which swept them up from the working tree.)
+
+### Outrangutan for Mac: cue hotkeys and Go to Cue
+- A cue can have a hotkey (Inspector, Cue tab). Press it and the cue
+  fires from anywhere, wherever the standby is. The key shows on the
+  cue's row and rides in the show file. A pad with the same key wins,
+  and the show keys (GO, Pause and so on) win over both.
+- Go to Cue (Playback menu, Command-J): type a cue number or a few
+  letters of its name, press Return, and that cue stands by.
+
 ### Outrangutan for Mac: ducking
 - Settings, Sound: "Duck cue sound under pads". While any pad sounds, the
   cue sound dips by 6, 12 or 20 dB (a music bed under a stinger) and

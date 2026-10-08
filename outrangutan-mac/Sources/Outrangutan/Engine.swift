@@ -1448,6 +1448,11 @@ final class Engine: ObservableObject {
             }.joined(separator: ", ")
     }
 
+    /// The cue a hotkey fires, if any cue has that key.
+    func cue(forHotkey key: String) -> Cue? {
+        key.isEmpty ? nil : cues.first { $0.hotkey == key }
+    }
+
     /// Where the player on a lane is, in seconds into its file; for test mode.
     func soundPosition(lane: Int) -> Double? {
         (videoDecks + soundDecks).first { $0.lane === cueSound.lanes[lane] && $0.cue != nil }?.current
