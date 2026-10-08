@@ -333,6 +333,7 @@ enum TestSnapshot {
         case "duck": steps = duckSteps(engine: engine, note: note)
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
+        case "stage": steps = stageSteps(engine: engine, link: link, files: files, scopes: scopes, note: note)
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -609,6 +610,22 @@ enum TestSnapshot {
 
     /// Saves a picture of a SwiftUI view in its own dark window. `store`
     /// keeps remembered settings (like an Inspector tab) away from the real app's.
+    /// Windows held open for the "stage" test, so a real screen capture
+    /// (which draws glass, unlike cacheDisplay) can be taken from outside.
+    @MainActor static var staged: [NSWindow] = []
+
+    @MainActor static func stage<V: View>(_ view: V, size: CGSize, title: String, store: UserDefaults? = nil) {
+        let root = view
+            .defaultAppStorage(store ?? UserDefaults(suiteName: "live.cueola.outrangutan.test")!)
+            .frame(width: size.width, height: size.height)
+        let win = NSWindow(contentRect: NSRect(origin: CGPoint(x: 40, y: 60), size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        win.title = title
+        win.appearance = NSAppearance(named: .darkAqua)
+        win.contentView = NSHostingView(rootView: root)
+        win.orderBack(nil)
+        staged.append(win)
+    }
+
     @MainActor static func picture<V: View>(_ view: V, size: CGSize, to url: URL, store: UserDefaults? = nil) {
         let root = view
             .defaultAppStorage(store ?? UserDefaults(suiteName: "live.cueola.outrangutan.test")!)

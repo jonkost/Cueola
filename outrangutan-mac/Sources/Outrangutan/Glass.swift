@@ -79,10 +79,18 @@ private struct TransportSurface: ViewModifier {
     let shape: RoundedRectangle
 
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content.glassEffect(prominent ? .regular.tint(color).interactive() : .regular.interactive(), in: shape)
+        if prominent {
+            // GO and All Stop are solid color, always, active window or not:
+            // a show button must never look gray.
+            content.background(color, in: shape)
+        } else if #available(macOS 26, *) {
+            content
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
         } else {
-            content.background(prominent ? color : Color.secondary.opacity(0.16), in: shape)
+            content
+                .background(Color.secondary.opacity(0.14), in: shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
         }
     }
 }

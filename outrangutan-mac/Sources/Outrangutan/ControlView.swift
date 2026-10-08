@@ -176,7 +176,7 @@ struct ControlView: View {
     // MARK: Clock and transport
 
     private var header: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             HStack(alignment: .center, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
@@ -184,14 +184,14 @@ struct ControlView: View {
                             .font(.subheadline.weight(.bold))
                             .fixedSize()
                             .padding(.horizontal, 10).padding(.vertical, 3)
-                            .glassSurface(tint: statusColor.opacity(0.45), in: Capsule())
+                            .background(statusColor.opacity(0.22), in: Capsule())
                             .foregroundStyle(statusColor)
                         if engine.locked {
                             Label("LOCKED", systemImage: "lock.fill")
                                 .font(.subheadline.weight(.bold))
                                 .fixedSize()
                                 .padding(.horizontal, 10).padding(.vertical, 3)
-                                .glassSurface(in: Capsule())
+                                .background(Color.secondary.opacity(0.18), in: Capsule())
                                 .foregroundStyle(.secondary)
                                 .help("Editing is locked. The show still runs.")
                         }
@@ -265,9 +265,11 @@ struct ControlView: View {
                         .frame(width: all)
                 } }
             }
-            .frame(height: 72) }
+            .frame(height: 66) }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 14)
     }
 
     /// Shown after Outrangutan closed mid-show: what was on air, and a way
@@ -371,7 +373,7 @@ struct ControlView: View {
                     }
                     .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
+                .listStyle(.plain)
                 .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
                     let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
@@ -466,7 +468,9 @@ struct ControlView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 56, alignment: .trailing)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
+        .listRowSeparator(.visible)
+        .listRowSeparatorTint(Color.primary.opacity(0.08))
         .simultaneousGesture(TapGesture().onEnded { touchedPads = false })
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)

@@ -144,6 +144,7 @@ struct PadBoardView: View {
             Toggle("Several at once", isOn: $board.multiTrigger)
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .fixedSize()
                 .help("Off: hitting a pad stops every other pad.")
             Button { recordIntoNextSlot() } label: {
                 Label("Record", systemImage: "mic")
@@ -207,7 +208,8 @@ struct PadTile: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-            .glassSurface(tint: color.opacity(sounding ? 1 : 0.65), interactive: true, in: RoundedRectangle(cornerRadius: 12))
+            // The pad's color, solid: glass tint washed it out to gray.
+            .background(color.opacity(sounding ? 0.9 : 0.45), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.white : (dropTargeted ? Color.accentColor : .clear), lineWidth: 2))
             .foregroundStyle(.white)
             .contentShape(RoundedRectangle(cornerRadius: 12))
