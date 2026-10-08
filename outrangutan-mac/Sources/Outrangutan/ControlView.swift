@@ -169,13 +169,14 @@ struct ControlView: View {
                         }
                     }
                     Text(onAirText)
-                        .font(.title3.weight(.medium))
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(engine.pictureCue != nil || engine.soundCue != nil || engine.pendingCue != nil ? .primary : .secondary)
+                        .padding(.top, 2)
+                    Label(standbyText, systemImage: "arrow.turn.down.right")
+                        .font(.callout.weight(.medium))
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
-                    Text(standbyText)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .foregroundStyle(.tertiary)
                     if let notice = engine.notice {
                         Label(notice, systemImage: "exclamationmark.triangle.fill")
                             .font(.callout)
@@ -213,14 +214,29 @@ struct ControlView: View {
 
             // The transport gets its own row, so every button stays a big
             // target however narrow the window is.
-            HStack(spacing: 10) {
-                transport("GO", symbol: "play.fill", key: keys.name(.go), color: .green, prominent: true) { engine.go() }
-                transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
-                          key: keys.name(.pause), color: .yellow, action: engine.togglePause)
-                transport("Stop", symbol: "stop.fill", key: keys.name(.stop), color: .orange, action: engine.stop)
-                transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
-                transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
+            GeometryReader { geo in
+                // GO takes a third of the row, All Stop a sixth, the three in
+                // between share the rest, with a little air around All Stop.
+                let gap: CGFloat = 10
+                let go = geo.size.width * 0.32
+                let all = geo.size.width * 0.16
+                let mid = (geo.size.width - go - all - gap * 5) / 3
+                HStack(spacing: gap) {
+                    transport("GO", symbol: "play.fill", key: keys.name(.go), color: .green, prominent: true) { engine.go() }
+                        .frame(width: go)
+                    transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
+                              key: keys.name(.pause), color: .yellow, action: engine.togglePause)
+                        .frame(width: mid)
+                    transport("Stop", symbol: "stop.fill", key: keys.name(.stop), color: .orange, action: engine.stop)
+                        .frame(width: mid)
+                    transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
+                        .frame(width: mid)
+                    Spacer(minLength: gap)
+                    transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
+                        .frame(width: all)
+                }
             }
+            .frame(height: 72)
         }
         .padding(16)
     }
