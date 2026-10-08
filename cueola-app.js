@@ -4608,7 +4608,7 @@ function pbAssignRender(opts={}) {
     </div>
     ${legacyNote}
     ${pbAssignSelectedProfileId ? pbAssignStudentEditorHTML(pbAssignSelectedProfileId) : `<div class="u-note pba-hint">Choose a student above, or tap a name in the list below.</div>`}
-    ${pbAssignCoverageHTML(pbAssignRows, pbAssignSelectedProfileId)}
+    ${pbAssignCoverageHTML(pbAssignRows, { pickable:true })}
     <div class="pba-everyone">
       <div class="pb-assign-title">${sfIcon('content.checklist')} Everyone on this show</div>
       ${pbAssignRosterTableHTML(groups, { pickable:true })}
@@ -4736,41 +4736,41 @@ function pbAssignGivePaperwork(id, label='') {
   return true;
 }
 
-// Every piece of paperwork on this show with the names on it, so a gap is
-// one glance away. With a student selected, each piece they do not hold gets
-// a Give button.
-function pbAssignCoverageHTML(rows, pid) {
+// Every piece of paperwork on this show with the names on it: a reference
+// board, so a gap is one glance away. Shown on the hub for everyone and on
+// the Position Assignments page.
+function pbAssignCoverageHTML(rows, opts={}) {
   const items = new Map();
   plandaBearAssignmentCatalog().forEach(item => items.set(item.id, { id:item.id, label:item.label, people:[] }));
   (rows || []).forEach(row => {
-    (row.paperworkIds || []).forEach((id, i) => {
-      if (!items.has(id)) items.set(id, { id, label: row.paperwork?.[i] || id, people:[] });
+    (row.paperworkIds || []).forEach((rawId, i) => {
+      const label = row.paperwork?.[i] || rawId;
+      // An older record can carry its own id for a piece the catalog lists
+      // under a newer one: the label is the same piece, so count it there.
+      const byLabel = !items.has(rawId) && [...items.values()].find(item => item.label.toLowerCase() === String(label).toLowerCase());
+      const id = byLabel ? byLabel.id : rawId;
+      if (!items.has(id)) items.set(id, { id, label, people:[] });
       const entry = items.get(id);
-      if (row.profileId && !entry.people.some(p => p.profileId === row.profileId)) entry.people.push({ profileId:row.profileId, person:row.person });
+      const key = row.profileId || String(row.person || '').trim().toLowerCase();
+      if (row.person && !entry.people.some(p => p.key === key)) entry.people.push({ key, profileId:row.profileId || '', person:row.person });
     });
   });
   const list = [...items.values()];
   if (!list.length) return '';
   const covered = list.filter(item => item.people.length).length;
-  const giveTo = pid && pbAssignRowsFor(pid).length ? (pbAssignProfile(pid)?.fullName || pbAssignRowsFor(pid)[0]?.person || '') : '';
-  const giveFirst = giveTo ? giveTo.split(' ')[0] : '';
-  const rowsHTML = list.map(item => {
-    const held = pid && item.people.some(p => p.profileId === pid);
-    const give = giveTo && !held
-      ? `<button type="button" class="pba-cov-give" onclick="pbAssignGivePaperwork('${esc(item.id)}')" data-tip="Put ${esc(item.label)} on ${esc(giveTo)}'s list">Give to ${esc(giveFirst)}</button>`
-      : '';
-    const people = item.people.length
-      ? item.people.map(p => `<button type="button" class="pb-roster-chip pb-roster-assigned pba-cov-person" onclick="pbAssignSelectStudent('${esc(p.profileId)}')">${esc(p.person)}</button>`).join('')
-      : `<span class="pba-cov-nobody">Nobody yet</span>`;
-    return `<div class="pba-cov-row${item.people.length ? '' : ' is-empty'}">
+  const chip = p => opts.pickable && p.profileId
+    ? `<button type="button" class="pb-roster-chip pb-roster-assigned pba-cov-person" onclick="pbAssignSelectStudent('${esc(p.profileId)}')">${esc(p.person)}</button>`
+    : `<span class="pb-roster-chip pb-roster-assigned pba-cov-person">${esc(p.person)}</span>`;
+  const rowsHTML = list.map(item => `<div class="pba-cov-row${item.people.length ? '' : ' is-empty'}">
       <span class="pba-cov-label">${esc(item.label)}</span>
-      <span class="pba-cov-people">${people}</span>
-      ${give}
-    </div>`;
-  }).join('');
+      <span class="pba-cov-people">${item.people.length ? item.people.map(chip).join('') : '<span class="pba-cov-nobody">Nobody yet</span>'}</span>
+    </div>`).join('');
   const summary = covered === list.length ? 'Every piece has someone.' : `${list.length - covered} of ${list.length} still need${list.length - covered === 1 ? 's' : ''} someone.`;
+  const ok = covered === list.length ? ' is-ok' : '';
   return `<div class="pba-coverage">
-    <div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork and who has it <span class="pba-cov-sum${covered === list.length ? ' is-ok' : ''}">${esc(summary)}</span></div>
+    ${opts.title === false
+      ? `<div class="pba-cov-sum-line${ok}">${esc(summary)}</div>`
+      : `<div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork and who has it <span class="pba-cov-sum${ok}">${esc(summary)}</span></div>`}
     <div class="pba-cov-list">${rowsHTML}</div>
   </div>`;
 }
@@ -22271,6 +22271,11 @@ function pbRefreshPaperworkConfigUI() {
 // paperwork, for everyone. A signed-in admin also gets the button that opens
 // the Position Assignments page (openPbAssignEditor), where the editing is.
 let _pbAssignCardFp = '';
+let pbRosterView = 'student';   // 'student' or 'paperwork'
+function pbSetRosterView(view) {
+  pbRosterView = view === 'paperwork' ? 'paperwork' : 'student';
+  renderPlandaBearAssignmentsCard({ force:true });
+}
 function renderPlandaBearAssignmentsCard(opts={}) {
   const wrap = document.getElementById('pbAssignmentsCard');
   if (!wrap) return;
@@ -22286,17 +22291,23 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   // Presence heartbeats repaint this card on every session snapshot; when
   // nothing it renders from actually changed, skip the innerHTML teardown.
   let fp;
-  try { fp = stableStringify(['roster', session.code, canEdit, noCode, groups]); } catch (e) { fp = 'x' + Date.now(); }
+  try { fp = stableStringify(['roster', session.code, canEdit, noCode, pbRosterView, groups, rows.map(r => [r.profileId, r.person, r.paperworkIds])]); } catch (e) { fp = 'x' + Date.now(); }
   if (!opts.force && fp === _pbAssignCardFp && wrap.firstChild) return;
   _pbAssignCardFp = fp;
   const editBtn = canEdit
     ? `<button type="button" class="pb-assign-edit" onclick="openPbAssignEditor()" data-tip="Open the Position Assignments page">${sfIcon('action.edit')}<span>Assign positions</span></button>`
     : '';
+  const byPaperwork = pbRosterView === 'paperwork';
+  const views = noCode ? '' : `<div class="pb-roster-views" role="tablist" aria-label="Roster view">
+    <button type="button" class="pb-roster-view${byPaperwork ? '' : ' on'}" role="tab" aria-selected="${!byPaperwork}" onclick="pbSetRosterView('student')">By student</button>
+    <button type="button" class="pb-roster-view${byPaperwork ? ' on' : ''}" role="tab" aria-selected="${byPaperwork}" onclick="pbSetRosterView('paperwork')">By paperwork</button>
+  </div>`;
   const body = noCode
     ? `<div class="u-note">No show code. Open Planda Bear with a show code to see and assign positions.</div>`
+    : byPaperwork ? (pbAssignCoverageHTML(rows, { title:false }) || '<div class="u-note">No paperwork on this show yet.</div>')
     : pbAssignRosterTableHTML(groups);
   wrap.innerHTML = `<div class="pb-assign-card pb-roster-card">
-    <div class="pb-assign-title">${sfIcon('content.checklist')} Students and positions${editBtn}</div>
+    <div class="pb-assign-title">${sfIcon('content.checklist')} ${byPaperwork ? 'Paperwork and who has it' : 'Students and positions'}${views}${editBtn}</div>
     ${body}
   </div>`;
 }
