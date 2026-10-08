@@ -281,7 +281,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
         engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }
         if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes, watch: watch) }
-        NSApp.activate(ignoringOtherApps: true)
+        // If the app is about to die of an exception, write down why first:
+        // the crash report never carries the reason. Logs/crash.txt.
+        NSSetUncaughtExceptionHandler { e in
+            let text = "\(Date()) \(e.name.rawValue): \(e.reason ?? "")\n" + e.callStackSymbols.joined(separator: "\n") + "\n\n"
+            FileHandle.standardError.write(("UNCAUGHT " + text).data(using: .utf8)!)
+            let url = ShowLog.folder.appendingPathComponent("crash.txt")
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(text.data(using: .utf8)!); try? h.close() }
+            else { try? text.write(to: url, atomically: true, encoding: .utf8) }
+        }
+        // OUTRANGUTAN_POKE: pretend the person resizes the window, from the
+        // shell, to chase a layout crash. "900x600,1300x800" resizes the
+        // main window to each size, two seconds apart, after eight seconds.
+        if let poke = ProcessInfo.processInfo.environment["OUTRANGUTAN_POKE"] {
+            let sizes = poke.split(separator: ",").compactMap { part -> CGSize? in
+                let xy = part.split(separator: "x").compactMap { Double($0) }
+                return xy.count == 2 ? CGSize(width: xy[0], height: xy[1]) : nil
+            }
+            for (i, size) in sizes.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8 + Double(i) * 2) {
+                    guard let w = NSApp.windows.first(where: { $0.toolbar != nil }) else { return }
+                    FileHandle.standardError.write("poke: resize to \(size)\n".data(using: .utf8)!)
+                    var f = w.frame; f.size = size
+                    w.setFrame(f, display: true, animate: false)
+                }
+            }
+        }
+        // OUTRANGUTAN_QUIET keeps a launch from the shell in the background.
+        if ProcessInfo.processInfo.environment["OUTRANGUTAN_QUIET"] == nil { NSApp.activate(ignoringOtherApps: true) }
 
         // Tell macOS a show is running: never nap this app, never slow its
         // timers, never let the screens go to sleep.

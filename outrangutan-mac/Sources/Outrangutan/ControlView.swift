@@ -58,6 +58,9 @@ struct ControlView: View {
             }
         }
         .frame(minWidth: 800)
+        // The app's own buttons share one shape. The toolbar is the Mac's:
+        // it lays those items out itself, so the style stops here.
+        .buttonStyle(ActionStyle())
         .inspector(isPresented: $showInspector) {
             Group {
                 if inspectorShowsPads { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
@@ -65,7 +68,6 @@ struct ControlView: View {
             .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
         }
         .toolbar { toolbar }
-        .buttonStyle(ActionStyle())
         // Like any Mac document, the window is named for its show file.
         .navigationTitle(files.currentFile?.deletingPathExtension().lastPathComponent ?? "Outrangutan")
         .navigationSubtitle(link.phase == .linked ? link.message : "")
