@@ -101,13 +101,26 @@ struct MonitorStrip: View {
     /// Every box is this tall: the program and waveform at 16:9, the
     /// vectorscope square, side by side from the left with nothing floating.
     static let boxHeight: CGFloat = 148
-    static let wide = boxHeight * 16 / 9
 
     var body: some View {
+        GeometryReader { geo in
+            // Two 16:9 boxes and a square one, with 12 between and 16 at
+            // the sides: shrink them together when the window is narrow.
+            let room = geo.size.width - 32 - 24
+            let h = max(72, min(Self.boxHeight, room / (32 / 9 + 1)))
+            strip(boxHeight: h, wide: h * 16 / 9)
+        }
+        .frame(height: 180)
+        .onAppear { scopes.isOn = showScopes }
+        .onDisappear { scopes.isOn = false }
+        .onChange(of: showScopes) { _, on in scopes.isOn = on }
+    }
+
+    private func strip(boxHeight: CGFloat, wide: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 ProgramPreview(view: engine.monitor)
-                    .frame(width: Self.wide, height: Self.boxHeight)
+                    .frame(width: wide, height: boxHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.35)))
                 HStack(spacing: 6) {
@@ -128,19 +141,15 @@ struct MonitorStrip: View {
                         .help("How loud the cues are: videos and sound cues, at their volume. SFX pads have their own meter.")
                 }
             }
-            .frame(width: Self.wide)
+            .frame(width: wide)
             if showScopes {
-                ScopePanel(title: "WAVEFORM", image: scopes.waveform, width: Self.wide, height: Self.boxHeight) { WaveformGrid() }
-                ScopePanel(title: "VECTORSCOPE", image: scopes.vectorscope, width: Self.boxHeight, height: Self.boxHeight) { VectorGrid() }
+                ScopePanel(title: "WAVEFORM", image: scopes.waveform, width: wide, height: boxHeight) { WaveformGrid() }
+                ScopePanel(title: "VECTORSCOPE", image: scopes.vectorscope, width: boxHeight, height: boxHeight) { VectorGrid() }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .frame(height: 180)
-        .onAppear { scopes.isOn = showScopes }
-        .onDisappear { scopes.isOn = false }
-        .onChange(of: showScopes) { _, on in scopes.isOn = on }
     }
 }
 

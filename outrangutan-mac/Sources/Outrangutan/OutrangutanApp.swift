@@ -5,12 +5,16 @@ import SwiftUI
 struct OutrangutanApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var preview = PreviewPlayer()
+    @AppStorage("ui.inspector") private var showInspector = true
 
     var body: some Scene {
         // One show, one control window.
         Window("Outrangutan", id: "main") {
+            // The window can never be smaller than its content: the show
+            // area plus the Inspector when it is open. Narrower, and the
+            // Mac would cut the edges off instead of shrinking them.
             ControlView(engine: appDelegate.engine, link: appDelegate.link, files: appDelegate.files, scopes: appDelegate.scopes)
-                .frame(minWidth: 960, minHeight: 600)
+                .frame(minWidth: showInspector ? 1120 : 800, minHeight: 620)
         }
         .commands {
             FileCommands(files: appDelegate.files, watch: appDelegate.watch)

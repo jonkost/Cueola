@@ -57,6 +57,7 @@ struct ControlView: View {
             default: cueList
             }
         }
+        .frame(minWidth: 800)
         .inspector(isPresented: $showInspector) {
             Group {
                 if inspectorShowsPads { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
@@ -127,7 +128,7 @@ struct ControlView: View {
                     Button("Chroma Green") { engine.addMatte(color: "#00B140", name: "Chroma green") }
                     Button("Chroma Blue") { engine.addMatte(color: "#0047BB", name: "Chroma blue") }
                 } label: {
-                    Label("Add Matte", systemImage: "square.fill")
+                    Label("Add Matte", systemImage: "paintpalette")
                 }
                 .help("Add a solid color picture. Change its color in the Inspector.")
                 .disabled(engine.locked)
@@ -340,8 +341,7 @@ struct ControlView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
         Button(action: action) { label }
-            .glassButton(prominent: prominent, tint: prominent ? color : nil)
-            .controlSize(.extraLarge)
+            .buttonStyle(TransportStyle(color: color, prominent: prominent))
         .focusable(false)
         .help("\(title) (\(key))")
     }

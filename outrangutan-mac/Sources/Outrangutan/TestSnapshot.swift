@@ -319,6 +319,13 @@ enum TestSnapshot {
                 stacked.set("both", forKey: "ui.tab"); stacked.set("stacked", forKey: "ui.layout"); stacked.set(false, forKey: "ui.inspector"); stacked.set(false, forKey: "ui.transport")
                 picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control-stacked.png"), store: stacked)
                 picture(GoToCueView(engine: engine), size: CGSize(width: 460, height: 380), to: dir.appendingPathComponent("go-to-cue.png"))
+                // The narrowest the window goes with the Inspector open, and without it.
+                let narrow = UserDefaults(suiteName: "live.cueola.outrangutan.test.narrow")!
+                narrow.set("cues", forKey: "ui.tab"); narrow.set(true, forKey: "ui.inspector")
+                picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1120, height: 620), to: dir.appendingPathComponent("control-narrow.png"), store: narrow)
+                let tight = UserDefaults(suiteName: "live.cueola.outrangutan.test.tight")!
+                tight.set("cues", forKey: "ui.tab"); tight.set(false, forKey: "ui.inspector")
+                picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 800, height: 620), to: dir.appendingPathComponent("control-tight.png"), store: tight)
             }),
             (1.0, { engine.allStop() }),
         ]

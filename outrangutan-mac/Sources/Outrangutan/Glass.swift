@@ -52,3 +52,37 @@ struct GlassGroup<Content: View>: View {
         }
     }
 }
+
+/// The show's big buttons: a rounded rectangle at the house control
+/// radius (12), not the Mac's capsule, in glass. GO and All Stop fill
+/// with their color; the others are clear glass with a colored symbol.
+struct TransportStyle: ButtonStyle {
+    let color: Color
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        configuration.label
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .foregroundStyle(prominent ? Color.white : Color.primary)
+            .contentShape(shape)
+            .modifier(TransportSurface(color: color, prominent: prominent, shape: shape))
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+    }
+}
+
+private struct TransportSurface: ViewModifier {
+    let color: Color
+    let prominent: Bool
+    let shape: RoundedRectangle
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(prominent ? .regular.tint(color).interactive() : .regular.interactive(), in: shape)
+        } else {
+            content.background(prominent ? color : Color.secondary.opacity(0.16), in: shape)
+        }
+    }
+}
