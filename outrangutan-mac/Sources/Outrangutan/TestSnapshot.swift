@@ -325,6 +325,7 @@ enum TestSnapshot {
         case "multiview": steps = multiviewSteps(engine: engine, dir: dir, note: note, state: state)
         case "duck": steps = duckSteps(engine: engine, note: note)
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
+        case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
         case "padsearch": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

@@ -121,7 +121,7 @@ struct PadBoardView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(on ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.12), in: Capsule())
+                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: Capsule())
                         .contextMenu {
                             Button("Rename…") { newName = bank.name; renaming = bank }
                                 .disabled(board.locked)
@@ -148,11 +148,13 @@ struct PadBoardView: View {
             Button { recordIntoNextSlot() } label: {
                 Label("Record", systemImage: "mic")
             }
+            .glassButton()
             .help("Record a sound effect onto the next empty pad")
             .disabled(board.locked)
             Button { board.stopAll() } label: {
                 Label("Stop SFX", systemImage: "stop.fill")
             }
+            .glassButton()
             .help("Stops every pad that is playing")
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -205,7 +207,7 @@ struct PadTile: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-            .background(color.opacity(sounding ? 0.85 : 0.35), in: RoundedRectangle(cornerRadius: 12))
+            .glassSurface(tint: color.opacity(sounding ? 1 : 0.65), interactive: true, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.white : (dropTargeted ? Color.accentColor : .clear), lineWidth: 2))
             .foregroundStyle(.white)
             .contentShape(RoundedRectangle(cornerRadius: 12))

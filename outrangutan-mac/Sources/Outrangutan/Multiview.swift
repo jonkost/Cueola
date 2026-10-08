@@ -234,8 +234,7 @@ struct MultiviewView: View {
         if engine.standbyCue?.kind == .video {
             Button(preview.rolling ? "Stop" : "Roll") { preview.toggleRoll() }
                 .font(.system(size: unit * 1.3, weight: .semibold))
-                .buttonStyle(.bordered)
-                .tint(.green)
+                .glassButton(tint: .green)
                 .padding(unit * 0.8)
         }
     }

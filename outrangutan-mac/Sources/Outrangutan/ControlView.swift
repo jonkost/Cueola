@@ -183,14 +183,14 @@ struct ControlView: View {
                             .font(.subheadline.weight(.bold))
                             .fixedSize()
                             .padding(.horizontal, 10).padding(.vertical, 3)
-                            .background(statusColor.opacity(0.22), in: Capsule())
+                            .glassSurface(tint: statusColor.opacity(0.45), in: Capsule())
                             .foregroundStyle(statusColor)
                         if engine.locked {
                             Label("LOCKED", systemImage: "lock.fill")
                                 .font(.subheadline.weight(.bold))
                                 .fixedSize()
                                 .padding(.horizontal, 10).padding(.vertical, 3)
-                                .background(Color.secondary.opacity(0.18), in: Capsule())
+                                .glassSurface(in: Capsule())
                                 .foregroundStyle(.secondary)
                                 .help("Editing is locked. The show still runs.")
                         }
@@ -249,7 +249,7 @@ struct ControlView: View {
                 let go = geo.size.width * 0.32
                 let all = geo.size.width * 0.16
                 let mid = (geo.size.width - go - all - gap * 5) / 3
-                HStack(spacing: gap) {
+                GlassGroup(spacing: gap) { HStack(spacing: gap) {
                     transport("GO", symbol: "play.fill", key: keys.name(.go), color: .green, prominent: true) { engine.go() }
                         .frame(width: go)
                     transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
@@ -262,7 +262,7 @@ struct ControlView: View {
                     Spacer(minLength: gap)
                     transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
                         .frame(width: all)
-                }
+                } }
             }
             .frame(height: 72) }
         }
@@ -285,10 +285,11 @@ struct ControlView: View {
             }
             Spacer()
             Button("Dismiss") { engine.recovered = nil }
+                .glassButton()
             Button(point.offset > 0 ? "Stand By at \(Timecode.short(point.offset))" : "Stand By That Cue") {
                 engine.standbyRecovered()
             }
-            .buttonStyle(.borderedProminent)
+            .glassButton(prominent: true, tint: .orange)
             .help("The cue stands by. Its next GO starts where it left off.")
         }
         .padding(.horizontal, 16)
@@ -338,14 +339,9 @@ struct ControlView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
-        Group {
-            if prominent {
-                Button(action: action) { label }.buttonStyle(.borderedProminent).tint(color)
-            } else {
-                Button(action: action) { label }.buttonStyle(.bordered)
-            }
-        }
-        .controlSize(.extraLarge)
+        Button(action: action) { label }
+            .glassButton(prominent: prominent, tint: prominent ? color : nil)
+            .controlSize(.extraLarge)
         .focusable(false)
         .help("\(title) (\(key))")
     }
