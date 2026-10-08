@@ -295,6 +295,7 @@ enum TestSnapshot {
                 // The monitor row under the transport, at the window's narrowest and wider.
                 picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 960, height: 180), to: dir.appendingPathComponent("strip-960.png"))
                 picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 1300, height: 180), to: dir.appendingPathComponent("strip-1300.png"))
+                picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control.png"))
             }),
             (1.0, { engine.allStop() }),
         ]

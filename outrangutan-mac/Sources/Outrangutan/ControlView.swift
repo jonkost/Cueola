@@ -105,6 +105,8 @@ struct ControlView: View {
                 .help("Add a solid color picture. Change its color in the Inspector.")
                 .disabled(engine.locked)
             }
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
             Menu {
                 Button(engine.openOutputs.isEmpty ? "Open All Outputs" : "Close All Outputs") { engine.toggleOutput() }
                 Divider()
@@ -123,8 +125,6 @@ struct ControlView: View {
                 engine.toggleOutput()
             }
             .help(engine.openOutputs.isEmpty ? "Open the outputs" : "Close the outputs")
-        }
-        ToolbarItemGroup(placement: .primaryAction) {
             Button { showCheck = true } label: { Label("Show Check", systemImage: "checkmark.seal") }
                 .help("Check everything before the show: media, outputs, sound, power, links")
             Toggle(isOn: $engine.locked) {
@@ -133,6 +133,8 @@ struct ControlView: View {
             .toggleStyle(.button)
             .help(engine.locked ? "Editing is locked. The show still runs. Click to unlock (Shift-Command-L)."
                   : "Lock editing for the show, so a stray click changes nothing (Shift-Command-L)")
+        }
+        ToolbarItem(placement: .primaryAction) {
             LinkBadge(link: link) { showConnect = true }
         }
         // The Inspector button sits last, at the window's right edge, over
@@ -195,13 +197,17 @@ struct ControlView: View {
                         .help(countUp ? "Counting up: time played. Click to count down." : "Counting down: time left. Click to count up.")
                         .accessibilityLabel(countUp ? "Time played" : "Time left")
                         .accessibilityAddTraits(.isButton)
-                        .overlay(alignment: .topTrailing) {
-                            Image(systemName: countUp ? "arrow.up" : "arrow.down")
-                                .font(.caption.weight(.bold))
+                    HStack(spacing: 14) {
+                        Button { countUp.toggle() } label: {
+                            Label(countUp ? "Played" : "Left", systemImage: countUp ? "arrow.up" : "arrow.down")
+                                .font(.title3.weight(.medium))
                                 .foregroundStyle(.secondary)
-                                .offset(x: 12, y: 6)
                         }
-                    timeOfDay
+                        .buttonStyle(.plain)
+                        .help(countUp ? "Counting up: time played. Click to count down." : "Counting down: time left. Click to count up.")
+                        timeOfDay
+                    }
+                    .padding(.top, 2)
                 }
             }
 
