@@ -269,8 +269,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    carries it now. 3% read as nothing against the page, 12% gives the row a body
    without turning the list into a wall of alarm. */
 .deleted-row{display:flex;align-items:center;gap:14px;padding:12px 16px;border: 1.5px dashed transparent;border-radius:var(--ui-radius-control);margin-bottom:8px;background:color-mix(in srgb,var(--red) 12%,transparent)}
-.deleted-row .dr-code{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.08em}
-.deleted-row .dr-name{font-size:13px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deleted-row .dr-name{font-size:13px;font-weight:700;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deleted-row .dr-code{font-family:var(--mono);font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--text2)}
 .deleted-row .dr-meta{font-size:11.5px;color:var(--text3);white-space:nowrap}
 .deleted-row .dr-actions{display:flex;gap:8px;flex-shrink:0}
 .btn-danger-ghost{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);border:1.5px solid transparent}
@@ -312,8 +312,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 .sc-left{}
 .sc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
-.sc-code{font-family:var(--mono-num);font-size:18px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
-.sc-showname{font-family:var(--syne);font-size:16px;font-weight:700;letter-spacing:0}
+.sc-showname{font-family:var(--syne);font-size:18px;font-weight:700;letter-spacing:0}
+.sc-code{font-family:var(--mono-num);font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
 .sc-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .sc-m{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);font-family:var(--mono)}
 .sc-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
@@ -699,7 +699,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .session-card{grid-template-columns:minmax(0,1fr);gap:14px;padding:16px 18px 16px 20px}
 .session-card:hover{border-color:transparent;transform:none}
 .sc-top{gap:6px 12px;margin-bottom:8px;min-width:0}
-.sc-code{font-size:17px;letter-spacing:.06em}
+.sc-code{font-size:12px;letter-spacing:.06em}
 .sc-showname{font-size:17px;min-width:0;overflow-wrap:anywhere}
 .sc-pill{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px}
 .sc-meta{gap:6px 16px}
@@ -827,6 +827,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 
 /* Peek */
 .peek-code{font-family:var(--mono-num);letter-spacing:.06em;overflow-wrap:anywhere}
+.peek-code-sm{font-size:12px;color:var(--accent);margin-left:6px}
 .peek-row{padding:9px 12px}
 .peek-name{font-size:13.5px}
 .peek-pill{font-family:var(--sans);font-size:10px;letter-spacing:.04em}
@@ -1370,7 +1371,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 <!-- ── MODAL: READ-ONLY RUNDOWN PEEK (Phase 4 item 5) ── -->
 <div class="modal-wrap" id="modal-peek">
   <div class="modal peek-modal">
-    <div class="modal-title">Rundown: <span class="peek-code" id="peekTitle"></span></div>
+    <div class="modal-title">Rundown: <span id="peekTitle"></span></div>
     <div class="modal-sub">Read-only live view. The highlighted row is where the show is right now.</div>
     <div class="peek-body" id="peekBody"></div>
     <button class="btn-full btn-secondary" onclick="closeRundownPeek()">Close</button>
@@ -2126,7 +2127,7 @@ function presenceStripHTML(s) {
 
 let peekUnsub = null;
 function openRundownPeek(code) {
-  document.getElementById('peekTitle').textContent = code;
+  document.getElementById('peekTitle').innerHTML = `<span class="peek-code">${escapeHtml(code)}</span>`;
   document.getElementById('peekBody').innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">Connecting…</div></div>`;
   showModal('modal-peek');
   try { if (peekUnsub) peekUnsub(); } catch {}
@@ -2136,7 +2137,9 @@ function openRundownPeek(code) {
       document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Session not found.</div>`;
       return;
     }
-    renderRundownPeek(snap.data() || {});
+    const peekData = snap.data() || {};
+    document.getElementById('peekTitle').innerHTML = `${escapeHtml(peekData.showName || 'Untitled Show')} <span class="peek-code peek-code-sm">${escapeHtml(code)}</span>`;
+    renderRundownPeek(peekData);
   }, () => {
     document.getElementById('peekBody').innerHTML = `<div class="peek-empty">Live view unavailable. Check the connection.</div>`;
   });
@@ -2375,8 +2378,8 @@ function renderSessions() {
     card.innerHTML = `
       <div class="sc-left">
         <div class="sc-top">
-          <div class="sc-code">${escapeHtml(s.code || s.id)}</div>
           <div class="sc-showname">${escapeHtml(s.showName || 'Untitled Show')}</div>
+          <div class="sc-code">${escapeHtml(s.code || s.id)}</div>
           <span class="sc-pill ${isActive?'active':'idle'}">${isActive?'● ACTIVE':'IDLE'}</span>
         </div>
         <div class="sc-meta">
@@ -2427,8 +2430,8 @@ function renderDeletedSessions() {
     const row = document.createElement('div');
     row.className = 'deleted-row';
     row.innerHTML = `
-      <div class="dr-code">${escapeHtml(code)}</div>
       <div class="dr-name">${escapeHtml(s.showName || 'Untitled Show')}</div>
+      <div class="dr-code">${escapeHtml(code)}</div>
       <div class="dr-meta">Deleted ${when}${s.deletedBy ? ' by ' + escapeHtml(s.deletedBy) : ''} · ${daysLeft} day${daysLeft===1?'':'s'} left</div>
       <div class="dr-actions">
         ${manageable

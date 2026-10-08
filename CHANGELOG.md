@@ -2,6 +2,43 @@
 
 ## Next release (not pushed yet)
 
+### Position Assignments page + show titles first (Oct 8)
+
+**Positions get their own page in Planda Bear.** The hub's Position
+Assignments card was a wall of rows with a Save button. Now the hub shows a
+simple roster, **Students and positions**: every student on the show, the
+positions they hold, and the paperwork they are responsible for. A signed-in
+admin taps **Assign positions** on that card to open the new page.
+
+- On the page: pick a **Student** from a dropdown (students on this show
+  first, then every other saved profile), give them a position from the
+  **Give them a position** dropdown, then hand them paperwork from the
+  **Assign paperwork** dropdown. Each position and each piece of paperwork is
+  a chip with an x to take it away. **Clear all** empties a student.
+- Every change saves on its own a moment later. The status line at the top
+  says Saved, Saving, or what went wrong, the same way paperwork pages do.
+  Nothing to press.
+- A student picked from "Other saved profiles" gets the show on their
+  sign-in page with their first position, so the one-tap tile is there.
+- Paperwork can only be handed out once a student has a position, because
+  each record is one student in one position. A student with two positions
+  carries the same paperwork list on both.
+- **Everyone on this show** at the bottom of the page is the same roster as
+  the hub. Tap a name to jump to that student.
+- The positions list for the show (add your own, remove ones you do not use)
+  is folded away at the bottom of the page.
+- The "Who worked on what" log still records Role Assignments on every save.
+
+**The production title leads; the show code follows, small.** Everywhere a
+show was labelled by its code, it is now labelled by its name with the code
+small beside it: the rundown top bar, the front page's Your sessions list,
+every Your shows picker (join, Planda Bear, Flowmingo talent and Op,
+Outrangutan), the profile portal cards, the resume banner, the Show setup
+launcher, the dashboard's show cards, recently deleted rows and rundown peek.
+The Planda Bear hub header now names the show and its code too.
+
+- After this update, reload every open Cueola window.
+
 ### Empty time boxes in Safari (Oct 5)
 
 **An empty time box shows --:-- in Safari, never 12:30 PM.** Safari paints

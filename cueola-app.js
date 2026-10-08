@@ -2158,7 +2158,7 @@ function initResumeBanner() {
   // lsRow is the crew's row number (segments do not count); old records lack it.
   const where = r.screen === 'live' ? 'live on row ' + (r.lsRow || ((r.lsIdx ?? 0) + 1)) : 'building';
   const text = document.getElementById('resumeBannerText');
-  if (text) text.innerHTML = `You were ${where} in show <b>${esc(r.code)}</b>${r.showName ? ' · “' + esc(r.showName) + '”' : ''}. Resume where you left off?`;
+  if (text) text.innerHTML = `You were ${where} in <b>${esc(r.showName || 'Untitled Show')}</b> <span class="u-mono-sm">${esc(r.code)}</span>. Resume where you left off?`;
   banner.hidden = false;
 }
 function dismissResumeBanner() {
@@ -3619,6 +3619,7 @@ function initAdminAuthAdapter() {
     // and hydrate itself protects a draft that reappears mid-load.
     try {
       renderPlandaBearAssignmentsCard({ force:true });
+      if (!adminSession && pbOpenPageId() === 'assignments') closePbAssignEditor();
       if (adminSession && pbOpenPageId() === 'hub' && session.code && session.code !== 'LOCAL'
           && !session.isDemo && !session.isExpert) {
         hydrateRoleAssignments({ force:true });
@@ -3748,12 +3749,6 @@ const ADMIN_TABS = [
   { id:'sources', label:'Sources', symbol:'content.display',   when:() => Boolean(session.code || session.isExpert) },
 ];
 let adminActiveTab = '';
-// Unsaved assignment edits carried across editor rebuilds (hub close, group
-// switch, a save that fails after the rows leave the DOM). The editor lives
-// on the Planda Bear hub; this stash is what survives when its DOM does not.
-// Cleared whenever the server copy is (re)confirmed: save, revert, reload,
-// hydrate.
-let assignmentDraftStash = null;
 
 function adminAvailableTabs() { return ADMIN_TABS.filter(t => t.when()); }
 
@@ -4094,25 +4089,28 @@ function resetAssignmentStateForSessionChange() {
   confirmedRoleAssignmentRows = [];
   assignmentProfiles = [];
   assignmentRevision = 0;
-  assignmentDraftStash = null;
+  pbAssignRows = [];
+  pbAssignLegacyRows = [];
+  pbAssignSelectedProfileId = '';
+  clearTimeout(_pbAssignSaveTimer);
+  _pbAssignSaveTimer = null;
+  _pbAssignSaveAgain = false;
   assignmentFromCache = false;
   _assignmentLoadDenied = false;
   _assignmentLegacyPending = false;
   _assignmentFailureOrigin = '';
   assignmentSaveState = 'loading';
   assignmentSaveDetail = 'Loading saved profiles and assignments…';
-  const rows = document.getElementById('adminRoleAssignments');
-  if (rows) rows.innerHTML = '';
   return true;
 }
 
 function assignmentSaveStateHTML() {
   const state = assignmentSaveState || 'unsaved';
-  const labels = { loading:'Loading', unsaved:'Unsaved', saving:'Saving', saved:'Saved', failed:'Failed', conflict:'Conflict' };
+  const labels = { loading:'Loading', unsaved:'Not saved yet', saving:'Saving', saved:'Saved', failed:'Failed', conflict:'Conflict' };
   const actions = state === 'failed'
     ? (assignmentFromCache || _assignmentFailureOrigin === 'load')
       ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="retryRoleAssignmentLoad()">Retry connection</button></span>`
-      : `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="saveRoleAssignmentsFromAdmin()">Retry</button><button class="admin-act-btn" onclick="revertRoleAssignments()">Revert draft</button></span>`
+      : `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="pbAssignSaveNow()">Try again</button><button class="admin-act-btn" onclick="revertRoleAssignments()">Undo my changes</button></span>`
     : state === 'conflict'
       ? `<span class="admin-assignment-state-actions"><button class="admin-act-btn" onclick="reloadRoleAssignmentsAfterConflict()">Load the saved version</button></span>`
       : '';
@@ -4278,7 +4276,7 @@ function normalizePaperworkSelections(value, options=basePlandaBearAssignmentOpt
 function normalizeRoleAssignment(row={}, options=null, catalog=null) {
   const model = assignmentModel();
   // One catalog build feeds both the label options and the id lookup: callers
-  // that normalize many rows (getRoleAssignments, renderRoleAssignmentRows)
+  // that normalize many rows (getRoleAssignments, the assignments page)
   // pass a shared catalog so the per-row localStorage parse + call-sheet
   // normalization does not run dozens of times per presence snapshot.
   const cat = catalog || plandaBearAssignmentCatalog();
@@ -4362,7 +4360,7 @@ function addPositionOption() {
     custom.push(name);
   }
   persistWholeClassPreProPatch({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
-  renderPlandaBearAssignmentsCard({ force:true });
+  pbAssignRefreshAll();
   toast(`Position "${name}" added.`);
 }
 
@@ -4377,7 +4375,7 @@ function removePositionOption(name) {
     removed.push(String(name).trim());
   }
   persistWholeClassPreProPatch({ positionsCustom: custom, positionsRemoved: removed }, 'Positions');
-  renderPlandaBearAssignmentsCard({ force:true });
+  pbAssignRefreshAll();
   toast(`Position "${name}" removed. Anyone already assigned to it keeps it.`);
 }
 
@@ -4432,240 +4430,345 @@ function mergeWholeClassPreProFromParent(server) {
   next.updatedAt = Math.max(Number(previous.updatedAt) || 0, Number(server.updatedAt) || 0);
   try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
   if (pbOpenPageId() === 'hub') renderPlandaBearAssignmentsCard();
+  if (pbOpenPageId() === 'assignments') pbAssignRender({ guardFocus:true });
 }
 
-function rolePositionOptionsHTML(selected='', selectedId='') {
-  const chosen = String(selected || '').trim();
-  // Keep the chosen value selectable even if it was removed from this
-  // production's list — an existing assignment must never silently change.
-  const options = cleanUniqueStrings([...getRolePositionOptions(), chosen])
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' }));
-  return `<option value="">Select position</option>` + options.map(opt => {
-    const id = assignmentModel()?.positionIdFor?.(opt) || paperworkIdForLabel(opt).replace(/^paperwork_/, 'position_');
-    return `<option value="${esc(id)}" data-position-label="${esc(opt)}" ${(selectedId && id === selectedId) || (!selectedId && opt.toLowerCase() === chosen.toLowerCase()) ? 'selected' : ''}>${esc(opt)}</option>`;
-  }).join('');
-}
+// ── Position Assignments: its own Planda Bear page, admins only (owner
+// 2026-10-08). Pick a student, give them positions, hand them paperwork.
+// Every change saves on its own a moment later through the same transaction
+// the old Save button used: one record per student and position in the
+// canonical register, plus the compat rows on the session doc. The hub keeps
+// a read-only roster for everyone (renderPlandaBearAssignmentsCard).
+let pbAssignRows = [];                 // the register as the editor holds it right now
+let pbAssignLegacyRows = [];           // older rows with no saved profile, shown as a note
+let pbAssignSelectedProfileId = '';
+let _pbAssignSaveTimer = null;
+let _pbAssignSaveAgain = false;        // an edit landed while a save was in flight
+const PB_ASSIGN_SAVE_DELAY_MS = 700;
 
-function renderRoleAssignmentRows(rows=getRoleAssignments()) {
-  const paperworkOptions = plandaBearAssignmentCatalog();
-  const paperworkOptionLabels = paperworkOptions.map(option => option.label);
-  const normalizedRows = (rows.length ? rows : defaultRoleAssignments()).map(row => normalizeRoleAssignment(row, paperworkOptionLabels, paperworkOptions));
-  // Owner 2026-08-30: ONE CARD PER STUDENT. The student's name select renders
-  // once at the top of their card; every position they hold stacks inside the
-  // same card as a scaled-down sub-row ("and <position>"). Each position is
-  // still its own record and its own [data-role-assignment-row] element with
-  // the same fields and data attributes, so the save/conflict machinery is
-  // untouched: sub-rows carry the profileId as a hidden input, kept in sync
-  // with the card's visible select by aaSyncGroupProfile.
-  const sortKey = row => `${(row.person || '￿').toLowerCase()}|${row.profileId || ''}`;
-  const list = [...normalizedRows].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0);
-  const recordHTML = (row, i, isLead) => {
-    const selectedPaperwork = new Set(row.paperworkIds);
-    const selectedLabels = new Set((row.paperwork || []).map(l => String(l || '').trim().toLowerCase()).filter(Boolean));
-    // An existing selection must never silently change (same rule as the
-    // position dropdown): union the catalog with this row's OWN pairs so a
-    // selection whose type was disabled mid-draft, or whose id predates the
-    // canonical ids, still renders as a checked item and round-trips.
-    const rowOptions = [...paperworkOptions];
-    (row.paperwork || []).forEach((label, pi) => {
-      const clean = String(label || '').trim();
-      if (!clean) return;
-      if (rowOptions.some(opt => opt.label.toLowerCase() === clean.toLowerCase())) return;
-      rowOptions.push({ id: row.paperworkIds?.[pi] || paperworkIdForLabel(clean), label: clean });
+function pbAssignCanEdit() {
+  return Boolean(adminSession && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert);
+}
+function pbAssignRealRows(rows) {
+  return (rows || []).filter(row => row && row.profileId && row.positionId);
+}
+function pbAssignModalOpen() {
+  return Boolean(document.getElementById('pbAssignModal')?.classList.contains('on'));
+}
+function pbAssignProfileIdOf(profile) {
+  return assignmentModel()?.profileIdFor?.(profile) || profile?.profileId || '';
+}
+function pbAssignPositionId(label) {
+  return assignmentModel()?.positionIdFor?.(label) || paperworkIdForLabel(label).replace(/^paperwork_/, 'position_');
+}
+function pbAssignRowsFor(profileId) {
+  return pbAssignRows.filter(row => row.profileId === profileId);
+}
+// A student's paperwork is the union of their position records. Writing it
+// back puts the same list on every record, so removing one position never
+// loses the paperwork.
+function pbAssignPaperworkFor(profileId) {
+  const ids = [], labels = [];
+  pbAssignRowsFor(profileId).forEach(row => {
+    (row.paperworkIds || []).forEach((id, i) => {
+      if (ids.includes(id)) return;
+      ids.push(id);
+      labels.push(row.paperwork?.[i] || id);
     });
-    const profile = assignmentProfileById(row.profileId);
-    const profileMeta = row.profileId
-      ? (profile?.username ? '@' + profile.username : 'Profile chosen')
-      : 'Choose a saved profile.';
-    const updated = row.updatedAt ? `Last saved ${new Date(row.updatedAt).toLocaleString()}` : 'Not saved yet';
-    const portalReady = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
-    const chosen = (row.paperwork || []).filter(Boolean);
-    const summary = chosen.length ? `Paperwork (${chosen.length}): ${chosen.join(' · ')}` : 'Choose paperwork';
-    return `<div class="admin-assignment-row aa-compact${isLead ? '' : ' aa-sub'}" data-role-assignment-row="${i}"
-      data-assignment-id="${esc(row.assignmentId)}" data-person="${esc(row.person)}" data-created-at="${row.createdAt || 0}" data-updated-at="${row.updatedAt || 0}"
-      data-record-revision="${row.revision || 0}" data-status="${esc(row.status)}" data-assigned-by="${esc(row.assignedBy)}" data-assigned-by-label="${esc(row.assignedByLabel)}">
-      ${isLead ? '' : `<input type="hidden" data-role-field="profileId" value="${esc(row.profileId)}">`}
-      <div class="aa-line${isLead ? '' : ' aa-line-sub'}">
-        ${isLead
-          ? `<select class="admin-in aa-student" data-role-field="profileId" aria-label="Student profile" onchange="aaSyncGroupProfile(this)">${assignmentProfileOptions(row.profileId, row.person)}</select>`
-          : `<span class="aa-sub-marker" aria-hidden="true">and</span>`}
-        <select class="admin-in aa-position" data-role-field="positionId" aria-label="Position">${rolePositionOptionsHTML(row.position, row.positionId)}</select>
-        ${isLead ? `<button class="aa-add-pos" type="button" onclick="addRoleAssignmentRowForRow(${i})" data-tip="Add another position for this student" aria-label="Add another position for this student">${sfIcon('action.add')}<span>Position</span></button>` : ''}
-        <button class="admin-assignment-remove" onclick="removeRoleAssignmentRow(${i})" data-tip="Remove this position" aria-label="Remove this position">${sfIcon('action.close')}</button>
-      </div>
-      <details class="aa-paperwork">
-        <summary>${esc(summary)}</summary>
-        <div class="aa-paperwork-list">
-          ${rowOptions.map(option => `<label class="aa-pw-item"><input type="checkbox" data-role-field="paperwork" value="${esc(option.id)}" data-paperwork-label="${esc(option.label)}" ${selectedPaperwork.has(option.id) || selectedLabels.has(option.label.toLowerCase()) ? 'checked' : ''} onchange="aaUpdatePaperworkSummary(this)"><span>${esc(option.label)}</span></label>`).join('')}
-        </div>
-        <div class="aa-meta">${esc(profileMeta)} · ${esc(updated)} · <span class="${portalReady ? 'portal-ready' : 'portal-not-ready'}">${portalReady ? 'Show is on their profile' : 'Show is not on their profile yet'}</span>${row.assignedByLabel ? ` · By ${esc(row.assignedByLabel)}` : ''}</div>
-      </details>
-    </div>`;
-  };
-  const cards = [];
-  let i = 0;
-  while (i < list.length) {
-    let j = i;
-    // Blank drafts (no student yet) never merge into another card.
-    while (j + 1 < list.length && list[i].person && sortKey(list[j + 1]) === sortKey(list[i])) j++;
-    const rowsHTML = [];
-    for (let k = i; k <= j; k++) rowsHTML.push(recordHTML(list[k], k, k === i));
-    cards.push(`<div class="aa-card">${rowsHTML.join('')}</div>`);
-    i = j + 1;
+  });
+  return { ids, labels };
+}
+function pbAssignSetPaperworkFor(profileId, ids, labels) {
+  pbAssignRowsFor(profileId).forEach(row => {
+    row.paperworkIds = ids.slice();
+    row.paperwork = labels.slice();
+  });
+}
+
+// Open the page from the hub. Everyone else gets the hub roster only.
+function openPbAssignEditor() {
+  if (!adminSession) { openAdminLogin(); return; }
+  if (!pbAssignCanEdit()) { toast('Open Planda Bear with a show code to assign positions.'); return; }
+  resetAssignmentStateForSessionChange();
+  if (!assignmentDraftInProgress() && assignmentSaveState !== 'loading') {
+    pbAssignRows = pbAssignRealRows(getRoleAssignments());
   }
-  return `<div class="admin-assignment-list">${cards.join('')}</div>`;
+  if (assignmentSaveState === 'loading' && !assignmentHydratePromise) hydrateRoleAssignments();
+  hideModal('paperworkHubModal');
+  pbAssignRender();
+  showModal('pbAssignModal');
+  pbSetPresencePage('assignments');
 }
 
-// The card's one visible student select drives every position record inside
-// it: sub-rows carry hidden profileId inputs that must follow a change.
-function aaSyncGroupProfile(select) {
-  const card = select.closest('.aa-card');
-  if (!card) return;
-  card.querySelectorAll('input[type="hidden"][data-role-field="profileId"]').forEach(input => { input.value = select.value; });
+function closePbAssignEditor() {
+  pbAssignFlush();
+  hideModal('pbAssignModal');
+  openPaperworkHub();
 }
-window.aaSyncGroupProfile = aaSyncGroupProfile;
 
-// Keep the collapsed paperwork summary honest as boxes get checked.
-function aaUpdatePaperworkSummary(input) {
-  const details = input.closest('details.aa-paperwork');
-  if (!details) return;
-  const labels = [...details.querySelectorAll('[data-role-field="paperwork"]:checked')].map(i => i.dataset.paperworkLabel || i.value);
-  const summary = details.querySelector('summary');
-  if (summary) summary.textContent = labels.length ? `Paperwork (${labels.length}): ${labels.join(' · ')}` : 'Choose paperwork';
+function pbAssignSelectStudent(profileId) {
+  pbAssignSelectedProfileId = String(profileId || '');
+  pbAssignRender();
+  if (pbAssignSelectedProfileId) {
+    document.getElementById('pbAssignAddPosition')?.focus();
+  }
 }
-window.aaUpdatePaperworkSummary = aaUpdatePaperworkSummary;
 
-// One tap on a row: another position record for the SAME student. The save
-// model already treats each (student, position) pair as its own record.
-function addRoleAssignmentRowForRow(index) {
-  const rows = getRoleAssignmentsFromAdminDOM(true);
-  const src = rows[index];
-  if (!src) return addRoleAssignmentRow();
-  rows.push({ profileId: src.profileId, person: src.person, positionId:'', position:'', paperworkIds:[], paperwork:[] });
-  rerenderRoleAssignments(rows);
-  markRoleAssignmentsUnsaved();
-  setTimeout(() => {
-    const target = [...document.querySelectorAll('#adminRoleAssignments [data-role-assignment-row]')]
-      .find(el => el.querySelector('[data-role-field="profileId"]')?.value === String(src.profileId || '')
-        && !el.querySelector('[data-role-field="positionId"]')?.value);
-    target?.querySelector('[data-role-field="positionId"]')?.focus();
-  }, 0);
+// The student list: profiles tied to this show first, then every other saved
+// profile, so a student who has not joined yet can still be given a position.
+function pbAssignStudentOptionsHTML() {
+  const inShow = assignmentProfiles.slice();
+  const inIds = new Set(inShow.map(pbAssignProfileIdOf));
+  const others = (assignmentAllProfiles || [])
+    .filter(p => !inIds.has(pbAssignProfileIdOf(p)))
+    .sort((a, b) => String(a.fullName || a.username || '').localeCompare(String(b.fullName || b.username || ''), undefined, { sensitivity:'base' }));
+  const option = p => {
+    const id = pbAssignProfileIdOf(p);
+    return `<option value="${esc(id)}" ${id === pbAssignSelectedProfileId ? 'selected' : ''}>${esc(p.fullName || p.username || id)}${p.username ? esc(' @' + p.username) : ''}</option>`;
+  };
+  let html = `<option value="">Choose a student…</option>`;
+  if (inShow.length) html += `<optgroup label="In this show">${inShow.map(option).join('')}</optgroup>`;
+  if (others.length) html += `<optgroup label="Other saved profiles">${others.map(option).join('')}</optgroup>`;
+  return html;
 }
-window.addRoleAssignmentRowForRow = addRoleAssignmentRowForRow;
 
-function getRoleAssignmentsFromAdminDOM(includeBlank=false) {
-  const rows = Array.from(document.querySelectorAll('[data-role-assignment-row]')).map(rowEl => {
-    const profileId = rowEl.querySelector('[data-role-field="profileId"]')?.value?.trim() || '';
-    const profile = assignmentProfileById(profileId);
-    const positionSelect = rowEl.querySelector('[data-role-field="positionId"]');
-    const positionId = positionSelect?.value?.trim() || '';
-    const position = positionSelect?.selectedOptions?.[0]?.dataset?.positionLabel || positionSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
-    const paperworkInputs = Array.from(rowEl.querySelectorAll('[data-role-field="paperwork"]:checked'));
-    const paperworkIds = paperworkInputs.map(input => input.value);
-    const paperwork = paperworkInputs.map(input => input.dataset.paperworkLabel || input.value);
-    return {
-      assignmentId:rowEl.dataset.assignmentId || '', profileId,
-      username:profile?.username || '',
-      // No profile picked yet: keep the row's legacy name so migration rows
-      // survive a DOM round-trip with their 'Old name, pick a profile' label.
-      person:profile?.fullName || (!profileId && rowEl.dataset.person) || '',
-      positionId, position, paperworkIds, paperwork,
-      status:rowEl.dataset.status || 'assigned',
-      assignedBy:rowEl.dataset.assignedBy || '', assignedByLabel:rowEl.dataset.assignedByLabel || '',
-      createdAt:Number(rowEl.dataset.createdAt) || 0, updatedAt:Number(rowEl.dataset.updatedAt) || 0,
-      revision:Number(rowEl.dataset.recordRevision) || 0,
-    };
+function pbAssignProfile(profileId) {
+  return assignmentProfileById(profileId)
+    || (assignmentAllProfiles || []).find(p => pbAssignProfileIdOf(p) === profileId)
+    || null;
+}
+
+// Everyone with a position, plus the students on this show who have none yet.
+function pbAssignRosterGroups(rows) {
+  const groups = new Map();
+  const add = (key, seed) => {
+    if (!groups.has(key)) groups.set(key, { profileId:'', person:'', username:'', positions:[], paperwork:[], ...seed });
+    return groups.get(key);
+  };
+  (rows || []).forEach(row => {
+    if (!row || !row.person) return;
+    const key = row.profileId || String(row.person).trim().toLowerCase();
+    const g = add(key, { profileId:row.profileId || '', person:row.person, username:row.username || '' });
+    if (row.position && !g.positions.includes(row.position)) g.positions.push(row.position);
+    (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
   });
-  return includeBlank ? rows : rows.filter(row => row.profileId || row.positionId || row.paperworkIds.length);
-}
-
-function rerenderRoleAssignments(rows, opts={}) {
-  const wrap = document.getElementById('adminRoleAssignments');
-  if (!wrap) return;
-  // A background refresh must not rebuild the rows under the operator's
-  // cursor (an open select would snap shut); the next repaint catches up.
-  if (opts.guardFocus && wrap.contains(document.activeElement)) return;
-  wrap.innerHTML = renderRoleAssignmentRows(rows.length ? rows : defaultRoleAssignments());
-  refreshPbRosterStrip();
-}
-
-function addRoleAssignmentRow() {
-  const rows = getRoleAssignmentsFromAdminDOM(true);
-  rows.push({ profileId:'', person:'', positionId:'', position:'', paperworkIds:[], paperwork:[] });
-  rerenderRoleAssignments(rows);
-  markRoleAssignmentsUnsaved();
-}
-
-// One-tap assign from the session roster: appends a draft row with the
-// person's profile preselected, so the instructor only picks the position.
-function addRoleAssignmentRowForProfile(profileId) {
-  profileId = String(profileId || '');
-  if (!profileId) return;
-  const model = assignmentModel();
-  const profile = assignmentProfiles.find(p => (model?.profileIdFor?.(p) || p.profileId || '') === profileId);
-  const rows = getRoleAssignmentsFromAdminDOM(true);
-  rows.push({
-    profileId,
-    person: profile?.fullName || profile?.username || '',
-    positionId:'', position:'', paperworkIds:[], paperwork:[],
+  const named = new Set([...groups.values()].map(g => String(g.person).trim().toLowerCase()));
+  assignmentProfiles.forEach(p => {
+    const id = pbAssignProfileIdOf(p);
+    const name = String(p.fullName || p.username || '').trim();
+    if (!name || groups.has(id) || named.has(name.toLowerCase())) return;
+    add(id, { profileId:id, person:name, username:p.username || '' });
+    named.add(name.toLowerCase());
   });
-  rerenderRoleAssignments(rows);
-  markRoleAssignmentsUnsaved();
-  // Land the cursor on the new row's position picker: the one choice left.
-  const rowEls = document.querySelectorAll('#adminRoleAssignments [data-role-assignment-row]');
-  rowEls[rowEls.length - 1]?.querySelector('[data-role-field="positionId"]')?.focus();
+  (Array.isArray(sessionParticipantNames) ? sessionParticipantNames : []).forEach(name => {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key || named.has(key)) return;
+    add(key, { person:name });
+    named.add(key);
+  });
+  return [...groups.values()].sort((a, b) => a.person.localeCompare(b.person, undefined, { sensitivity:'base' }));
 }
 
-// The join the editor was missing: who is IN this session (participants +
-// live presence) against who has an assignment row. Joined-but-unassigned
-// people with a saved profile get a one-tap assign chip; people without a
-// profile are named so the instructor knows to have them create one (the
-// save validator requires a profile).
-function pbAssignmentRosterStripHTML(draftRows) {
-  const names = Array.isArray(sessionParticipantNames) ? sessionParticipantNames : [];
-  if (!names.length) return '';
-  const model = assignmentModel();
-  const assignedKeys = new Set();
-  (draftRows || getRoleAssignments()).forEach(row => {
-    const key = String(row?.person || '').trim().toLowerCase();
-    if (key) assignedKeys.add(key);
-    const pid = String(row?.profileId || '');
-    if (pid) assignedKeys.add(pid);
-  });
-  const chips = names.map(name => {
-    const key = name.trim().toLowerCase();
-    const matches = assignmentProfiles.filter(p =>
-      String(p.fullName || '').trim().toLowerCase() === key
-      || String(p.username || '').trim().toLowerCase() === key);
-    const profileId = matches.length === 1 ? (model?.profileIdFor?.(matches[0]) || matches[0].profileId || '') : '';
-    const assigned = assignedKeys.has(key) || (profileId && assignedKeys.has(profileId));
-    // Assigned people stay tappable: a student can hold several positions.
-    if (assigned && profileId) return `<button class="pb-roster-chip pb-roster-assigned" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Add another position for ${esc(name)}">${sfIcon('marker.ready')} ${esc(name)}</button>`;
-    if (assigned) return `<span class="pb-roster-chip pb-roster-assigned">${sfIcon('marker.ready')} ${esc(name)}</span>`;
-    if (profileId) return `<button class="pb-roster-chip pb-roster-add" onclick="addRoleAssignmentRowForProfile('${esc(profileId)}')" data-tip="Assign a position to ${esc(name)}">+ ${esc(name)}</button>`;
-    return `<span class="pb-roster-chip pb-roster-noprofile" data-tip="${matches.length > 1 ? 'Several profiles match this name: pick them in a row manually' : 'No saved profile yet: they create one at the front door'}">${esc(name)}</span>`;
-  }).join('');
-  return `<div class="admin-src-row u-mb10" id="pbRosterStrip">
-    <span class="admin-src-label">In this session</span>
-    <div class="admin-src-chips">${chips}</div>
+function pbAssignRosterTableHTML(groups, opts={}) {
+  if (!groups.length) return `<div class="u-note">No students on this show yet. They appear here when they join with the show code.</div>`;
+  const row = g => {
+    const pickable = opts.pickable && g.profileId;
+    const tag = pickable ? 'button' : 'div';
+    const attrs = pickable ? ` type="button" onclick="pbAssignSelectStudent('${esc(g.profileId)}')"` : '';
+    const selected = pickable && g.profileId === pbAssignSelectedProfileId ? ' is-selected' : '';
+    return `<${tag} class="pb-roster-row${selected}"${attrs}>
+      <span class="pb-roster-name">${esc(g.person)}</span>
+      <span class="pb-roster-pos">${g.positions.length ? g.positions.map(p => `<span class="pb-roster-chip pb-roster-assigned">${esc(p)}</span>`).join('') : '<span class="pb-roster-none">No position yet</span>'}</span>
+      <span class="pb-roster-paper">${g.paperwork.length ? esc(g.paperwork.join(', ')) : '<span class="pb-roster-none">No paperwork</span>'}</span>
+    </${tag}>`;
+  };
+  return `<div class="pb-roster-table">
+    <div class="pb-roster-row pb-roster-headrow" aria-hidden="true"><span>Student</span><span>Positions</span><span>Paperwork</span></div>
+    ${groups.map(row).join('')}
   </div>`;
 }
 
-// Keep the strip honest as the draft changes: a chip that stayed '+ Name'
-// after its own one-tap add invited a second tap and a duplicate row.
-function refreshPbRosterStrip() {
-  const strip = document.getElementById('pbRosterStrip');
-  if (!strip) return;
-  const html = pbAssignmentRosterStripHTML(getRoleAssignmentsFromAdminDOM(true));
-  if (html) strip.outerHTML = html;
-  else strip.remove();
+function pbAssignRender(opts={}) {
+  const body = document.getElementById('pbAssignBody');
+  if (!body || !pbAssignModalOpen()) return;
+  // A background refresh must not rebuild the page under an open dropdown.
+  if (opts.guardFocus && body.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  const pid = pbAssignSelectedProfileId;
+  const profile = pid ? pbAssignProfile(pid) : null;
+  if (pid && !profile && !pbAssignRowsFor(pid).length) pbAssignSelectedProfileId = '';
+  const groups = pbAssignRosterGroups(pbAssignRows);
+  const legacyNote = pbAssignLegacyRows.length
+    ? `<div class="u-note-sm pba-legacy">Older rows without a saved profile: ${esc(pbAssignLegacyRows.map(r => r.person + (r.position ? ' (' + r.position + ')' : '')).join(', '))}. Pick each student from the list to assign them again.</div>`
+    : '';
+  body.innerHTML = `
+    <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
+    <div class="pba-pick">
+      <label class="field-lbl" for="pbAssignStudent">Student</label>
+      <select class="field-in" id="pbAssignStudent" onchange="pbAssignSelectStudent(this.value)">${pbAssignStudentOptionsHTML()}</select>
+    </div>
+    ${legacyNote}
+    ${pbAssignSelectedProfileId ? pbAssignStudentEditorHTML(pbAssignSelectedProfileId) : `<div class="u-note pba-hint">Choose a student above, or tap a name in the list below.</div>`}
+    <div class="pba-everyone">
+      <div class="pb-assign-title">${sfIcon('content.checklist')} Everyone on this show</div>
+      ${pbAssignRosterTableHTML(groups, { pickable:true })}
+    </div>
+    <details class="pba-positions-list">
+      <summary>Positions list for this show</summary>
+      <div class="u-note-sm u-mb8">The positions offered in the dropdown. Remove ones this show does not use, or add your own. Anyone already assigned keeps their position.</div>
+      <div class="admin-src-chips">
+        ${getRolePositionOptions().map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this show" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
+        <input class="admin-in admin-src-new" id="pbNewPositionName" placeholder="New position" maxlength="40" onkeydown="if(event.key==='Enter'){event.preventDefault();addPositionOption()}">
+        <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
+      </div>
+    </details>`;
 }
 
-function removeRoleAssignmentRow(index) {
-  const rows = getRoleAssignmentsFromAdminDOM(true);
-  rows.splice(index, 1);
-  rerenderRoleAssignments(rows);
-  markRoleAssignmentsUnsaved();
+function pbAssignStudentEditorHTML(pid) {
+  const profile = pbAssignProfile(pid);
+  const rows = pbAssignRowsFor(pid);
+  const name = profile?.fullName || profile?.username || rows[0]?.person || 'Student';
+  const onShow = profile && Array.isArray(profile.sessions) && profile.sessions.includes(session.code);
+  const held = rows.map(r => r.position).filter(Boolean);
+  const heldIds = new Set(rows.map(r => r.positionId));
+  const positionOptions = getRolePositionOptions()
+    .filter(label => !heldIds.has(pbAssignPositionId(label)))
+    .map(label => `<option value="${esc(label)}">${esc(label)}</option>`).join('');
+  const paper = pbAssignPaperworkFor(pid);
+  const catalog = plandaBearAssignmentCatalog();
+  const paperOptions = catalog
+    .filter(item => !paper.ids.includes(item.id) && !paper.labels.some(l => l.toLowerCase() === item.label.toLowerCase()))
+    .map(item => `<option value="${esc(item.id)}" data-paperwork-label="${esc(item.label)}">${esc(item.label)}</option>`).join('');
+  const lastSaved = rows.map(r => Number(r.updatedAt) || 0).reduce((a, b) => Math.max(a, b), 0);
+  const meta = [
+    profile?.username ? '@' + profile.username : '',
+    onShow ? 'Show is on their sign-in page' : (profile ? 'Show goes on their sign-in page with their first position' : ''),
+    lastSaved ? `Last saved ${new Date(lastSaved).toLocaleString()}` : '',
+    rows[0]?.assignedByLabel ? `By ${rows[0].assignedByLabel}` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="pba-student">
+    <div class="pba-student-head">
+      <div>
+        <div class="pba-student-name">${esc(name)}</div>
+        ${meta ? `<div class="pba-student-meta">${esc(meta)}</div>` : ''}
+      </div>
+      ${rows.length ? `<button type="button" class="admin-act-btn danger" onclick="pbAssignClearStudent('${esc(pid)}')">Clear all</button>` : ''}
+    </div>
+    <div class="pba-section">
+      <div class="pba-section-title">Positions</div>
+      <div class="pba-chips">
+        ${held.length ? rows.map(r => `<span class="pba-chip">${esc(r.position)}<button type="button" class="rm" onclick="pbAssignRemovePosition('${esc(pid)}','${esc(r.positionId)}')" data-tip="Take ${esc(r.position)} away" aria-label="Remove ${esc(r.position)}">${sfIcon('action.close')}</button></span>`).join('')
+          : `<span class="pba-empty">No position yet.</span>`}
+      </div>
+      <select class="field-in pba-add" id="pbAssignAddPosition" onchange="pbAssignAddPosition(this)" aria-label="Add a position">
+        <option value="">${held.length ? 'Add another position…' : 'Give them a position…'}</option>${positionOptions}
+      </select>
+    </div>
+    <div class="pba-section">
+      <div class="pba-section-title">Paperwork they are responsible for</div>
+      <div class="pba-chips">
+        ${paper.ids.length ? paper.ids.map((id, i) => `<span class="pba-chip pba-chip-paper">${esc(paper.labels[i])}<button type="button" class="rm" onclick="pbAssignRemovePaperwork('${esc(pid)}','${esc(id)}')" data-tip="Take this paperwork off their list" aria-label="Remove ${esc(paper.labels[i])}">${sfIcon('action.close')}</button></span>`).join('')
+          : `<span class="pba-empty">${held.length ? 'No paperwork yet.' : 'Give them a position first, then their paperwork.'}</span>`}
+      </div>
+      <select class="field-in pba-add" id="pbAssignAddPaperwork" onchange="pbAssignAddPaperwork(this)" aria-label="Assign paperwork" ${held.length ? '' : 'disabled'}>
+        <option value="">Assign paperwork…</option>${paperOptions}
+      </select>
+    </div>
+  </div>`;
+}
+
+function pbAssignAddPosition(select) {
+  const label = String(select?.value || '').trim();
+  const pid = pbAssignSelectedProfileId;
+  if (!label || !pid) return;
+  const profile = pbAssignProfile(pid);
+  const positionId = pbAssignPositionId(label);
+  if (pbAssignRowsFor(pid).some(r => r.positionId === positionId)) { pbAssignRender(); return; }
+  const paper = pbAssignPaperworkFor(pid);
+  pbAssignRows.push({
+    assignmentId:'', profileId:pid,
+    username: profile?.username || '',
+    person: profile?.fullName || profile?.username || pbAssignRowsFor(pid)[0]?.person || '',
+    positionId, position:label,
+    paperworkIds: paper.ids.slice(), paperwork: paper.labels.slice(),
+    status:'assigned', assignedBy:'', assignedByLabel:'', createdAt:0, updatedAt:0, revision:0,
+  });
+  // A student picked from "Other saved profiles" gets the show on their
+  // sign-in page too, so the one-tap tile is there when they next sign in.
+  if (profile && !assignmentProfiles.some(p => pbAssignProfileIdOf(p) === pid)) {
+    assignmentProfiles.push(profile);
+    assignmentProfiles.sort((a, b) => String(a.fullName || a.username || '').localeCompare(String(b.fullName || b.username || ''), undefined, { sensitivity:'base' }));
+    if (profile.username && !(Array.isArray(profile.sessions) && profile.sessions.includes(session.code))) {
+      adminAssignProfileToSession(profile.username).catch(() => {});
+    }
+  }
+  pbAssignQueueSave();
+  pbAssignRender();
+  document.getElementById('pbAssignAddPosition')?.focus();
+}
+
+function pbAssignRemovePosition(pid, positionId) {
+  const before = pbAssignRows.length;
+  pbAssignRows = pbAssignRows.filter(r => !(r.profileId === pid && r.positionId === positionId));
+  if (pbAssignRows.length === before) return;
+  pbAssignQueueSave();
+  pbAssignRender();
+}
+
+function pbAssignAddPaperwork(select) {
+  const id = String(select?.value || '').trim();
+  const label = select?.selectedOptions?.[0]?.dataset?.paperworkLabel || id;
+  const pid = pbAssignSelectedProfileId;
+  if (!id || !pid || !pbAssignRowsFor(pid).length) return;
+  const paper = pbAssignPaperworkFor(pid);
+  if (paper.ids.includes(id)) { pbAssignRender(); return; }
+  pbAssignSetPaperworkFor(pid, [...paper.ids, id], [...paper.labels, label]);
+  pbAssignQueueSave();
+  pbAssignRender();
+  document.getElementById('pbAssignAddPaperwork')?.focus();
+}
+
+function pbAssignRemovePaperwork(pid, id) {
+  const paper = pbAssignPaperworkFor(pid);
+  const at = paper.ids.indexOf(id);
+  if (at < 0) return;
+  paper.ids.splice(at, 1);
+  paper.labels.splice(at, 1);
+  pbAssignSetPaperworkFor(pid, paper.ids, paper.labels);
+  pbAssignQueueSave();
+  pbAssignRender();
+}
+
+function pbAssignClearStudent(pid) {
+  const rows = pbAssignRowsFor(pid);
+  if (!rows.length) return;
+  const name = rows[0].person || 'this student';
+  if (!confirm(`Take every position and all paperwork away from ${name}?`)) return;
+  pbAssignRows = pbAssignRows.filter(r => r.profileId !== pid);
+  pbAssignQueueSave();
+  pbAssignRender();
+}
+
+// Save as you go: each change arms a short timer, so a burst of taps becomes
+// one save. The save itself is the register transaction below.
+function pbAssignQueueSave() {
+  clearTimeout(_pbAssignSaveTimer);
+  if (assignmentSaveState === 'saving') { _pbAssignSaveAgain = true; return; }
+  setAssignmentSaveState('unsaved', 'Saving in a moment…');
+  _pbAssignSaveTimer = setTimeout(pbAssignSaveNow, PB_ASSIGN_SAVE_DELAY_MS);
+}
+function pbAssignSaveNow() {
+  clearTimeout(_pbAssignSaveTimer);
+  _pbAssignSaveTimer = null;
+  return saveRoleAssignmentsFromAdmin(pbAssignRows);
+}
+function pbAssignFlush() {
+  if (_pbAssignSaveTimer) pbAssignSaveNow();
+}
+// After the register changes anywhere (save, hydrate, positions list): repaint
+// the page if it is open and the hub roster if that is.
+function pbAssignRefreshAll() {
+  pbAssignRender({ guardFocus:true });
+  renderPlandaBearAssignmentsCard({ force:true });
 }
 
 function legacyAssignmentRowsFromSession(data={}) {
@@ -4785,10 +4888,10 @@ async function hydrateRoleAssignments({ force=false }={}) {
         confirmedRoleAssignmentRows = [];
         const unresolved = rows.filter(row => !row.profileId || !row.positionId).length;
         if (!draftMaterialized) setAssignmentSaveState(fromCache ? 'failed' : (unresolved ? 'conflict' : 'unsaved'), fromCache
-          ? 'Showing older positions saved on this computer. Reconnect before you save.'
+          ? 'Showing older positions saved on this computer. Reconnect before you make changes.'
           : unresolved
-            ? `${unresolved} older row${unresolved === 1 ? ' needs' : 's need'} a profile and a position picked again.`
-            : `${rows.length} older assignment${rows.length === 1 ? '' : 's'} found. Check them, then press Save assignments.`);
+            ? `${unresolved} older row${unresolved === 1 ? ' needs' : 's need'} a saved profile. Pick those students from the list to assign them again.`
+            : `${rows.length} older assignment${rows.length === 1 ? '' : 's'} found. They save in the new format with your next change.`);
       } else {
         rows = defaultRoleAssignments();
         confirmedRoleAssignmentRows = [];
@@ -4797,9 +4900,10 @@ async function hydrateRoleAssignments({ force=false }={}) {
           : 'No assignments saved yet.');
       }
       if (!draftMaterialized) {
-        assignmentDraftStash = null;   // the server copy is now the truth
-        rerenderRoleAssignments(rows, { guardFocus:true });
-        renderPlandaBearAssignmentsCard();
+        // The server copy is now the truth the editor holds.
+        pbAssignRows = pbAssignRealRows(rows);
+        pbAssignLegacyRows = rows.filter(row => row.person && !(row.profileId && row.positionId));
+        pbAssignRefreshAll();
       }
       // The People pane's membership list and assign picker ride the same
       // hydration; repaint them if they are on screen.
@@ -4853,11 +4957,6 @@ function projectAssignmentFieldsToBaseMirror(sessionData={}) {
   try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
 }
 
-function markRoleAssignmentsUnsaved() {
-  if (assignmentSaveState === 'saving') return;
-  setAssignmentSaveState('unsaved', 'Press Save assignments when you are done.');
-}
-
 function localizeConfirmedAssignmentProjection(rows, updatedAt) {
   // The transaction writes the PARENT session doc; the local mirror of it is
   // the ungrouped base key, even while a group workspace is open.
@@ -4867,8 +4966,10 @@ function localizeConfirmedAssignmentProjection(rows, updatedAt) {
   try { localStorage.setItem(preProBaseKey(), JSON.stringify(next)); } catch {}
 }
 
-async function saveRoleAssignmentsFromAdmin() {
-  if (assignmentSaveState === 'saving') return;
+async function saveRoleAssignmentsFromAdmin(rows=pbAssignRows) {
+  // An edit during a save waits its turn: the finished save re-arms the timer.
+  if (assignmentSaveState === 'saving') { _pbAssignSaveAgain = true; return false; }
+  _pbAssignSaveAgain = false;
   _assignmentFailureOrigin = 'save';   // any 'failed' below holds the draft
   const model = assignmentModel();
   if (!model || !window._runTransaction || !window._getDocs || !session.code || session.isDemo || session.isExpert) {
@@ -4879,7 +4980,7 @@ async function saveRoleAssignmentsFromAdmin() {
     setAssignmentSaveState('failed', 'These positions came from this computer, not the cloud. Reconnect and press Retry connection before you save. Your changes are kept.');
     return false;
   }
-  const draft = getRoleAssignmentsFromAdminDOM().map(row => normalizeRoleAssignment(row));
+  const draft = pbAssignRealRows(rows).map(row => normalizeRoleAssignment(row));
   const incompleteAt = draft.findIndex(row => !row.profileId || !row.positionId || !row.person || !row.position);
   if (incompleteAt >= 0) {
     const row = draft[incompleteAt];
@@ -4976,20 +5077,22 @@ async function saveRoleAssignmentsFromAdmin() {
     assignmentRevision = expectedRevision + 1;
     assignmentFromCache = false;
     canonicalRoleAssignments = records;
-    assignmentDraftStash = null;
+    _assignmentLegacyPending = false;
+    pbAssignLegacyRows = [];
     confirmedRoleAssignmentRows = records.map(record => normalizeRoleAssignment(record));
     localizeConfirmedAssignmentProjection(compatibility, now);
-    rerenderRoleAssignments(confirmedRoleAssignmentRows);
-    renderPlandaBearAssignmentsCard();
-    setAssignmentSaveState('saved', `${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
-    toast('Assignments saved.');
+    setAssignmentSaveState('saved', `Saved. ${records.length} position${records.length === 1 ? '' : 's'} assigned.`);
+    if (_pbAssignSaveAgain) {
+      // Edits landed while this save was in flight: keep them and save again.
+      pbAssignQueueSave();
+    } else {
+      pbAssignRows = confirmedRoleAssignmentRows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
+    }
+    pbAssignRefreshAll();
     return true;
   } catch (error) {
-    // If the editor's rows left the DOM mid-save (a rebuild replaced the hub
-    // card), stash the draft we just tried so "the draft remains" stays true.
-    if (!document.getElementById('adminRoleAssignments')) assignmentDraftStash = draft;
     if (error?.code === 'assignment-conflict') {
-      setAssignmentSaveState('conflict', `${error.message} Your changes are still here. Tap Load the saved version, then redo them.`);
+      setAssignmentSaveState('conflict', `${error.message} Your last change was not saved. Tap Load the saved version, then make it again.`);
     } else if (error?.code === 'permission-denied') {
       setAssignmentSaveState('failed', 'Saving was refused. Your changes are still here. Check that you are signed in as an instructor, then try again.');
     } else {
@@ -5001,9 +5104,12 @@ async function saveRoleAssignmentsFromAdmin() {
 }
 
 function revertRoleAssignments() {
-  assignmentDraftStash = null;
+  clearTimeout(_pbAssignSaveTimer);
+  _pbAssignSaveTimer = null;
+  _pbAssignSaveAgain = false;
   _assignmentFailureOrigin = 'load';   // the only 'failed' below is the cache copy
-  rerenderRoleAssignments(confirmedRoleAssignmentRows.length ? confirmedRoleAssignmentRows : defaultRoleAssignments());
+  pbAssignRows = confirmedRoleAssignmentRows.map(row => ({ ...row, paperworkIds:row.paperworkIds.slice(), paperwork:row.paperwork.slice() }));
+  pbAssignRefreshAll();
   setAssignmentSaveState(assignmentFromCache ? 'failed' : 'saved', assignmentFromCache
     ? 'Back to the copy on this computer. Reconnect before you save.'
     : confirmedRoleAssignmentRows.length
@@ -5016,7 +5122,10 @@ async function retryRoleAssignmentLoad() {
 }
 
 async function reloadRoleAssignmentsAfterConflict() {
-  if (!confirm('Load the saved assignments and discard your changes?')) return false;
+  if (!confirm('Load the saved assignments? Your last change is dropped, so make it again after.')) return false;
+  clearTimeout(_pbAssignSaveTimer);
+  _pbAssignSaveTimer = null;
+  _pbAssignSaveAgain = false;
   return hydrateRoleAssignments({ force:true });
 }
 
@@ -5024,7 +5133,9 @@ function onAssignmentRevisionSnapshot(data={}) {
   const incoming = Math.max(0, Number(data.assignmentRevision) || 0);
   if (incoming === assignmentRevision || assignmentSaveState === 'loading' || assignmentSaveState === 'saving') return;
   if (['unsaved','failed','conflict'].includes(assignmentSaveState)) {
-    setAssignmentSaveState('conflict', 'Someone saved positions on another computer while you were editing. Your changes are still here. Tap Load the saved version before you save.');
+    clearTimeout(_pbAssignSaveTimer);
+    _pbAssignSaveTimer = null;
+    setAssignmentSaveState('conflict', 'Someone saved positions on another computer at the same moment. Tap Load the saved version, then make your last change again.');
     return;
   }
   hydrateRoleAssignments({ force:true });
@@ -5841,7 +5952,7 @@ function enterRundown() {
   const badge = document.getElementById('topSessionBadge');
   if (session.code && !session.isExpert) {
     badge.style.display='flex';
-    document.getElementById('topCode').textContent = session.code;
+    renderTopShowBadge();
     document.getElementById('roleTag').textContent = session.role==='instructor'?'INST':'STU';
     document.getElementById('roleTag').className = `role-badge ${session.role==='instructor'?'role-inst':'role-stud'}`;
     setCloudSyncState(session.isDemo ? 'local' : 'saving',
@@ -7693,6 +7804,12 @@ document.addEventListener('keydown', e => {
     dismissPaperPreview();
     return;
   }
+  if (top.id === 'pbAssignModal') {
+    // Esc on Position Assignments flushes the pending save and goes back to the hub.
+    e.preventDefault();
+    closePbAssignEditor();
+    return;
+  }
   if (['preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal'].includes(top.id)) {
     // Esc on a paperwork editor must SAVE first (returnToPaperworkHub runs
     // saveOpenPaperworkSection while the modal is still 'on'), matching the
@@ -7995,11 +8112,22 @@ function toggleSegmentCollapse(id) {
   renderRundown();
 }
 
+// The top bar names the show, with the show code small beside it (owner
+// 2026-10-08: the title leads everywhere, the code follows).
+function renderTopShowBadge() {
+  const name = document.getElementById('topCode');
+  const code = document.getElementById('topShowCode');
+  if (!name || !code) return;
+  name.textContent = show.name || 'Untitled Show';
+  code.textContent = session.code && !session.isExpert ? session.code : '';
+}
+
 function renderRundown() {
   resolveOutrangutanNameLinks();   // name-authored playback links pick up ids when a matching show is present
   renderTableHeaders();
   const name = show.name||'Untitled Show';
   document.getElementById('rd-name').textContent = name;
+  renderTopShowBadge();
   document.getElementById('rd-start').textContent = show.start ? clock(show.start,0) : '—';
 
   const total = totalSecs();
@@ -15680,7 +15808,7 @@ async function openWorkspaceLauncher() {
     let choices = [];
     try { choices = await (window.CueolaIdentity?.sessionChoices?.() || []); } catch {}
     if (choices.length) {
-      sel.innerHTML = choices.map(c => `<option value="${esc(c.code)}"${c.code === last ? ' selected' : ''}>${esc(c.code)}${c.name ? ' · ' + esc(c.name) : ''}</option>`).join('')
+      sel.innerHTML = choices.map(c => `<option value="${esc(c.code)}"${c.code === last ? ' selected' : ''}>${esc(c.name || 'Untitled show')} · ${esc(c.code)}</option>`).join('')
         + `<option value="__other">Type a code…</option>`;
     }
     wsCodeChanged();
@@ -21384,7 +21512,7 @@ async function hydratePreProFromFirestore() {
 const PB_PAGE_LABELS = {
   'hub':'Planda Bear', 'call-sheet':'Call Sheet', 'production-scheduler':'Production Schedule',
   'safety-plan':'Safety Plan', 'video-patch':'Video Patch', 'audio-comms-patch':'Audio / Comms Patch',
-  'stage-plot':'Stage Plot', 'production-notes':'Production Notes',
+  'stage-plot':'Stage Plot', 'production-notes':'Production Notes', 'assignments':'Position Assignments',
 };
 let _pbFieldSaveTimer = null;
 let _pbFieldBlurTimer = null;
@@ -21397,6 +21525,7 @@ function pbOpenPageId() {
   if (document.getElementById('patchSheetModal')?.classList.contains('on')) return (typeof activePatchKind !== 'undefined' && activePatchKind === 'video') ? 'video-patch' : 'audio-comms-patch';
   if (document.getElementById('stagePlotModal')?.classList.contains('on')) return 'stage-plot';
   if (document.getElementById('productionNotesModal')?.classList.contains('on')) return 'production-notes';
+  if (document.getElementById('pbAssignModal')?.classList.contains('on')) return 'assignments';
   if (document.getElementById('paperworkHubModal')?.classList.contains('on')) return 'hub';
   return null;
 }
@@ -21759,6 +21888,7 @@ function pbApplyRemoteCollab() {
   if (!pbOpenPageId()) return;
   pbRefreshOpenPaperworkFields();
   if (pbOpenPageId() === 'hub') renderPlandaBearAssignmentsCard();
+  if (pbOpenPageId() === 'assignments') pbAssignRender({ guardFocus:true });
   pbRenderFieldPresence();
   pbRenderPagePresence();
 }
@@ -21859,7 +21989,7 @@ function currentPaperworkItemId() {
 }
 
 function hidePaperworkEditors() {
-  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal'].forEach(hideModal);
+  ['paperPreviewModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal','pbAssignModal'].forEach(hideModal);
   pbUpdatePlandaBearBadge();
 }
 
@@ -21966,6 +22096,7 @@ function openPaperworkHub() {
   renderPaperworkHubGrid();
   renderPlandaBearPaperworkManager();
   renderPackageSheetPicker();   // D9.1: honest call-sheet count + picker
+  renderPbHubShowLine();
   showModal('paperworkHubModal');
   paperworkDirty = false;
   pbInitCollabListeners();
@@ -21974,6 +22105,16 @@ function openPaperworkHub() {
   loadPlandaBearNotes().then(() => { annotatePlandaBearNoteCards(); pbUpdatePlandaBearBadge(); });
   renderPlandaBearHubActivity();
   renderPlandaBearAssignmentsCard();
+}
+
+// The hub header names the show and its code, so a student knows whose
+// paperwork this is before they open anything.
+function renderPbHubShowLine() {
+  const line = document.getElementById('pbHubShowLine');
+  if (!line) return;
+  const name = show.name || 'Untitled Show';
+  const code = onSharedShowCode() ? session.code : '';
+  line.textContent = `Show paperwork · ${name}${code ? ' · ' + code : ''}`;
 }
 
 // The hub grid, extracted so remote paperwork-config changes and the in-hub
@@ -22070,122 +22211,52 @@ function togglePaperworkItemEnabled(itemId) {
 // One place to refresh every surface that renders from the paperwork config.
 let _lastPaperworkConfigFingerprint = '';
 function pbRefreshPaperworkConfigUI() {
+  if (pbOpenPageId() === 'assignments') pbAssignRender({ guardFocus:true });   // the paperwork picker honors the config
   if (!document.getElementById('paperworkHubModal')?.classList.contains('on')) return;
   renderPaperworkHubGrid();
   renderPlandaBearPaperworkManager();
   renderPackageSheetPicker();
-  renderPlandaBearAssignmentsCard();   // the per-person picker honors the config
+  renderPlandaBearAssignmentsCard();
 }
 
-// The app's assignments editor (the Admin panel's Crew tab retired in its
-// favor; the instructor dashboard's session inspector keeps its own): a
-// signed-in admin gets the editor right on the hub, everyone else sees the
-// read-only roster. The editor keeps the #adminRoleAssignments and
-// #adminAssignmentSaveState ids plus the [data-role-assignment-row] draft
-// contract, so the hydrate/save/conflict machinery carries over unchanged.
+// The hub's roster card: every student on this show with their positions and
+// paperwork, for everyone. A signed-in admin also gets the button that opens
+// the Position Assignments page (openPbAssignEditor), where the editing is.
 let _pbAssignCardFp = '';
 function renderPlandaBearAssignmentsCard(opts={}) {
   const wrap = document.getElementById('pbAssignmentsCard');
   if (!wrap) return;
   resetAssignmentStateForSessionChange();
-  if (adminSession && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert) {
-    const liveRows = wrap.querySelector('[data-role-assignment-row]');
-    const draftish = assignmentDraftInProgress();
-    // Remote collab ticks and group switches repaint this card. Never rebuild
-    // over an unsaved draft or under the operator's cursor; positions
-    // add/remove passes force:true and rebuilds WITH the captured draft.
-    if (liveRows && !opts.force && (draftish || wrap.contains(document.activeElement))) return;
-    const draft = liveRows && draftish ? getRoleAssignmentsFromAdminDOM(true)
-      : (assignmentDraftStash?.length && draftish ? assignmentDraftStash : undefined);
-    const positionOptions = getRolePositionOptions();
-    // One shared rows computation feeds the roster strip, the editor rows,
-    // and the damping fingerprint below. Presence heartbeats repaint this
-    // card on every session snapshot; when nothing it renders from actually
-    // changed, skip the innerHTML teardown (which ate in-flight clicks).
-    const rows = draft || getRoleAssignments();
-    let cardFp;
-    try {
-      cardFp = stableStringify(['admin', session.code, positionOptions,
-        Array.isArray(sessionParticipantNames) ? sessionParticipantNames : [],
-        assignmentProfiles.map(p => [p.profileId || '', p.username || '', p.fullName || '',
-          Array.isArray(p.sessions) && p.sessions.includes(session.code)]),
-        rows]);
-    } catch (e) { cardFp = 'x' + Date.now(); }
-    if (!opts.force && liveRows && cardFp === _pbAssignCardFp) return;
-    _pbAssignCardFp = cardFp;
-    wrap.innerHTML = `<div class="pb-assign-card pb-assign-editor">
-      <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
-      <div class="u-note-sm u-mb8">Choose a profile, position and required paperwork for each person. The crew sees this roster. Nothing is saved until you press <b>Save assignments</b>.</div>
-      <div id="adminAssignmentSaveState">${assignmentSaveStateHTML()}</div>
-      <div class="admin-src-row u-mb10">
-        <span class="admin-src-label">Positions</span>
-        <div class="admin-src-chips">
-          ${positionOptions.map(p => `<span class="admin-src-chip">${esc(p)}<button class="rm" onclick="removePositionOption(${esc(JSON.stringify(p))})" data-tip="Remove ${esc(p)} from this production" aria-label="Remove ${esc(p)}">${sfIcon('action.close')}</button></span>`).join('')}
-          <input class="admin-in admin-src-new" id="pbNewPositionName" placeholder="New position" maxlength="40" onkeydown="if(event.key==='Enter'){event.preventDefault();addPositionOption()}">
-          <button class="admin-src-add" onclick="addPositionOption()">+ Add</button>
-        </div>
-      </div>
-      ${pbAssignmentRosterStripHTML(rows)}
-      <div id="adminRoleAssignments" onchange="markRoleAssignmentsUnsaved()">${renderRoleAssignmentRows(rows)}</div>
-      <div class="admin-assignment-actions">
-        <button class="admin-act-btn" onclick="addRoleAssignmentRow()">+ Add person</button>
-        <button class="admin-add-btn" onclick="saveRoleAssignmentsFromAdmin()">Save assignments</button>
-      </div>
-    </div>`;
-    return;
-  }
-  // Every branch below replaces the editor DOM (admin sign-out, a workspace
-  // without a code): park a live draft in the stash first, exactly like
-  // closing the hub does, so a later sign-in can restore it.
-  if (wrap.querySelector('[data-role-assignment-row]') && assignmentDraftInProgress()) {
-    assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
-  }
-  if (adminSession && (session.code || session.isDemo || session.isExpert)) {
-    wrap.innerHTML = `<div class="pb-assign-card">
-      <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
-      <div class="u-note">No show code. Open Planda Bear with a show code to assign positions.</div>
-    </div>`;
-    return;
-  }
+  const canEdit = pbAssignCanEdit();
+  const noCode = Boolean(adminSession) && !canEdit;
   // Prefer the hydrated canonical register (it also heals grouped devices,
   // whose base mirror can lag); fall back to the base mirror projection.
   const rows = getRoleAssignments().filter(row => row.person && (row.position || row.paperwork.length));
-  // Same damping as the editor branch: student hubs get this repaint on every
-  // presence heartbeat too, and it had no guard at all.
-  let roFp;
-  try { roFp = stableStringify(['ro', rows]); } catch (e) { roFp = 'x' + Date.now(); }
-  if (roFp === _pbAssignCardFp && wrap.firstChild) return;
-  _pbAssignCardFp = roFp;
-  if (!rows.length) { wrap.innerHTML = ''; return; }
-  // Owner 2026-08-30: one entry per STUDENT — name, their position(s), then
-  // their paperwork as a readable list (several records collapse into one).
-  const byPerson = new Map();
-  rows.forEach(row => {
-    const key = String(row.person || '').trim().toLowerCase();
-    if (!byPerson.has(key)) byPerson.set(key, { person: row.person, positions: [], paperwork: [] });
-    const g = byPerson.get(key);
-    if (row.position && !g.positions.includes(row.position)) g.positions.push(row.position);
-    (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
-  });
-  wrap.innerHTML = `<div class="pb-assign-card">
-    <div class="pb-assign-title">${sfIcon('content.checklist')} Position Assignments</div>
-    ${[...byPerson.values()].map(g => `<div class="pb-assign-row pb-assign-stack">
-      <div class="pb-assign-head"><span class="pb-assign-name">${esc(g.person)}</span>
-      ${g.positions.length ? `<span class="pb-assign-pos">${esc(g.positions.join(' / '))}</span>` : ''}</div>
-      ${g.paperwork.length ? `<ul class="pb-assign-paperlist">${g.paperwork.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-    </div>`).join('')}
+  const groups = pbAssignRosterGroups(rows);
+  // A demo or local workspace with nobody on it has no roster to show.
+  if (!noCode && !groups.length && !onSharedShowCode()) { wrap.innerHTML = ''; _pbAssignCardFp = ''; return; }
+  // Presence heartbeats repaint this card on every session snapshot; when
+  // nothing it renders from actually changed, skip the innerHTML teardown.
+  let fp;
+  try { fp = stableStringify(['roster', session.code, canEdit, noCode, groups]); } catch (e) { fp = 'x' + Date.now(); }
+  if (!opts.force && fp === _pbAssignCardFp && wrap.firstChild) return;
+  _pbAssignCardFp = fp;
+  const editBtn = canEdit
+    ? `<button type="button" class="pb-assign-edit" onclick="openPbAssignEditor()" data-tip="Open the Position Assignments page">${sfIcon('action.edit')}<span>Assign positions</span></button>`
+    : '';
+  const body = noCode
+    ? `<div class="u-note">No show code. Open Planda Bear with a show code to see and assign positions.</div>`
+    : pbAssignRosterTableHTML(groups);
+  wrap.innerHTML = `<div class="pb-assign-card pb-roster-card">
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Students and positions${editBtn}</div>
+    ${body}
   </div>`;
 }
 
 // Leave the Planda Bear workspace and clear my page presence so collaborators
 // stop seeing me "here".
 function closePlandaBear() {
-  // An unsaved assignments draft survives the hub closing: stash the DOM rows
-  // now, re-rendered on the next hub open. A confirmed save clears the stash.
-  if (assignmentDraftInProgress()
-      && document.querySelector('#pbAssignmentsCard [data-role-assignment-row]')) {
-    assignmentDraftStash = getRoleAssignmentsFromAdminDOM(true);
-  }
+  pbAssignFlush();   // a position change still on its timer saves now
   pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   hidePaperworkEditors();
   hideModal('paperworkHubModal');
@@ -26043,7 +26114,7 @@ let lastPaperPreview = null;
 function dismissPaperPreview() {
   hideModal('paperPreviewModal');
   if (!lastPaperPreview?.fromPlandaBear) return;
-  const pbStillOpen = ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal']
+  const pbStillOpen = ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal','pbAssignModal']
     .some(id => document.getElementById(id)?.classList.contains('on'));
   if (!pbStillOpen) openPaperworkHub();
 }
@@ -26090,7 +26161,7 @@ function showPaperPreview(title, html, primaryLabel='Done', primaryAction="dismi
   // Captured BEFORE the hub/editors get hidden below: dismissing the preview
   // must land back on the Planda Bear workspace it replaced, not the front page.
   const fromPlandaBear = Boolean(flowId)
-    || ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal']
+    || ['paperworkHubModal','preProModal','productionScheduleModal','safetyPlanModal','patchSheetModal','stagePlotModal','productionNotesModal','pbAssignModal']
       .some(id => document.getElementById(id)?.classList.contains('on'));
   lastPaperPreview = { title, html:printableHTML, options:{...exportOptions}, flowId, sequence, fromPlandaBear };
   previewBody.style.background = 'transparent';
@@ -29015,8 +29086,9 @@ function deleteCallSheet(index=resolveActiveCallSheetIndex()) {
       return next;
     });
     if (canonicalChanged) {
-      rerenderRoleAssignments(getRoleAssignments());
-      setAssignmentSaveState('unsaved', 'Call sheet deleted: press Save assignments to confirm the removal for the whole class.');
+      pbAssignRows = pbAssignRealRows(getRoleAssignments());
+      pbAssignQueueSave();   // the removal saves for the whole class on its own
+      pbAssignRender({ guardFocus:true });
     }
   }
   renderCallSheetSelector(remaining);

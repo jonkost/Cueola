@@ -1565,8 +1565,8 @@
         ? '<button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button>' : '')
       + '<button type="button" class="jis-btn jis-remove" onclick="CueolaIdentity.portalRemoveCode(' + codeArg + ')" data-tip="Remove this session from your profile" aria-label="Remove ' + esc(entry.code) + ' from your profile">Remove</button>'
       + '</div>';
-    return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
-      '<span class="id-card-name">' + esc(name) + '</span></div>' + actions + '</div>';
+    return '<div class="id-card gone"><div class="id-card-head"><span class="id-card-name">' + esc(name) + '</span>' +
+      '<span class="id-card-code">' + esc(entry.code) + '</span></div>' + actions + '</div>';
   }
 
   async function renderPortal() {
@@ -1638,8 +1638,8 @@
       else if (!summary.todos && !summary.unseen) badges += '<span class="id-badge quiet">No open actions or unseen notes</span>';
       var hasIssue = entry.sessionStatus !== 'ok' || entry.assignmentStatus !== 'ok' || entry.notesStatus !== 'ok';
       return '<div class="id-card">' +
-        '<div class="id-card-head"><span class="id-card-code">' + esc(entry.code) + '</span>' +
-        '<span class="id-card-name">' + esc(summary.showName) + '</span></div>' +
+        '<div class="id-card-head"><span class="id-card-name">' + esc(summary.showName || 'Untitled show') + '</span>' +
+        '<span class="id-card-code">' + esc(entry.code) + '</span></div>' +
         '<div class="id-card-badges">' + badges + '</div>' +
         '<div class="id-card-actions">' +
         '<button type="button" class="jis-btn" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')">Open Cueola</button>' +
@@ -2115,8 +2115,8 @@
     var sessionRow = function (m, isHidden) {
       var codeArg = JSON.stringify(m.code).replace(/"/g, '&quot;');
       var btn = '<button type="button" class="fd-session" onclick="CueolaIdentity.enterSession(' + codeArg + ',\'cueola\')" title="Open this session">'
-        + '<span class="fd-code">' + esc(m.code) + '</span>'
         + '<span class="fd-show">' + esc(m.showName || 'Untitled show') + '</span>'
+        + '<span class="fd-code">' + esc(m.code) + '</span>'
         + '<span class="fd-open">Open</span></button>';
       if (!canHide) return btn;
       var toggle = isHidden
@@ -2298,8 +2298,8 @@
     return '<div class="fd-sessions">' + choices.map(function (c) {
       var codeArg = JSON.stringify(String(c.code || '')).replace(/"/g, '&quot;');
       return '<button type="button" class="fd-session" onclick="' + pick + '(' + codeArg + ')" title="Open this session">'
-        + '<span class="fd-code">' + esc(c.code) + '</span>'
         + '<span class="fd-show">' + esc(c.name || 'Untitled show') + '</span>'
+        + '<span class="fd-code">' + esc(c.code) + '</span>'
         + '<span class="fd-open">Open</span></button>';
     }).join('') + '</div>';
   }

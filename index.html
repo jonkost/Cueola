@@ -193,7 +193,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Two-tone wordmark highlight — accent half of Cueola / Planda Bear. Follows the active theme accent. */
 .brand-hi{color:var(--accent)}
 .session-badge{display:flex;align-items:center;gap:7px;padding:6px 13px;background:var(--s3);border: 1px solid transparent;border-radius:20px;font-family:var(--mono);font-size:12px;color:var(--text2);font-weight:500}
-.session-badge strong{color:var(--accent);letter-spacing:.08em}
+.session-badge strong{color:var(--text);font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:0;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-badge-code{color:var(--accent);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em}
+.session-badge-code:empty{display:none}
+.u-mono-sm{font-family:var(--mono);font-size:.85em;color:var(--accent);letter-spacing:.06em}
 .role-badge{padding:5px 11px;border-radius:20px;font-size:11px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase}
 .role-inst{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}.role-stud{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
 
@@ -971,13 +974,13 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 /* ── MODALS ── */
 .modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(var(--liquid-blur)) saturate(140%);-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(140%);z-index:300;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s var(--ease) both;overflow-y:auto}
 .modal-wrap.on{display:flex}
-#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
+#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal{animation:none;background:rgba(0,0,0,.42)}
 /* margin:auto (not just flex centering): a modal TALLER than the viewport
    scrolls inside the overflow-y wrap from its top edge — plain flex centering
    clips both ends off-screen and strands the action buttons (the avatar-grid
    mouse-trap, checkout fix 2026-07-21). Short modals center identically. */
 .modal{background:linear-gradient(145deg,color-mix(in srgb,var(--s1) 97%,transparent),color-mix(in srgb,var(--s1) 88%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));border: 1px solid transparent;border-radius:18px;padding:28px 26px;width:100%;max-width:440px;margin:auto;display:flex;flex-direction:column;gap:18px;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text) 10%,transparent);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));animation:rise .28s var(--ease) both}
-#paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#patchSheetModal .modal,#stagePlotModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
+#paperworkHubModal .modal,#preProModal .modal,#productionScheduleModal .modal,#safetyPlanModal .modal,#pbAssignModal .modal,#patchSheetModal .modal,#stagePlotModal .modal,#paperPreviewModal .modal,#productionNotesModal .modal{animation:none}
 .modal-title{font-family:var(--syne);font-size:24px;font-weight:700;letter-spacing:0;line-height:1.15}
 .modal-sub{font-size:14px;color:var(--text2);line-height:1.5;margin-top:-8px;letter-spacing:0}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -1317,23 +1320,23 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .plandabear-theme-bar{display:none;flex-direction:column;gap:12px;padding:16px;border: 1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent)}
 .plandabear-theme-bar.on{display:flex}
 .plandabear-theme-label{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text2);padding-bottom:6px;border-bottom: 1px solid transparent}
-[data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
-[data-plandabear-theme="honey"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
+[data-plandabear-theme="honey"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0c0a03;--s1:#15110a;--s2:#1e1810;--s3:#2a2214;--s4:#3a2f18;--border:#3a2f14;--bord2:#6b5520;--text:#fdf6e3;--text2:#e3cf94;--text3:#9a8447;--accent:#ffc400;--acg:#f5a623;--green:#a8d04a;--cyan:#4ec9c0;--purple:#c878c0;--yellow:#ffc400;--red:#ef5a3a;--orange:#f5a623;position:relative}
+[data-plandabear-theme="honey"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="outrangutan"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip),[data-plandabear-theme="prepbear"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#1c1404;text-shadow:none}
 /* Eucalyptus runs a bright leaf-green accent: accent-filled buttons take dark
    ink (white on #6cd234 is about 1.9:1, far under AA). */
-[data-plandabear-theme="eucalyptus"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
-[data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
-[data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
-[data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7e7e7e;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;position:relative}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;position:relative}
-[data-plandabear-theme="flamingo"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0e0410;--s1:#160820;--s2:#1d0d28;--s3:#251234;--s4:#2e1842;--border:#241338;--bord2:#3e2658;--text:#f5edff;--text2:#a890c4;--text3:#79618f;--accent:#9d4ed8;--acg:#c14fa0;--green:#5cd0a8;--cyan:#5ec0e8;--purple:#a560ff;--yellow:#e8b850;--red:#e85a78;--orange:#e88858;position:relative}
-[data-plandabear-theme="outrangutan"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1a1817;--s1:#222020;--s2:#2b2928;--s3:#373533;--s4:#454240;--border:#3a352f;--bord2:#5b534a;--text:#ffffff;--text2:#d8d3cd;--text3:#928b82;--accent:#ff6a00;--acg:#ff9133;--green:#5fd07a;--cyan:#36c6c0;--purple:#bb8cff;--yellow:#ffc24d;--red:#ff5247;--orange:#ff6a00;position:relative}
-[data-plandabear-theme="prepbear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#080a14;--s1:#0d1124;--s2:#141930;--s3:#1e2548;--s4:#2a346a;--border:#1e2548;--bord2:#3a4585;--text:#f5f0dc;--text2:#b8b89c;--text3:#7a7868;--accent:#eeca57;--acg:#d4a830;--green:#7ed68c;--cyan:#7ec8e0;--purple:#c878d8;--yellow:#eeca57;--red:#e85a40;--orange:#f5933a;position:relative}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border: 1px solid transparent}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border: 1px solid transparent}
-[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
-[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#262626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+[data-plandabear-theme="eucalyptus"] :where(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.paperwork-flow-actions .primary,.pb-collab-avatar.inst,.pb-field-editor-chip){color:#071505;text-shadow:none}
+[data-plandabear-theme="glacier"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0a0d18;--s1:#101427;--s2:#161c32;--s3:#1d2440;--s4:#262e52;--border:#222a48;--bord2:#34406a;--text:#e4ecf8;--text2:#94a8c8;--text3:#607193;--accent:#5b8df8;--acg:#7b6cf8;--green:#3dd590;--cyan:#3dd5d5;--purple:#b06ef8;--yellow:#f5c842;--red:#f05252;--orange:#f97316;position:relative}
+[data-plandabear-theme="polar-bear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#fafaf7;--s1:#ffffff;--s2:#f4f2ee;--s3:#e8e5e0;--s4:#d8d5cf;--border:#e0ddd6;--bord2:#b8b4ab;--text:#0f0f0f;--text2:#3a3a3a;--text3:#787878;--accent:#e50000;--acg:#b50000;--green:#157a5e;--cyan:#0f8a96;--purple:#7a2f9c;--yellow:#b87000;--red:#e50000;--orange:#d65a18;position:relative}
+[data-plandabear-theme="eucalyptus"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#041208;--s1:#08180c;--s2:#0c2110;--s3:#122c16;--s4:#1a391e;--border:#193918;--bord2:#2c5530;--text:#e8f5d8;--text2:#9ac280;--text3:#5e8246;--accent:#6cd234;--acg:#4eb01c;--green:#6cd234;--cyan:#3dcfac;--purple:#c8d234;--yellow:#e8c83a;--red:#e07a3a;--orange:#e89538;position:relative}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1c1c1b;--s1:#252524;--s2:#2c2c2b;--s3:#383838;--s4:#454545;--border:#303030;--bord2:#4c4c4c;--text:#ffffff;--text2:#cccccc;--text3:#7e7e7e;--accent:#ffffff;--acg:#d4d4d4;--green:#8ce6d4;--cyan:#7eb8d4;--purple:#c8a8e8;--yellow:#f5d068;--red:#e87060;--orange:#e8a050;position:relative}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#000000;--s1:#0a0a0a;--s2:#141414;--s3:#1f1f1f;--s4:#2a2a2a;--border:#1e1e1e;--bord2:#3c3c3c;--text:#ffffff;--text2:#bababa;--text3:#6c6c6c;--accent:#ffffff;--acg:#cccccc;--green:#dcdcdc;--cyan:#a8a8a8;--purple:#c8c8c8;--yellow:#ededed;--red:#909090;--orange:#b8b8b8;position:relative}
+[data-plandabear-theme="flamingo"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#0e0410;--s1:#160820;--s2:#1d0d28;--s3:#251234;--s4:#2e1842;--border:#241338;--bord2:#3e2658;--text:#f5edff;--text2:#a890c4;--text3:#79618f;--accent:#9d4ed8;--acg:#c14fa0;--green:#5cd0a8;--cyan:#5ec0e8;--purple:#a560ff;--yellow:#e8b850;--red:#e85a78;--orange:#e88858;position:relative}
+[data-plandabear-theme="outrangutan"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#1a1817;--s1:#222020;--s2:#2b2928;--s3:#373533;--s4:#454240;--border:#3a352f;--bord2:#5b534a;--text:#ffffff;--text2:#d8d3cd;--text3:#928b82;--accent:#ff6a00;--acg:#ff9133;--green:#5fd07a;--cyan:#36c6c0;--purple:#bb8cff;--yellow:#ffc24d;--red:#ff5247;--orange:#ff6a00;position:relative}
+[data-plandabear-theme="prepbear"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{--bg:#080a14;--s1:#0d1124;--s2:#141930;--s3:#1e2548;--s4:#2a346a;--border:#1e2548;--bord2:#3a4585;--text:#f5f0dc;--text2:#b8b89c;--text3:#7a7868;--accent:#eeca57;--acg:#d4a830;--green:#7ed68c;--cyan:#7ec8e0;--purple:#c878d8;--yellow:#eeca57;--red:#e85a40;--orange:#f5933a;position:relative}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#404040,#494949);color:#fff;border: 1px solid transparent}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.btn-primary,.save-btn,.admin-add-btn){background:linear-gradient(135deg,#262626,#3a3a3a);color:#fff;border: 1px solid transparent}
+[data-plandabear-theme="koala"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+[data-plandabear-theme="panda"] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) :is(.pb-collab-avatar.inst,.pb-field-editor-chip){background:#262626;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 /* The derived control and material tokens (--btn-*, --ui-label*, --glass-*,
    --liquid-*) resolve at :root against the APP theme, so a Planda-themed panel
    used to render app-theme title bars, seg shells, and N/A pills over its own
@@ -1342,7 +1345,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
    scoped surface and text vars, so one rule fixes all nine themes.
    Never write a star followed by a slash inside this comment: it closes the
    comment early and the whole block below silently stops parsing. */
-[data-plandabear-theme] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+[data-plandabear-theme] :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   --glass-bg:color-mix(in srgb,var(--s1) 78%,transparent);
   --glass-bg-strong:color-mix(in srgb,var(--s2) 88%,transparent);
   --glass-border:color-mix(in srgb,var(--text) 14%,transparent);
@@ -1389,36 +1392,49 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 /* Date/time rows: narrower columns so four compact fields share one row and
    the inputs fill their columns instead of leaving dead space after each. */
 .prepro-grid-times{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-/* Assignments editor: one card per student (owner 2026-08-30). The card is
-   the box; position records inside it are flat rows, and sub-rows scale down
-   to fit additional positions under the same name. */
-.aa-card{background:var(--s2);border: 1px solid transparent;border-radius:12px;padding:4px 0;display:flex;flex-direction:column}
-.aa-card .admin-assignment-row{background:transparent;border:0;border-radius:0;margin:0}
-.aa-compact{padding:8px 12px;gap:6px}
-.aa-compact.aa-sub{padding-top:2px}
-.aa-sub .admin-in{font-size:12px;padding:7px 10px}
-.aa-sub .aa-paperwork summary{font-size:11px;padding:5px 8px}
-.aa-sub .admin-assignment-remove{width:32px;height:32px;font-size:15px}
-.aa-sub-marker{font-size:10px;font-family:var(--mono);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);justify-self:end;padding-right:2px}
-.aa-line{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto auto;gap:8px;align-items:center}
-.aa-line-sub{grid-template-columns:minmax(48px,1.2fr) minmax(0,1fr) auto;padding-left:0}
-.aa-line .admin-in{min-width:0}
-.aa-add-pos{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:9px;border: 1px solid transparent;background:var(--s3);color:var(--text2);cursor:pointer;font-size:11.5px;white-space:nowrap}
-.aa-add-pos:hover{background:var(--s4);color:var(--text)}
-.aa-paperwork{margin-top:8px}
-.aa-paperwork summary{cursor:pointer;font-size:12px;color:var(--text2);padding:6px 9px;border-radius:8px;background:color-mix(in srgb,var(--s3) 55%,transparent);list-style-position:inside;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.aa-paperwork summary:hover{background:var(--s3);color:var(--text)}
-.aa-paperwork[open] summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
-.aa-paperwork-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px;padding:9px 11px;background:color-mix(in srgb,var(--s3) 35%,transparent);border-radius:0 0 8px 8px}
-.aa-pw-item{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2);padding:4px 0;cursor:pointer}
-.aa-pw-item:hover{color:var(--text)}
-.aa-pw-item input{flex:none}
-.aa-meta{padding:8px 11px 4px;font-size:10.5px;font-family:var(--mono);color:var(--text3)}
-@media (max-width:700px){.aa-line{grid-template-columns:1fr auto auto}.aa-line .aa-position{grid-column:1 / -1}}
-/* Crew Assignments read-only list, grouped per student */
-.pb-assign-stack{display:block}
-.pb-assign-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.pb-assign-paperlist{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--text3);display:flex;flex-direction:column;gap:2px}
+/* Position Assignments page: student picker, position and paperwork chips
+   with an add dropdown under each, and the roster of everyone. */
+.pba-pick{display:flex;flex-direction:column;gap:6px;max-width:460px}
+.pba-pick .field-in{font-weight:600}
+.pba-hint{margin:4px 0 2px}
+.pba-legacy{padding:8px 11px;border-radius:9px;background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--text2)}
+.pba-student{border:1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent);padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.pba-student-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.pba-student-name{font-size:18px;font-weight:800;color:var(--text);line-height:1.2}
+.pba-student-meta{font-size:11px;font-family:var(--mono);color:var(--text3);margin-top:4px;line-height:1.5}
+.pba-section{display:flex;flex-direction:column;gap:8px}
+.pba-section-title{font-size:11px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase}
+.pba-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:30px;align-items:center}
+.pba-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 8px 6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border:1px solid transparent}
+.pba-chip-paper{background:color-mix(in srgb,var(--green) 13%,transparent);color:var(--green)}
+.pba-chip .rm{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:0;background:color-mix(in srgb,currentColor 14%,transparent);color:inherit;cursor:pointer;font-size:11px;padding:0}
+.pba-chip .rm:hover{background:color-mix(in srgb,currentColor 28%,transparent)}
+.pba-empty{font-size:12.5px;color:var(--text3)}
+.pba-add{max-width:360px;font-size:14px;padding:10px 12px}
+.pba-add:disabled{opacity:.55;cursor:not-allowed}
+.pba-everyone{margin-top:4px}
+.pba-positions-list{border:1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 70%,transparent);padding:10px 14px}
+.pba-positions-list summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text2)}
+.pba-positions-list[open] summary{margin-bottom:8px}
+/* Roster table: the hub card and the page's "Everyone on this show" list */
+.pb-roster-table{display:flex;flex-direction:column;gap:4px}
+.pb-roster-row{display:grid;grid-template-columns:minmax(120px,.9fr) minmax(0,1fr) minmax(0,1.3fr);gap:10px;align-items:center;padding:8px 10px;border-radius:9px;background:var(--s2);border:1px solid transparent;color:var(--text);text-align:left;font-family:var(--sans);font-size:12.5px;width:100%}
+button.pb-roster-row{cursor:pointer;transition:background .15s var(--ease)}
+button.pb-roster-row:hover{background:var(--s3)}
+.pb-roster-row.is-selected{background:color-mix(in srgb,var(--accent) 12%,var(--s2));border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.pb-roster-headrow{background:transparent;padding-top:0;padding-bottom:2px;font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
+.pb-roster-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pb-roster-pos{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.pb-roster-pos .pb-roster-chip{font-size:10.5px;font-family:var(--sans);font-weight:700;letter-spacing:0;padding:3px 8px;border-radius:999px}
+.pb-roster-paper{color:var(--text2);min-width:0;line-height:1.4}
+.pb-roster-none{color:var(--text3);font-style:italic}
+.pb-assign-edit{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid transparent;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;cursor:pointer;transition:filter .15s var(--ease),transform .12s var(--ease)}
+.pb-assign-edit:hover{filter:brightness(1.08);transform:translateY(-1px)}
+@media (max-width:640px){
+  .pb-roster-row{grid-template-columns:1fr;gap:4px}
+  .pb-roster-headrow{display:none}
+  .pba-student-head{flex-direction:column}
+}
 /* Paperwork-for-this-show list view */
 .pb-pw-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
 .pb-pw-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:10px;border: 1px solid transparent;background:var(--s2);color:var(--text);cursor:pointer;text-align:left;font-size:12.5px}
@@ -1456,7 +1472,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .seg-group{display:inline-flex;gap:6px;background:var(--btn-fill);border:var(--btn-hairline);border-radius:12px;padding:5px;flex-wrap:wrap}
 /* Owner rule (Aug 2026): in paperwork forms a segmented control (venue, meals
    provided) hugs its options; the bordered pill never spans the whole row. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal) .seg-group{width:fit-content;max-width:100%}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal) .seg-group{width:fit-content;max-width:100%}
 .seg-btn{border:1px solid transparent;background:transparent;color:var(--text2);border-radius:8px;padding:8px 15px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
 .seg-btn:hover{color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .seg-btn.on{background:color-mix(in srgb,var(--accent) 20%,var(--s2));border-color:transparent;color:var(--text)}
@@ -1608,10 +1624,6 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 
 .pb-assign-card{border: 1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 88%,transparent);padding:12px 14px}
 .pb-assign-title{font-size:11px;font-weight:700;color:var(--text2);font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:7px}
-.pb-assign-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:6px 0;border-top: 1px solid transparent}
-.pb-assign-row:first-of-type{border-top:0}
-.pb-assign-name{font-size:13px;font-weight:700;color:var(--text)}
-.pb-assign-pos{font-size:11px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
 
 /* Person info — admin click on a presence badge */
 .person-info-modal{max-width:480px}
@@ -1839,8 +1851,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .id-card{border: 1px solid transparent;border-radius:13px;background:var(--s2);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .id-card.gone{opacity:.55}
 .id-card-head{display:flex;align-items:baseline;gap:10px;min-width:0}
-.id-card-code{font-family:var(--mono);font-weight:800;font-size:13px;letter-spacing:.08em}
-.id-card-name{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.id-card-name{font-size:13.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.id-card-code{font-family:var(--mono);font-weight:700;font-size:11px;letter-spacing:.08em;color:var(--text3);flex:0 0 auto}
 .id-card-badges{display:flex;gap:6px;flex-wrap:wrap}
 .id-badge{font-size:10.5px;font-family:var(--mono);padding:3px 8px;border-radius:7px;border: 1px solid transparent;color:var(--text2)}
 .id-badge.pos{color:var(--accent);border-color:transparent;background:color-mix(in srgb,var(--accent) 14%,transparent)}
@@ -3561,12 +3573,12 @@ input.pt-range::-moz-range-thumb,
 /* ── Basic Liquid Glass: Planda Bear + Flowmingo ──
    Glass stays on navigation and grouping surfaces; reading and form surfaces
    retain stronger opacity so the visual update never competes with the work. */
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
   background:rgba(3,6,14,.34);
   backdrop-filter:blur(var(--liquid-blur)) saturate(135%);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(135%);
 }
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   --pb-glass-surface:color-mix(in srgb,var(--s1) 78%,transparent);
   --pb-glass-raised:color-mix(in srgb,var(--s2) 74%,transparent);
   --pb-glass-edge:color-mix(in srgb,var(--text) 14%,var(--border));
@@ -3653,26 +3665,26 @@ input.pt-range::-moz-range-thumb,
 }
 
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 
 @media(prefers-reduced-transparency:reduce){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal),
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal),
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.plandabear-settings-btn,.paperwork-back,.pb-chat-tool,.pb-tag-chip,.pb-attach-add,.pb-mini-btn),
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
   }
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 @media(prefers-contrast:more){
-  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
+  :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
   :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
 }
 
@@ -3706,14 +3718,14 @@ input.pt-range::-moz-range-thumb,
 .pb-hub-modal .paperwork-actions>button{width:auto;flex:0 1 auto;padding-left:22px;padding-right:22px}
 
 /* Section overlays: floating glass windows over the hub. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){
   padding:clamp(10px,3vh,34px) clamp(10px,3vw,34px)!important;
   align-items:center!important;justify-content:center!important;
   background:color-mix(in srgb,#000 46%,transparent);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);
   backdrop-filter:blur(14px) saturate(1.1);
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   width:100%!important;max-width:min(1020px,100%)!important;
   height:auto!important;max-height:min(94dvh,1040px)!important;
   border-radius:var(--ui-radius-panel)!important;
@@ -3723,7 +3735,7 @@ input.pt-range::-moz-range-thumb,
 #patchSheetModal .modal{max-width:min(1100px,100%)!important}
 /* The plot editor carries three columns (bank, stage, inspector): wider panel. */
 #stagePlotModal .modal{max-width:min(1320px,100%)!important}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   overflow-y:auto!important;padding-bottom:0!important;
 }
 /* The notes board is a feed, not a form: the panel keeps ONE stable viewport
@@ -3736,7 +3748,7 @@ input.pt-range::-moz-range-thumb,
   min-height:min(60dvh,760px);
   padding-bottom:26px!important;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .paperwork-flow-actions{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .paperwork-flow-actions{
   position:sticky;left:auto;right:auto;bottom:0;transform:none;width:auto;z-index:5;
   margin:20px -26px 0;border-radius:0;border-left:0;border-right:0;border-bottom:0;
   padding-left:26px;padding-right:26px; /* footer controls share the body's 26px alignment line */
@@ -3744,18 +3756,18 @@ input.pt-range::-moz-range-thumb,
 }
 /* One vertical rhythm inside the forms: the modal's flex gap owns block-to-block
    spacing, so the in-body action row stops adding its own margin on top. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal) .paperwork-actions{margin-top:0}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal) .paperwork-actions{margin-top:0}
 /* Scroll hygiene (audit Aug 2026): tabbed-to fields clear the sticky glass
    bars, a flick past either end stops at the panel instead of scrolling the
    page behind it, and Firefox gets the same thin scrollbars WebKit shows. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   scroll-padding-top:96px;scroll-padding-bottom:84px;
   overscroll-behavior:contain;
 }
 .pb-modal-body{scroll-padding-top:96px;overscroll-behavior:contain}
 :is(.paper-preview,.pn-scroll,.modal-wrap,.paper-export-fit){overscroll-behavior:contain}
 :is(.pb-modal-body,.paper-preview,.u-modal-scroll,.u-modal-scroll-tall,.u-modal-scroll-short),
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal) .modal{
   scrollbar-width:thin;scrollbar-color:var(--bord2) transparent;
 }
 /* Preview panel: the panel is the one scroller (no 58vh inner pane), and Done
@@ -3776,8 +3788,8 @@ input.pt-range::-moz-range-thumb,
 /* Scaled-down window: the overlay takes the whole screen instead. */
 @media (max-width:900px),(max-height:640px){
   .precheck-card{padding:18px 16px;gap:10px}
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal){padding:0!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
     max-width:none!important;width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;
   }
 }
@@ -3785,15 +3797,15 @@ input.pt-range::-moz-range-thumb,
    overlay opens (guidelines: transitions communicate relationships). The
    full-screen fallback keeps the same quiet fade. */
 @media (prefers-reduced-motion:no-preference){
-  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal).on .modal{
+  :is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal).on .modal{
     animation:pbPanelIn .18s var(--ease) both;
   }
 }
 @keyframes pbPanelIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
 
 /* Planda Bear HIG pass: glass chrome, calm document surfaces, clear actions. */
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .pb-modal,
-:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .pb-modal,
+:is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   color:var(--ui-label);
   background:
     radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 70%),
@@ -3803,21 +3815,21 @@ input.pt-range::-moz-range-thumb,
    LESS prominent than the main window: translucent material over the blurred
    hub, panel radius token, hairline edge, quiet shadow, and a brief compact
    title bar. The hub keeps its opaque full-page surface. */
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{
   background:
     radial-gradient(70% 46% at 50% -12%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 70%),
     color-mix(in srgb,var(--bg) 84%,transparent);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
   padding-top:13px;
   padding-bottom:12px;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-title{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-title{
   font-size:17px;font-weight:700;
 }
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-sub{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head .modal-sub{
   font-size:12px;margin-top:2px;
 }
 .pb-modal-header,.paperwork-modal-head{
@@ -3832,8 +3844,8 @@ input.pt-range::-moz-range-thumb,
   backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
 }
 .pb-modal-header{margin:0;padding:18px clamp(18px,3vw,30px)}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal.pb-builder-modal{padding-top:0!important}
-:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal.pb-builder-modal{padding-top:0!important}
+:is(#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .paperwork-modal-head{
   z-index:30;
   margin:0 -26px!important; /* the modal's flex gap owns head-to-content spacing */
   padding-top:22px;
@@ -5239,7 +5251,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="tb-right">
       <div class="session-badge" id="topSessionBadge" style="display:none">
-        <span class="sync-dot" id="syncDot"></span><span class="sync-word" id="syncWord"></span>Code: <strong id="topCode">—</strong>
+        <span class="sync-dot" id="syncDot"></span><span class="sync-word" id="syncWord"></span><strong id="topCode">—</strong><span class="session-badge-code" id="topShowCode"></span>
         <span class="role-badge role-inst" id="roleTag">INST</span>
       </div>
       <div class="presence-wrap" id="presenceWrap" style="display:none">
@@ -5920,7 +5932,7 @@ input.pt-range::-moz-range-thumb,
       <div class="pb-brand-lockup">
         <div class="pb-brand-mark"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg></div>
         <div class="pb-brand-copy">
-          <div class="pb-modal-kicker">Show paperwork</div>
+          <div class="pb-modal-kicker" id="pbHubShowLine">Show paperwork</div>
           <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
           <div class="pb-modal-sub">Your paperwork in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
         </div>
@@ -5954,6 +5966,7 @@ input.pt-range::-moz-range-thumb,
       </div>
     </div>
     <div id="pbGroupBar" class="pb-group-bar" hidden></div>
+    <div id="pbAssignmentsCard"></div>
     <button type="button" class="paperwork-card pb-notes-card" id="paperworkNotesBtn" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')" aria-label="Production Notes">
       <div class="paperwork-card-num"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span></div>
       <div>
@@ -5964,7 +5977,6 @@ input.pt-range::-moz-range-thumb,
     </button>
     <div class="paperwork-grid" id="paperworkGrid"></div>
     <div id="pbPaperworkManager"></div>
-    <div id="pbAssignmentsCard"></div>
     <div id="pbCommentsHub"></div>
     <div id="plandabearHubActivity"></div>
     <div id="packageExportOptions" hidden></div>
@@ -5973,6 +5985,22 @@ input.pt-range::-moz-range-thumb,
       <button class="btn-secondary" onclick="showPreProPackagePreview()">Preview</button>
     </div>
     </div>
+  </div>
+</div>
+
+<!-- Position Assignments: the admin's page for who holds which position and
+     which paperwork. Opens from the hub's roster card; saves as you go. -->
+<div class="modal-wrap" id="pbAssignModal">
+  <div class="modal pb-builder-modal u-modal-scroll">
+    <div class="paperwork-modal-head">
+      <div>
+        <div class="modal-title">Position Assignments</div>
+        <div class="modal-sub">Pick a student, give them their positions, then the paperwork they are responsible for. Every change saves on its own.</div>
+      </div>
+      <button class="paperwork-back" onclick="closePbAssignEditor()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Planda Bear</span></button>
+    </div>
+    <div class="pb-collab" data-pb-collab="assignments"></div>
+    <div id="pbAssignBody"></div>
   </div>
 </div>
 
@@ -7015,8 +7043,8 @@ input.pt-range::-moz-range-thumb,
 .fd-session { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--s2); border: 1px solid transparent; border-radius:var(--ui-radius-control,12px); padding:9px 12px; color:var(--text); cursor:pointer; transition:border-color var(--dur-fast,.12s) var(--ease,ease), transform var(--dur-fast,.12s) var(--ease,ease), background var(--dur-fast,.12s) var(--ease,ease); }
 /* A 1px lift is not hover feedback on a touch device: the fill has to move. */
 .fd-session:hover { border-color:transparent; transform:translateY(-1px); background:color-mix(in srgb,var(--accent) 12%,var(--s2)); }
-.fd-code { font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:.08em; color:var(--accent); flex:0 0 auto; }
-.fd-show { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; }
+.fd-show { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; font-weight:700; }
+.fd-code { font-family:var(--mono); font-weight:700; font-size:11px; letter-spacing:.08em; color:var(--accent); flex:0 0 auto; }
 .fd-open { font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
 .fd-session:hover .fd-open { color:var(--accent); }
 .fd-loading { color:var(--text3); font-size:12.5px; padding:6px 0; }
@@ -7296,7 +7324,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=bf11137a90"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=7b1ee45cc7"></script>
+<script src="cueola-identity.js?v=c45ffd2a20"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-live-state.js?v=6314983dd7"></script>
@@ -7308,7 +7336,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=d3a05c8638"></script>
+<script src="cueola-app.js?v=2bb7be1a49"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
