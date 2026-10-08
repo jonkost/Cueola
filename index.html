@@ -5833,7 +5833,7 @@ input.pt-range::-moz-range-thumb,
   <div class="modal u-modal-scroll" style="max-width:520px">
     <div class="modal-title cc-title" id="cueConfigTitle">Cue</div>
     <div id="cueConfigFields"></div>
-    <button class="btn-primary" onclick="saveCueConfig()">Save</button>
+    <button class="btn-primary btn-save" onclick="saveCueConfig()">Save</button>
     <button class="btn-secondary" id="cueConfigRemoveBtn" onclick="removeCueCfg()" style="display:none">Delete this cue</button>
     <button class="btn-secondary" onclick="hideModal('cueConfigModal');setRundownPresence(null)">Cancel</button>
   </div>
@@ -5908,7 +5908,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="marker-divider"></div>
     <textarea class="field-in u-script-edit" id="lsScriptEditText" rows="14"></textarea>
-    <button class="btn-primary" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save &amp; Push to Flowmingo</span></button>
+    <button class="btn-primary btn-save" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save &amp; Push to Flowmingo</span></button>
     <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
   </div>
 </div>
@@ -6425,7 +6425,7 @@ input.pt-range::-moz-range-thumb,
     <div class="modal-title"><span class="sf-symbol" data-symbol="state.favorite" aria-hidden="true"></span> Your profile</div>
     <div class="modal-sub">Pick how you show up across Cueola. Signed-in profiles carry it to every device.</div>
     <div class="pb-portal-body" id="userPortalBody"></div>
-    <button class="btn-primary" onclick="pbSaveUserPortal()">Save</button>
+    <button class="btn-primary btn-save" onclick="pbSaveUserPortal()">Save</button>
     <button class="btn-secondary" onclick="hideModal('userPortalModal')">Cancel</button>
   </div>
 </div>
@@ -6661,7 +6661,7 @@ input.pt-range::-moz-range-thumb,
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
-      <button class="btn-primary" onclick="saveSettings()">Save Changes</button>
+      <button class="btn-primary btn-save" onclick="saveSettings()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -7159,6 +7159,13 @@ input.pt-range::-moz-range-thumb,
 .ar-ctx-none{color:var(--text3);font-size:10px}
 .cc-custom-in{margin-top:8px}
 .cc-save-src{display:inline-flex;align-items:center;gap:6px;min-height:36px;margin-top:8px;padding:6px 12px;border-radius:var(--ui-radius-control);border:1px solid transparent;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:13px;font-weight:600;cursor:pointer}
+/* Save buttons are red in every theme (owner 2026-10-08): a Save must never
+   read as greyed out, not even in the black-and-white Koala and Planda Bear
+   themes, which paint every other primary button grey. Declared last, with
+   !important, so no theme rule above can win. */
+:is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save){background:linear-gradient(135deg,#e5443a,#c42a22)!important;color:#fff!important;text-shadow:none!important;border-color:transparent!important;box-shadow:0 1px 0 rgba(255,255,255,.12) inset!important}
+:is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save):hover{filter:brightness(1.1)}
+:is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save):disabled{opacity:.45;filter:none}
 .cc-save-src:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 .cc-save-src[hidden]{display:none}
 @media (pointer:coarse){.cc-save-src{min-height:44px}}
@@ -7357,12 +7364,12 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=e445a26dcc"></script>
+<script src="cueola-app.js?v=58a223e38b"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
 <script src="assets/keywi-art/manifest.js?v=a8af0e1bfe"></script>
-<script src="cueola-streamdeck.js?v=cfb0fab355"></script>
+<script src="cueola-streamdeck.js?v=92f24304e5"></script>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";

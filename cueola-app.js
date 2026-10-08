@@ -24553,7 +24553,7 @@ function pbEditBoxHTML(note) {
   return `<div class="pb-editbox">
     <textarea id="pbEditInput" rows="2" onkeydown="pbEditInputKeydown(event,'${note.id}')">${esc(note.text)}</textarea>
     <div class="pb-editbtns">
-      <button type="button" class="pb-mini-btn save" onclick="pbSaveEditNote('${note.id}')">Save changes</button>
+      <button type="button" class="pb-mini-btn save btn-save" onclick="pbSaveEditNote('${note.id}')">Save changes</button>
       <button type="button" class="pb-mini-btn" onclick="pbCancelEditNote()">Cancel</button>
       <span class="pb-edit-hint">Enter to save · Esc to cancel</span>
     </div>

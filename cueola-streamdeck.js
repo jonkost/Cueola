@@ -3422,7 +3422,7 @@
       + '<div class="sd-save-actions">'
       + '<button class="btn-secondary" id="sd-save-local">' + (_leaveAfterSave ? 'Just leave, keep on this device' : 'Keep on this device') + '</button>'
       + '<button class="btn-secondary" id="sd-save-file">Download .keywi</button>'
-      + (signedIn ? '<button class="btn-primary" id="sd-save-cloud">Save to my profile</button>'
+      + (signedIn ? '<button class="btn-primary btn-save" id="sd-save-cloud">Save to my profile</button>'
                   : '<span class="sd-note">Sign in on the front page to save layouts to your profile.</span>')
       + '</div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
@@ -3521,7 +3521,7 @@
       + '<button class="btn-secondary" id="sd-lay-import">Import file</button>'
       + '<button class="btn-secondary" id="sd-lay-export">Export file</button>'
       + '<input type="file" id="sd-pf-file" accept=".keywi,application/json,.json" hidden>'
-      + '<button class="btn-primary" id="sd-lay-save">Save current</button>'
+      + '<button class="btn-primary btn-save" id="sd-lay-save">Save current</button>'
       + '<button class="btn-secondary" id="sd-lay-close">Close</button>'
       + '</div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
@@ -4415,7 +4415,7 @@
         + '<div class="sd-note">' + (admin
             ? 'Search GIPHY for key art right here. It needs a free GIPHY API key: create one at developers.giphy.com (Create an App, choose API), then paste it below. Share it and every student who signs in can search without a key of their own.'
             : 'Search GIPHY for key art right here. Ask your instructor to share the class key, or paste a free GIPHY API key of your own (developers.giphy.com, Create an App, choose API). A pasted key stays on this device.') + '</div>'
-        + '<div class="sd-giphy-row"><input id="sd-giphy-key" placeholder="Paste a GIPHY API key" autocomplete="off" spellcheck="false"><button class="sd-mini" id="sd-giphy-keysave">Save key</button>'
+        + '<div class="sd-giphy-row"><input id="sd-giphy-key" placeholder="Paste a GIPHY API key" autocomplete="off" spellcheck="false"><button class="sd-mini btn-save" id="sd-giphy-keysave">Save key</button>'
         + (_giphyKeyFormOpen ? '<button class="sd-mini" id="sd-giphy-cancel">Cancel</button>' : '') + '</div>'
         + (admin ? '<label class="sd-ed-check sd-giphy-share"><input type="checkbox" id="sd-giphy-share" checked><span>Use for the whole class</span></label>' : '')
         + '</div>';
