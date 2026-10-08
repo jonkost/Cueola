@@ -98,12 +98,16 @@ struct MonitorStrip: View {
     @ObservedObject var engine: Engine
     @ObservedObject var scopes: Scopes
     @AppStorage("ui.scopes") private var showScopes = true
+    /// Every box is this tall: the program and waveform at 16:9, the
+    /// vectorscope square, side by side from the left with nothing floating.
+    static let boxHeight: CGFloat = 148
+    static let wide = boxHeight * 16 / 9
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 ProgramPreview(view: engine.monitor)
-                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .frame(width: Self.wide, height: Self.boxHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.35)))
                 HStack(spacing: 6) {
@@ -127,13 +131,12 @@ struct MonitorStrip: View {
                         .help(showScopes ? "Hide the scopes" : "Show the waveform and vectorscope")
                 }
             }
-            .frame(width: 256)
+            .frame(width: Self.wide)
             if showScopes {
-                ScopePanel(title: "WAVEFORM", image: scopes.waveform) { WaveformGrid() }
-                ScopePanel(title: "VECTORSCOPE", image: scopes.vectorscope, square: true) { VectorGrid() }
-            } else {
-                Spacer()
+                ScopePanel(title: "WAVEFORM", image: scopes.waveform, width: Self.wide, height: Self.boxHeight) { WaveformGrid() }
+                ScopePanel(title: "VECTORSCOPE", image: scopes.vectorscope, width: Self.boxHeight, height: Self.boxHeight) { VectorGrid() }
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -154,7 +157,8 @@ struct ProgramPreview: NSViewRepresentable {
 struct ScopePanel<Grid: View>: View {
     let title: String
     let image: CGImage?
-    var square = false
+    let width: CGFloat
+    let height: CGFloat
     @ViewBuilder var grid: Grid
 
     var body: some View {
@@ -168,12 +172,11 @@ struct ScopePanel<Grid: View>: View {
                 }
                 grid
             }
-            .aspectRatio(square ? 1 : nil, contentMode: .fit)
+            .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.35)))
             Text(title).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: square ? nil : .infinity)
     }
 }
 

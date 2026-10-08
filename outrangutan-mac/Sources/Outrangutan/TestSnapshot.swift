@@ -283,6 +283,21 @@ enum TestSnapshot {
             (1.2, { note("d after All Stop the meter falls: \(String(format: "%.3f", max(engine.cueMeter.left, engine.cueMeter.right)))") }),
         ]
         case "cuepair": steps = cuePairSteps(engine: engine, dir: dir, note: note)
+        case "strip": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                engine.replaceShow(cues: [bars], pads: [], banks: [], multiTrigger: nil)
+                scopes.isOn = true
+                engine.go()
+            }),
+            (1.5, {
+                // The monitor row under the transport, at the window's narrowest and wider.
+                picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 960, height: 180), to: dir.appendingPathComponent("strip-960.png"))
+                picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 1300, height: 180), to: dir.appendingPathComponent("strip-1300.png"))
+            }),
+            (1.0, { engine.allStop() }),
+        ]
         case "multiview": steps = multiviewSteps(engine: engine, dir: dir, note: note, state: state)
         case "duck": steps = duckSteps(engine: engine, note: note)
         case "padsearch": steps = [
