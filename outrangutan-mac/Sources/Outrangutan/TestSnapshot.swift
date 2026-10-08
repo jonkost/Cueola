@@ -295,7 +295,15 @@ enum TestSnapshot {
                 matte.armed = false
                 var b2 = Cue(name: "Bars 4x3, output 2", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 3))
                 b2.output = 2; b2.xfade = 1
-                engine.replaceShow(cues: [bars, still, applause, matte, b2], pads: [], banks: [], multiTrigger: nil)
+                func pad(_ n: Int, _ name: String, _ file: String, _ emoji: String) -> Pad {
+                    var p = Pad(id: Pad.newID(offsetMs: n), slot: n, bank: "bk_1", name: name, path: media.appendingPathComponent(file).path, key: "\(n + 1)")
+                    p.emoji = emoji
+                    return p
+                }
+                engine.replaceShow(cues: [bars, still, applause, matte, b2],
+                                   pads: [pad(0, "Air horn", "demo-airhorn.wav", "📯"), pad(1, "Applause", "demo-applause.wav", "👏"),
+                                          pad(2, "Rimshot", "demo-rimshot.wav", "🥁"), pad(3, "Aww", "demo-aww.wav", "😢")],
+                                   banks: [PadBank(id: "bk_1", name: "Show open")], multiTrigger: true)
                 scopes.isOn = true
                 engine.go()
             }),
@@ -304,6 +312,12 @@ enum TestSnapshot {
                 picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 960, height: 180), to: dir.appendingPathComponent("strip-960.png"))
                 picture(MonitorStrip(engine: engine, scopes: scopes), size: CGSize(width: 1300, height: 180), to: dir.appendingPathComponent("strip-1300.png"))
                 picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control.png"))
+                let both = UserDefaults(suiteName: "live.cueola.outrangutan.test.both")!
+                both.set("both", forKey: "ui.tab"); both.set("side", forKey: "ui.layout"); both.set(false, forKey: "ui.inspector")
+                picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control-both.png"), store: both)
+                let stacked = UserDefaults(suiteName: "live.cueola.outrangutan.test.stacked")!
+                stacked.set("both", forKey: "ui.tab"); stacked.set("stacked", forKey: "ui.layout"); stacked.set(false, forKey: "ui.inspector"); stacked.set(false, forKey: "ui.transport")
+                picture(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), to: dir.appendingPathComponent("control-stacked.png"), store: stacked)
             }),
             (1.0, { engine.allStop() }),
         ]

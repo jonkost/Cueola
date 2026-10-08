@@ -39,8 +39,8 @@ struct HelpView: View {
                 "Window, Multiview (Shift-Command-M) is a monitor wall for the director's screen: Program, a preview of the standby cue (Roll plays a video silently between its trim points), the clock and the next cues. Full screen with the green button.",
                 "Lock Editing (the lock in the toolbar) keeps a stray click from changing the show. GO and the keys still work.",
             ]),
-            Topic(id: "pads", title: "Sound Effect Pads", symbol: "square.grid.3x3.fill", lines: [
-                "Click Pads in the toolbar (Command-2). Drop sounds on the pads, or click an empty pad to pick one.",
+            Topic(id: "pads", title: "SFX Pads", symbol: "square.grid.3x3.fill", lines: [
+                "Click SFX in the toolbar (Command-2), or Both to see the pads beside the cues (Command-3; View, Layout stacks them instead). Drop sounds on the pads, or click an empty pad to pick one.",
                 "Click a pad, or press its key, to play it. Several at once lets pads play on top of each other.",
                 "Record puts a new sound from the microphone on the next empty pad.",
                 "The Inspector sets each pad's name, emoji, color, key, volume, EQ, fades and trim.",

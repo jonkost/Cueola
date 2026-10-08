@@ -47,8 +47,8 @@ The Planda Bear hub header now names the show and its code too.
 Planda Bear themes a Save button was painted grey like everything else, so
 it looked turned off. Every Save button (Save Changes in Settings and the
 row editor, Save on a cue, Save and Push to Flowmingo, the profile Save, a
-note's Save changes, and the Stream Deck Save buttons) is now red no matter
-which theme is on.
+note's Save changes, Save File, and the Stream Deck Save buttons) is now
+red no matter which theme is on.
 
 - After this update, reload every open Cueola window.
 

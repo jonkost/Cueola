@@ -25,7 +25,7 @@ enum Printer {
         for bank in engine.pads.banks {
             let pads = engine.pads.pads.filter { $0.bank == bank.id }.sorted { $0.slot < $1.slot }
             guard !pads.isEmpty else { continue }
-            padTables += "<h2>Pads: \(esc(bank.name))</h2><table><tr><th>Key</th><th>Pad</th><th>Length</th><th>Plays</th></tr>"
+            padTables += "<h2>SFX: \(esc(bank.name))</h2><table><tr><th>Key</th><th>Pad</th><th>Length</th><th>Plays</th></tr>"
             for p in pads {
                 let len = engine.pads.length(p.id).map { String(format: "%.1f s", $0) } ?? ""
                 let plays = p.retrigger.label + (p.loop ? ", loops" : "")

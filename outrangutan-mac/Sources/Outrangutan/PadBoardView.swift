@@ -151,7 +151,7 @@ struct PadBoardView: View {
             .help("Record a sound effect onto the next empty pad")
             .disabled(board.locked)
             Button { board.stopAll() } label: {
-                Label("Stop Pads", systemImage: "stop.fill")
+                Label("Stop SFX", systemImage: "stop.fill")
             }
             .help("Stops every pad that is playing")
         }
@@ -406,7 +406,7 @@ struct PadInspectorView: View {
 /// The pads' level meter: two thin bars, green to yellow to red.
 struct LevelMeterView: View {
     @ObservedObject var meter: LevelMeter
-    var label = "PADS"
+    var label = "SFX"
     var width: CGFloat = 90
 
     var body: some View {
@@ -424,7 +424,7 @@ struct LevelMeterView: View {
                 .help(meter.clipped ? "It hit full level. Click to clear." : "Lights red if the sound hits full level.")
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label == "PADS" ? "Pad level" : "Cue sound level")
+        .accessibilityLabel(label == "SFX" ? "SFX level" : "Cue sound level")
         .accessibilityValue("\(Int(max(meter.left, meter.right) * 100)) percent")
     }
 

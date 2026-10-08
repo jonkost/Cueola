@@ -125,7 +125,7 @@ struct MonitorStrip: View {
                     Spacer()
                     // The scopes switch lives in the View menu (Option-Command-S).
                     LevelMeterView(meter: engine.cueMeter, label: "SOUND", width: 72)
-                        .help("How loud the cues are: videos and sound cues, at their volume. Pads have their own meter.")
+                        .help("How loud the cues are: videos and sound cues, at their volume. SFX pads have their own meter.")
                 }
             }
             .frame(width: Self.wide)

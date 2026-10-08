@@ -175,7 +175,7 @@ struct SoundSettings: View {
                 }
                 .disabled(!engine.audio.duckUnderPads)
             } header: {
-                Text("Pads")
+                Text("SFX")
             } footer: {
                 Text("On an audio interface with more than two outputs, pads can play on their own pair, for their own fader on the board. Ducking turns the cue sound down while any pad sounds (a music bed under a stinger), and brings it back up over about a second.")
                     .foregroundStyle(.secondary)

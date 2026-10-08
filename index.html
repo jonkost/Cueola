@@ -6647,7 +6647,7 @@ input.pt-range::-moz-range-thumb,
 	      <div class="settings-sec-label">File<button type="button" class="info-btn" aria-label="About the .cueola show file" onclick="toggleInfoPop(event,'cueola-file')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></div>
 	      <div class="settings-file-grid">
 	        <button type="button" class="btn-secondary settings-file-btn export-action" onclick="hideModal('modal-settings');exportPDF()" data-tip="Export the rundown paperwork as a PDF"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
-	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');exportRundownFile()" data-tip="Save this rundown as a .cueola show file. Cmd+S saves it again in place."><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
+	        <button type="button" class="btn-secondary settings-file-btn btn-save" onclick="hideModal('modal-settings');exportRundownFile()" data-tip="Save this rundown as a .cueola show file. Cmd+S saves it again in place."><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Save File</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openRundownFilePicker()" data-tip="Open a saved .cueola show file. Older .json files still open."><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Open File</span></button>
 	        <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openSessionHistory()" data-tip="Browse backup snapshots saved on this device"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>History</span></button>
 	      </div>
@@ -7166,6 +7166,11 @@ input.pt-range::-moz-range-thumb,
 :is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save){background:linear-gradient(135deg,#e5443a,#c42a22)!important;color:#fff!important;text-shadow:none!important;border-color:transparent!important;box-shadow:0 1px 0 rgba(255,255,255,.12) inset!important}
 :is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save):hover{filter:brightness(1.1)}
 :is(.btn-save,.save-btn,.pb-mini-btn.save,.cc-save-src,.sd-mini.btn-save):disabled{opacity:.45;filter:none}
+/* Save File sits in the Settings list as a plain row (no fill), so it goes
+   red in its words and icon instead of its background. */
+#modal-settings .settings-sheet .settings-file-btn.btn-save{background:transparent!important;color:#e5443a!important;box-shadow:none!important}
+#modal-settings .settings-sheet .settings-file-btn.btn-save:hover{background:color-mix(in srgb,#e5443a 12%,transparent)!important;color:#ff5a4e!important}
+#modal-settings .settings-file-btn.btn-save :is(.sf-symbol,.brand-ico,.app-svg-icon),#modal-settings .settings-file-btn.btn-save:hover :is(.sf-symbol,.brand-ico,.app-svg-icon){color:#e5443a!important}
 .cc-save-src:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 .cc-save-src[hidden]{display:none}
 @media (pointer:coarse){.cc-save-src{min-height:44px}}

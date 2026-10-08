@@ -146,11 +146,19 @@ struct MonitorToggles: View {
     @AppStorage("ui.monitor") private var showMonitor = true
     @AppStorage("ui.scopes") private var showScopes = true
     @AppStorage("ui.tab") private var tab = "cues"
+    @AppStorage("ui.layout") private var layout = "side"
+    @AppStorage("ui.transport") private var showTransport = true
 
     var body: some View {
         Button("Cues") { tab = "cues" }.keyboardShortcut("1")
-        Button("Pads") { tab = "pads" }.keyboardShortcut("2")
+        Button("SFX") { tab = "pads" }.keyboardShortcut("2")
+        Button("Cues and SFX") { tab = "both" }.keyboardShortcut("3")
+        Picker("Layout", selection: $layout) {
+            Text("SFX Beside Cues").tag("side")
+            Text("SFX Under Cues").tag("stacked")
+        }
         Divider()
+        Toggle("Transport Buttons", isOn: $showTransport)
         Toggle("Program Preview", isOn: $showMonitor)
             .keyboardShortcut("p", modifiers: [.command, .option])
         Toggle("Scopes", isOn: $showScopes)
@@ -196,7 +204,7 @@ struct PlaybackCommands: Commands {
             Button("Identify Outputs") { engine.identifyOutputs() }
                 .disabled(engine.openOutputs.isEmpty)
             Divider()
-            Button("Stop All Pads") { engine.pads.stopAll() }
+            Button("Stop All SFX") { engine.pads.stopAll() }
         }
     }
 }

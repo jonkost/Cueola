@@ -25,6 +25,13 @@ struct ControlView: View {
     @State private var picked: Set<UUID> = []
     @AppStorage("ui.inspector") private var showInspector = true
     @AppStorage("ui.tab") private var tab = "cues"
+    @AppStorage("ui.layout") private var layout = "side"
+    @AppStorage("ui.transport") private var showTransport = true
+    /// With both panels showing, the Inspector follows whatever was touched
+    /// last: a cue or a pad.
+    @State private var touchedPads = false
+
+    private var inspectorShowsPads: Bool { tab == "pads" || (tab == "both" && touchedPads) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,11 +39,26 @@ struct ControlView: View {
             Divider()
             if showMonitor { MonitorStrip(engine: engine, scopes: scopes); Divider() }
             if let point = engine.recovered { recoveryBar(point); Divider() }
-            if tab == "pads" { PadBoardView(board: engine.pads) } else { cueList }
+            switch tab {
+            case "pads": PadBoardView(board: engine.pads)
+            case "both":
+                if layout == "stacked" {
+                    VSplitView {
+                        cueList.frame(minHeight: 160)
+                        PadBoardView(board: engine.pads).frame(minHeight: 160)
+                    }
+                } else {
+                    HSplitView {
+                        cueList.frame(minWidth: 420)
+                        PadBoardView(board: engine.pads).frame(minWidth: 360)
+                    }
+                }
+            default: cueList
+            }
         }
         .inspector(isPresented: $showInspector) {
             Group {
-                if tab == "pads" { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
+                if inspectorShowsPads { PadInspectorView(board: engine.pads) } else { InspectorView(engine: engine) }
             }
             .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
         }
@@ -50,9 +72,12 @@ struct ControlView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
+        .onChange(of: engine.pads.selectedPadID) { _, id in if id != nil { touchedPads = true } }
+        .onChange(of: picked) { _, _ in touchedPads = false }
+        .onChange(of: engine.standbyID) { _, _ in touchedPads = false }
         .dropDestination(for: URL.self) { urls, _ in
             guard !engine.locked else { return false }
-            if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
+            if inspectorShowsPads { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
             return true
         } isTargeted: { dropTargeted = $0 }
         .overlay {
@@ -82,15 +107,16 @@ struct ControlView: View {
         ToolbarItem(placement: .principal) {
             Picker("View", selection: $tab) {
                 Label("Cues", systemImage: "list.bullet.rectangle").tag("cues")
-                Label("Pads", systemImage: "square.grid.3x3.fill").tag("pads")
+                Label("SFX", systemImage: "square.grid.3x3.fill").tag("pads")
+                Label("Both", systemImage: "rectangle.split.2x1").tag("both")
             }
             .pickerStyle(.segmented)
             .labelStyle(.titleAndIcon)
-            .help("Switch between the cue list and the sound effect pads")
+            .help("The cue list, the SFX pads, or both at once (View, Layout picks side by side or stacked)")
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { chooseFiles() } label: { Label("Add Media", systemImage: "plus") }
-                .help(tab == "pads" ? "Add sounds to the pads" : "Add videos, sounds or stills to the cue list")
+                .help(tab == "pads" ? "Add sounds to the SFX pads" : "Add videos, sounds or stills to the cue list")
                 .disabled(engine.locked)
             if tab == "cues" {
                 Menu {
@@ -213,8 +239,9 @@ struct ControlView: View {
             }
 
             // The transport gets its own row, so every button stays a big
-            // target however narrow the window is.
-            GeometryReader { geo in
+            // target however narrow the window is. Pros who drive by keys
+            // or deck can hide it (View menu).
+            if showTransport { GeometryReader { geo in
                 // GO takes a third of the row, All Stop a sixth, the three in
                 // between share the rest, with a little air around All Stop.
                 let gap: CGFloat = 10
@@ -236,7 +263,7 @@ struct ControlView: View {
                         .frame(width: all)
                 }
             }
-            .frame(height: 72)
+            .frame(height: 72) }
         }
         .padding(16)
     }
@@ -527,7 +554,7 @@ struct ControlView: View {
         panel.allowedContentTypes = tab == "pads" ? [.audio] : [.movie, .audio, .image]
         panel.prompt = "Add"
         guard panel.runModal() == .OK else { return }
-        if tab == "pads" { engine.pads.add(urls: panel.urls) } else { engine.add(urls: panel.urls) }
+        if inspectorShowsPads { engine.pads.add(urls: panel.urls) } else { engine.add(urls: panel.urls) }
     }
 
     // MARK: Words and colors

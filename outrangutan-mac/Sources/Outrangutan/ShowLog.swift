@@ -18,7 +18,7 @@ final class ShowLog: ObservableObject {
             case .stop: return "Stop"
             case .panic: return "All Stop"
             case .pause: return "Pause"
-            case .pad: return "Pad"
+            case .pad: return "SFX"
             case .link: return "Link"
             case .output: return "Output"
             case .file: return "Show"
