@@ -65,6 +65,7 @@ struct ControlView: View {
             .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
         }
         .toolbar { toolbar }
+        .buttonStyle(ActionStyle())
         // Like any Mac document, the window is named for its show file.
         .navigationTitle(files.currentFile?.deletingPathExtension().lastPathComponent ?? "Outrangutan")
         .navigationSubtitle(link.phase == .linked ? link.message : "")

@@ -180,7 +180,7 @@ struct MidiSettings: View {
                 }
                 HStack {
                     Button(midi.learning ? "Waiting: Touch a Control\u{2026}" : "Learn a Control") { midi.learning.toggle() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(ActionStyle(prominent: true))
                         .tint(midi.learning ? .orange : .accentColor)
                     Spacer()
                 }

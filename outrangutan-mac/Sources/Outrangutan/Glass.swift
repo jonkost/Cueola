@@ -8,13 +8,8 @@ import SwiftUI
 extension View {
     /// A button in glass. Prominent ones (GO, All Stop) fill with their
     /// color; the rest are clear glass with a colored symbol.
-    @ViewBuilder
     func glassButton(prominent: Bool = false, tint: Color? = nil) -> some View {
-        if #available(macOS 26, *) {
-            if prominent { self.buttonStyle(.glassProminent).tint(tint) } else { self.buttonStyle(.glass).tint(tint) }
-        } else {
-            if prominent { self.buttonStyle(.borderedProminent).tint(tint) } else { self.buttonStyle(.bordered).tint(tint) }
-        }
+        buttonStyle(ActionStyle(prominent: prominent, tint: tint))
     }
 
     /// A surface in glass, tinted or clear: a pad tile, a bank pill, a
@@ -50,6 +45,29 @@ struct GlassGroup<Content: View>: View {
         } else {
             content()
         }
+    }
+}
+
+/// Every action button in the app: a rounded rectangle (radius 8, the
+/// big five use 12), never the Mac's capsule, so all of them share one
+/// shape. Prominent ones fill with their color; the rest are clear glass
+/// with a hairline. The text takes the tint when there is one.
+struct ActionStyle: ButtonStyle {
+    var prominent = false
+    var tint: Color? = nil
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        configuration.label
+            .font(.body.weight(.medium))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .foregroundStyle(prominent ? Color.white : (tint ?? Color.primary))
+            .contentShape(shape)
+            .modifier(TransportSurface(color: tint ?? .accentColor, prominent: prominent, shape: shape))
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 

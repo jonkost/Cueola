@@ -43,12 +43,13 @@ struct GoToCueView: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Stand By") { standBy() }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(ActionStyle(prominent: true))
                     .disabled(matches.isEmpty)
             }
         }
         .padding(20)
         .frame(width: 460)
+        .buttonStyle(ActionStyle())
         .onAppear { typing = true }
     }
 

@@ -24,6 +24,7 @@ struct SettingsView: View {
                 .tabItem { Label("OBS", systemImage: "video.circle") }
         }
         .frame(width: 560, height: 470)
+        .buttonStyle(ActionStyle())
     }
 }
 

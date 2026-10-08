@@ -142,7 +142,7 @@ struct RecordSheet: View {
                           systemImage: recorder.state == .recording ? "stop.fill" : "record.circle")
                         .frame(minWidth: 90)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ActionStyle(prominent: true, tint: .red))
                 .tint(.red)
                 .controlSize(.large)
                 Text(String(format: "%d:%04.1f", Int(recorder.seconds) / 60, recorder.seconds.truncatingRemainder(dividingBy: 60)))
@@ -163,7 +163,7 @@ struct RecordSheet: View {
                         board.assign(url: url, slot: slot)
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(ActionStyle(prominent: true, tint: .red))
                     .keyboardShortcut(.defaultAction)
                 }
             }

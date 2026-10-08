@@ -125,8 +125,7 @@ struct KeySettings: View {
                                 .font(.body.weight(.semibold))
                                 .frame(minWidth: 110)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(keys.recording == action ? .accentColor : nil)
+                        .buttonStyle(ActionStyle(prominent: keys.recording == action))
                     } label: {
                         Text(action.label)
                         Text(action.help)

@@ -109,7 +109,25 @@ struct PadBoardView: View {
         }
     }
 
+    /// The bar over the pads: banks on the left, the meter, the layer
+    /// switch, Record and Stop SFX on the right. When the panel is narrow
+    /// (SFX beside the cues) the buttons drop to their symbols and the
+    /// switch to its own, so nothing wraps and no bank name is cut.
     private var bankBar: some View {
+        ViewThatFits(in: .horizontal) {
+            bar(compact: false, flexBanks: false)
+            bar(compact: true, flexBanks: false)
+            bar(compact: true, flexBanks: true)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func barLabel(_ title: String, _ symbol: String, compact: Bool) -> some View {
+        if compact { Label(title, systemImage: symbol).labelStyle(.iconOnly) } else { Label(title, systemImage: symbol) }
+    }
+
+    private func bar(compact: Bool, flexBanks: Bool) -> some View {
         HStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -121,9 +139,10 @@ struct PadBoardView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 5)
-                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: Capsule())
+                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .fixedSize()
                         .contextMenu {
-                            Button("Rename…") { newName = bank.name; renaming = bank }
+                            Button("Rename\u{2026}") { newName = bank.name; renaming = bank }
                                 .disabled(board.locked)
                             if board.banks.count > 1 {
                                 Button("Remove bank and its pads", role: .destructive) { board.removeBank(bank.id) }
@@ -131,34 +150,41 @@ struct PadBoardView: View {
                             }
                         }
                     }
-                    Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .padding(.horizontal, 4)
-                        .help("Add a bank")
-                        .disabled(board.locked)
                 }
             }
-            Spacer()
-            LevelMeterView(meter: board.meter)
-            Toggle("Several at once", isOn: $board.multiTrigger)
-                .toggleStyle(.switch)
-                .controlSize(.small)
+            // The banks hug their names so the + sits right after them;
+            // only with too many banks to fit does the row scroll.
+            .fixedSize(horizontal: !flexBanks, vertical: false)
+            // Outside the scrolling row of banks, so it is never squeezed.
+            Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
+                .labelStyle(.iconOnly)
+                .buttonStyle(ActionStyle())
                 .fixedSize()
-                .help("Off: hitting a pad stops every other pad.")
+                .help("Add a bank")
+                .disabled(board.locked)
+            Spacer(minLength: 8)
+            LevelMeterView(meter: board.meter)
+            Toggle(isOn: $board.multiTrigger) {
+                if compact { Image(systemName: "square.stack.3d.up") } else { Text("Several at once") }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .fixedSize()
+            .help("Several at once. Off: hitting a pad stops every other pad.")
             Button { recordIntoNextSlot() } label: {
-                Label("Record", systemImage: "mic")
+                barLabel("Record", "mic", compact: compact)
             }
             .glassButton()
+            .fixedSize()
             .help("Record a sound effect onto the next empty pad")
             .disabled(board.locked)
             Button { board.stopAll() } label: {
-                Label("Stop SFX", systemImage: "stop.fill")
+                barLabel("Stop SFX", "stop.fill", compact: compact)
             }
             .glassButton()
+            .fixedSize()
             .help("Stops every pad that is playing")
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
     }
 }
 
