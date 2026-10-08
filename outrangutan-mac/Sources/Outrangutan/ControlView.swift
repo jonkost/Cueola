@@ -28,6 +28,8 @@ struct ControlView: View {
     @AppStorage("ui.tab") private var tab = "cues"
     @AppStorage("ui.layout") private var layout = "side"
     @AppStorage("ui.transport") private var showTransport = true
+    @AppStorage("ui.splitSide") private var splitSide = 0.55
+    @AppStorage("ui.splitStacked") private var splitStacked = 0.55
     /// With both panels showing, the Inspector follows whatever was touched
     /// last: a cue or a pad.
     @State private var touchedPads = false
@@ -44,15 +46,9 @@ struct ControlView: View {
             case "pads": PadBoardView(board: engine.pads)
             case "both":
                 if layout == "stacked" {
-                    VSplitView {
-                        cueList.frame(minHeight: 160)
-                        PadBoardView(board: engine.pads).frame(minHeight: 160)
-                    }
+                    SplitPane(axis: .vertical, share: $splitStacked, firstMin: 160, secondMin: 160) { cueList } second: { PadBoardView(board: engine.pads) }
                 } else {
-                    HSplitView {
-                        cueList.frame(minWidth: 380)
-                        PadBoardView(board: engine.pads).frame(minWidth: 300)
-                    }
+                    SplitPane(axis: .horizontal, share: $splitSide, firstMin: 380, secondMin: 300) { cueList } second: { PadBoardView(board: engine.pads) }
                 }
             default: cueList
             }

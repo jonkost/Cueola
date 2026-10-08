@@ -114,12 +114,15 @@ struct PadBoardView: View {
     /// (SFX beside the cues) the buttons drop to their symbols and the
     /// switch to its own, so nothing wraps and no bank name is cut.
     private var bankBar: some View {
-        ViewThatFits(in: .horizontal) {
-            bar(compact: false, flexBanks: false)
-            bar(compact: true, flexBanks: false)
-            bar(compact: true, flexBanks: true)
+        // The width decides full words or symbols. (Measuring both with
+        // ViewThatFits inside the split views sent the window into an
+        // endless layout loop: the launch crash of Oct 8.)
+        GeometryReader { geo in
+            bar(compact: geo.size.width < 700)
+                .frame(width: geo.size.width, height: geo.size.height)
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(height: 44)
+        .padding(.horizontal, 14).padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -127,7 +130,7 @@ struct PadBoardView: View {
         if compact { Label(title, systemImage: symbol).labelStyle(.iconOnly) } else { Label(title, systemImage: symbol) }
     }
 
-    private func bar(compact: Bool, flexBanks: Bool) -> some View {
+    private func bar(compact: Bool) -> some View {
         HStack(spacing: 8) {
             // A plain row, never a scroll view: a scroll view inside the
             // fit-or-shrink measuring above sent the window into an endless
@@ -143,7 +146,7 @@ struct PadBoardView: View {
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 5)
                         .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .fixedSize()
+                        .lineLimit(1)
                         .contextMenu {
                             Button("Rename\u{2026}") { newName = bank.name; renaming = bank }
                                 .disabled(board.locked)
@@ -155,10 +158,7 @@ struct PadBoardView: View {
                     }
                 }
             }
-            // The banks hug their names so the + sits right after them;
-            // with too many banks to fit, the last names give way.
-            .fixedSize(horizontal: !flexBanks, vertical: false)
-            .clipped()
+            .layoutPriority(-1)
             // Outside the scrolling row of banks, so it is never squeezed.
             Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
                 .labelStyle(.iconOnly)

@@ -280,7 +280,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         obs.onScene = { [weak self] scene in self?.engine.obsSceneChanged(scene) }
         obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
         engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }
-        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes, watch: watch) }
         // If the app is about to die of an exception, write down why first:
         // the crash report never carries the reason. Logs/crash.txt.
         NSSetUncaughtExceptionHandler { e in
@@ -290,6 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(text.data(using: .utf8)!); try? h.close() }
             else { try? text.write(to: url, atomically: true, encoding: .utf8) }
         }
+        if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes, watch: watch) }
         // OUTRANGUTAN_POKE: pretend the person resizes the window, from the
         // shell, to chase a layout crash. "900x600,1300x800" resizes the
         // main window to each size, two seconds apart, after eight seconds.
