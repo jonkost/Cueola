@@ -23,6 +23,11 @@ admin taps **Assign positions** on that card to open the new page.
 - Paperwork can only be handed out once a student has a position, because
   each record is one student in one position. A student with two positions
   carries the same paperwork list on both.
+- **Paperwork and who has it** lists every piece of paperwork on the show
+  with the names on it. A piece with nobody reads "Nobody yet" in yellow,
+  and the heading counts how many still need someone. With a student
+  picked, each piece they do not hold gets a **Give to** button. Tap a name
+  to jump to that student.
 - **Everyone on this show** at the bottom of the page is the same roster as
   the hub. Tap a name to jump to that student.
 - The positions list for the show (add your own, remove ones you do not use)

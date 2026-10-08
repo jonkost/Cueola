@@ -4608,6 +4608,7 @@ function pbAssignRender(opts={}) {
     </div>
     ${legacyNote}
     ${pbAssignSelectedProfileId ? pbAssignStudentEditorHTML(pbAssignSelectedProfileId) : `<div class="u-note pba-hint">Choose a student above, or tap a name in the list below.</div>`}
+    ${pbAssignCoverageHTML(pbAssignRows, pbAssignSelectedProfileId)}
     <div class="pba-everyone">
       <div class="pb-assign-title">${sfIcon('content.checklist')} Everyone on this show</div>
       ${pbAssignRosterTableHTML(groups, { pickable:true })}
@@ -4717,14 +4718,61 @@ function pbAssignRemovePosition(pid, positionId) {
 function pbAssignAddPaperwork(select) {
   const id = String(select?.value || '').trim();
   const label = select?.selectedOptions?.[0]?.dataset?.paperworkLabel || id;
+  if (pbAssignGivePaperwork(id, label)) document.getElementById('pbAssignAddPaperwork')?.focus();
+}
+
+// Put one piece of paperwork on the selected student's list (the dropdown
+// and the coverage list's Give buttons both land here).
+function pbAssignGivePaperwork(id, label='') {
+  id = String(id || '').trim();
   const pid = pbAssignSelectedProfileId;
-  if (!id || !pid || !pbAssignRowsFor(pid).length) return;
+  if (!id || !pid || !pbAssignRowsFor(pid).length) return false;
   const paper = pbAssignPaperworkFor(pid);
-  if (paper.ids.includes(id)) { pbAssignRender(); return; }
-  pbAssignSetPaperworkFor(pid, [...paper.ids, id], [...paper.labels, label]);
+  if (paper.ids.includes(id)) { pbAssignRender(); return false; }
+  const clean = String(label || plandaBearAssignmentCatalog().find(item => item.id === id)?.label || id);
+  pbAssignSetPaperworkFor(pid, [...paper.ids, id], [...paper.labels, clean]);
   pbAssignQueueSave();
   pbAssignRender();
-  document.getElementById('pbAssignAddPaperwork')?.focus();
+  return true;
+}
+
+// Every piece of paperwork on this show with the names on it, so a gap is
+// one glance away. With a student selected, each piece they do not hold gets
+// a Give button.
+function pbAssignCoverageHTML(rows, pid) {
+  const items = new Map();
+  plandaBearAssignmentCatalog().forEach(item => items.set(item.id, { id:item.id, label:item.label, people:[] }));
+  (rows || []).forEach(row => {
+    (row.paperworkIds || []).forEach((id, i) => {
+      if (!items.has(id)) items.set(id, { id, label: row.paperwork?.[i] || id, people:[] });
+      const entry = items.get(id);
+      if (row.profileId && !entry.people.some(p => p.profileId === row.profileId)) entry.people.push({ profileId:row.profileId, person:row.person });
+    });
+  });
+  const list = [...items.values()];
+  if (!list.length) return '';
+  const covered = list.filter(item => item.people.length).length;
+  const giveTo = pid && pbAssignRowsFor(pid).length ? (pbAssignProfile(pid)?.fullName || pbAssignRowsFor(pid)[0]?.person || '') : '';
+  const giveFirst = giveTo ? giveTo.split(' ')[0] : '';
+  const rowsHTML = list.map(item => {
+    const held = pid && item.people.some(p => p.profileId === pid);
+    const give = giveTo && !held
+      ? `<button type="button" class="pba-cov-give" onclick="pbAssignGivePaperwork('${esc(item.id)}')" data-tip="Put ${esc(item.label)} on ${esc(giveTo)}'s list">Give to ${esc(giveFirst)}</button>`
+      : '';
+    const people = item.people.length
+      ? item.people.map(p => `<button type="button" class="pb-roster-chip pb-roster-assigned pba-cov-person" onclick="pbAssignSelectStudent('${esc(p.profileId)}')">${esc(p.person)}</button>`).join('')
+      : `<span class="pba-cov-nobody">Nobody yet</span>`;
+    return `<div class="pba-cov-row${item.people.length ? '' : ' is-empty'}">
+      <span class="pba-cov-label">${esc(item.label)}</span>
+      <span class="pba-cov-people">${people}</span>
+      ${give}
+    </div>`;
+  }).join('');
+  const summary = covered === list.length ? 'Every piece has someone.' : `${list.length - covered} of ${list.length} still need${list.length - covered === 1 ? 's' : ''} someone.`;
+  return `<div class="pba-coverage">
+    <div class="pb-assign-title">${sfIcon('content.checklist')} Paperwork and who has it <span class="pba-cov-sum${covered === list.length ? ' is-ok' : ''}">${esc(summary)}</span></div>
+    <div class="pba-cov-list">${rowsHTML}</div>
+  </div>`;
 }
 
 function pbAssignRemovePaperwork(pid, id) {

@@ -1413,6 +1413,21 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .pba-add{max-width:360px;font-size:14px;padding:10px 12px}
 .pba-add:disabled{opacity:.55;cursor:not-allowed}
 .pba-everyone{margin-top:4px}
+/* Paperwork coverage: one row per piece, names on it, a gap reads yellow */
+.pba-coverage{border:1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 70%,transparent);padding:12px 14px}
+.pba-cov-sum{margin-left:auto;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--yellow)}
+.pba-cov-sum.is-ok{color:var(--green)}
+.pba-cov-list{display:flex;flex-direction:column;gap:4px}
+.pba-cov-row{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(0,1.6fr) auto;gap:10px;align-items:center;padding:7px 10px;border-radius:9px;background:var(--s2);font-size:12.5px}
+.pba-cov-row.is-empty{background:color-mix(in srgb,var(--yellow) 9%,var(--s2))}
+.pba-cov-label{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pba-cov-people{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.pba-cov-person{font-size:10.5px;font-family:var(--sans);font-weight:700;letter-spacing:0;padding:3px 8px;border-radius:999px;cursor:pointer;border:0}
+.pba-cov-person:hover{filter:brightness(1.15)}
+.pba-cov-nobody{color:var(--yellow);font-weight:700;font-style:italic}
+.pba-cov-give{padding:5px 10px;border-radius:999px;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);font-family:var(--sans);font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.pba-cov-give:hover{background:var(--btn-fill-hover);color:var(--btn-ink-hover)}
+@media (max-width:640px){.pba-cov-row{grid-template-columns:1fr;gap:4px}}
 .pba-positions-list{border:1px solid transparent;border-radius:var(--ui-radius-group);background:color-mix(in srgb,var(--s2) 70%,transparent);padding:10px 14px}
 .pba-positions-list summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text2)}
 .pba-positions-list[open] summary{margin-bottom:8px}
@@ -7336,7 +7351,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=2bb7be1a49"></script>
+<script src="cueola-app.js?v=042dc17674"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
