@@ -335,6 +335,9 @@ struct ControlView: View {
                     Button("Add Media") { chooseFiles() }
                 }
             } else {
+                VStack(spacing: 0) {
+                cueHeader
+                Divider()
                 List(selection: Binding(get: { picked }, set: { new in
                     picked = new
                     if new.count == 1, let id = new.first { engine.standbyID = id }
@@ -356,21 +359,45 @@ struct ControlView: View {
                     picked = [id]
                 }
                 .onAppear { if let id = engine.standbyID { picked = [id] } }
+                }
             }
         }
+    }
+
+    /// Quiet column names over the cue list, lined up with the rows.
+    private var cueHeader: some View {
+        HStack(spacing: 10) {
+            Color.clear.frame(width: 4, height: 1).padding(.trailing, -6)
+            Text("#").frame(width: 28, alignment: .trailing)
+            Color.clear.frame(width: 48, height: 1)
+            Text("CUE")
+            Spacer(minLength: 6)
+            Text("WAIT").frame(width: 56, alignment: .trailing)
+            Color.clear.frame(width: 58, height: 1)
+            Text("STATE").frame(width: 66)
+            Text("LENGTH").frame(width: 56, alignment: .trailing)
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(.secondary)
+        .padding(.leading, 18)
+        .padding(.trailing, 19)
+        .padding(.vertical, 6)
     }
 
     private func row(_ cue: Cue, number: Int) -> some View {
         let onAir = cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id
         let waiting = cue.id == engine.pendingCue?.id
+        let standby = cue.id == engine.standbyID
         return HStack(spacing: 10) {
             // The cue's color, as a stripe, like a label in Finder.
             Capsule().fill(cue.label == .none ? Color.clear : Self.color(cue.label)).frame(width: 4, height: 22)
                 .padding(.trailing, -6)
+            // The standby cue's number is green: the one GO fires next,
+            // whatever is selected.
             Text("\(number)")
-                .font(.body.weight(.semibold))
+                .font(.body.weight(standby ? .bold : .semibold))
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(standby ? Color.green : Color.secondary)
                 .frame(width: 28, alignment: .trailing)
             icon(cue, onAir: onAir)
             Text(cue.name).font(.body).lineLimit(1)
@@ -383,12 +410,17 @@ struct ControlView: View {
             // Settings tags, right-aligned against the icon columns.
             HStack(spacing: 4) {
                 if !cue.armed { chip("SKIP", .gray) }
-                if cue.preWait > 0 { chip("PRE \(Timecode.short(cue.preWait))", .yellow) }
                 if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
                 if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
                 if cue.key.mode != .off && cue.kind == .video { chip("KEY", .green) }
                 if cue.obs.action != .none || !cue.obsTriggerScene.isEmpty { chip("OBS", .indigo) }
             }
+            // The pre-wait, as a column: a dash when there is none.
+            Text(cue.preWait > 0 ? Timecode.short(cue.preWait) : "\u{2013}")
+                .font(.callout)
+                .monospacedDigit()
+                .foregroundStyle(cue.preWait > 0 ? Color.yellow : Color.secondary.opacity(0.5))
+                .frame(width: 56, alignment: .trailing)
             // The small icons each keep their own column, shown or not, so
             // they line up from row to row.
             HStack(spacing: 2) {
@@ -399,6 +431,7 @@ struct ControlView: View {
             Group {
                 if waiting { chip("PRE-WAIT", .orange, solid: true) }
                 else if onAir { chip("ON AIR", .red, solid: true) }
+                else if standby { chip("STANDBY", .green) }
                 else { Color.clear.frame(height: 1) }
             }
             .frame(width: 66, alignment: .center)

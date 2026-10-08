@@ -286,8 +286,16 @@ enum TestSnapshot {
         case "strip": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
-                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
-                engine.replaceShow(cues: [bars], pads: [], banks: [], multiTrigger: nil)
+                let bars = Cue(name: "Open: bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
+                var still = Cue(name: "Title card", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
+                still.preWait = 2; still.continueMode = .autoFollow; still.duration = 5
+                var applause = Cue(name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID(offsetMs: 2))
+                applause.loop = true; applause.label = .green
+                var matte = Cue.matte(named: "Red matte", color: "#C8102E")
+                matte.armed = false
+                var b2 = Cue(name: "Bars 4x3, output 2", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 3))
+                b2.output = 2; b2.xfade = 1
+                engine.replaceShow(cues: [bars, still, applause, matte, b2], pads: [], banks: [], multiTrigger: nil)
                 scopes.isOn = true
                 engine.go()
             }),
