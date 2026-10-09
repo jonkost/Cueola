@@ -97,15 +97,17 @@ extension View {
     }
 }
 
-/// The show's big buttons: a rounded rectangle at the house control
-/// radius (12), not the Mac's capsule, in glass. GO and All Stop fill
-/// with their color; the others are clear glass with a colored symbol.
+/// The show's big buttons. Apple's kit has no button this big, so they
+/// follow its push button scaled up: wide, the words inside, corners a
+/// quarter of the height (a 22-point button rounds by 5 or 6, a 64-point
+/// one by 16), never a capsule. GO and All Stop fill with their color;
+/// the others are clear glass with a colored symbol.
 struct TransportStyle: ButtonStyle {
     let color: Color
     let prominent: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         configuration.label
             .frame(maxWidth: .infinity, minHeight: 64)
             .foregroundStyle(prominent ? Color.white : Color.primary)

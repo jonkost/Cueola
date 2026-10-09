@@ -10,6 +10,10 @@ Cueola is a classroom TV-production app built by Jon, an instructor. Students us
 - When a change could go two ways, show a screenshot and ask one clear question. Do not build the big version and hope.
 - If something cannot be done, say so in one sentence and offer the nearest thing.
 
+## Outrangutan for Mac: Apple's kit decides the design
+
+Jon locked this in on Oct 9, 2026. Every design question about the Mac app (outrangutan-mac/) is answered from Apple's macOS kit and Human Interface Guidelines, not sent to Jon. Open the kit, find the nearest Apple control or layout, and build to it: its sizes, corners, order of buttons, spacing and colors. The kit is Apple's macOS 27 UI Kit on Figma (link in the Claude memory, reference_apple_macos27_figma_kit); it opens in the built-in browser without a login. Where the kit has nothing (a show button bigger than any Apple control), scale the nearest Apple control up and keep its proportions. Nothing in the kit has square corners or a capsule push button at regular size, so neither does the app. Jon's one standing rule on top of the kit: buttons that belong together are the same size. Show Jon a real screenshot of the result; do not ask him to choose.
+
 ## What must never change without Jon saying so
 
 - The rundown is a table: rows across, one cell per department (Video, Audio, Playback, GFX, Lighting, Script), each cell with its two lines (READY and TAKE, or the department's own words). Simplify inside the cells, never the table.
