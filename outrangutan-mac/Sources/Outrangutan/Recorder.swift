@@ -171,7 +171,7 @@ struct RecordSheet: View {
             }
             .buttonWidth(140)
         }
-        .padding(24)
+        .padding(20)
         .frame(width: 440)
         .buttonStyle(ActionStyle())
     }

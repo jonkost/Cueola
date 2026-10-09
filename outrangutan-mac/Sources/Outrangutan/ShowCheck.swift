@@ -172,7 +172,7 @@ struct ShowCheckView: View {
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
                     .buttonStyle(ActionStyle(prominent: true))
             }
-            .padding(16)
+            .padding(20)
             .buttonWidth(120)
         }
         .frame(width: 560, height: 560)

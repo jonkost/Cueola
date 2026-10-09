@@ -71,7 +71,7 @@ struct ConnectView: View {
             }
             .buttonWidth(110)
         }
-        .padding(24)
+        .padding(20)
         .frame(width: 420)
         .buttonStyle(ActionStyle())
     }

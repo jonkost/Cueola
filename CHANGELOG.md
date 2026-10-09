@@ -295,6 +295,17 @@ Everywhere
 - The cue list shades every other row the way the Mac's lists do, with
   no lines between rows, and the column header lines up with the rows.
 
+### Outrangutan for Mac: one margin everywhere
+- Jon: "Watch the margins." Every edge in the app is now 20 points, the
+  Mac's window margin: the show buttons, the monitors, the cue list, the
+  SFX bar and pads, the Inspector, and every sheet.
+- The five show buttons round their corners a quarter of their height,
+  the proportion of Apple's push button, never square and never a pill.
+- The smallest window no longer cuts off the cue list: the window's
+  least width follows the layout (Cues and SFX side by side need more),
+  a long cue name shortens with dots instead of pushing its chips onto
+  two lines, and the SFX bar drops its meter before it would spill over.
+
 ### Outrangutan for Mac: buttons that belong together are one size
 - The five show buttons (GO, Pause, Stop, Fade, All Stop) are the same
   width. GO and All Stop stand out by color, not by size.

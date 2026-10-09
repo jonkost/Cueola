@@ -6,15 +6,23 @@ struct OutrangutanApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var preview = PreviewPlayer()
     @AppStorage("ui.inspector") private var showInspector = true
+    @AppStorage("ui.tab") private var tab = "cues"
+    @AppStorage("ui.layout") private var layout = "side"
+
+    /// The least the window may be: the show area (the cue list needs
+    /// 580 points to show every column; side by side with SFX, 300 more)
+    /// plus the Inspector when it is open. Narrower, and the Mac would
+    /// cut the edges off instead of shrinking them.
+    private var leastWidth: CGFloat {
+        let show: CGFloat = (tab == "both" && layout == "side") ? 940 : 800
+        return show + (showInspector ? 340 : 0)
+    }
 
     var body: some Scene {
         // One show, one control window.
         Window("Outrangutan", id: "main") {
-            // The window can never be smaller than its content: the show
-            // area plus the Inspector when it is open. Narrower, and the
-            // Mac would cut the edges off instead of shrinking them.
             ControlView(engine: appDelegate.engine, link: appDelegate.link, files: appDelegate.files, scopes: appDelegate.scopes)
-                .frame(minWidth: showInspector ? 1120 : 800, minHeight: 620)
+                .frame(minWidth: leastWidth, minHeight: 620)
         }
         .commands {
             FileCommands(files: appDelegate.files, watch: appDelegate.watch)

@@ -48,7 +48,7 @@ struct ControlView: View {
                 if layout == "stacked" {
                     SplitPane(axis: .vertical, share: $splitStacked, firstMin: 160, secondMin: 160) { cueList } second: { PadBoardView(board: engine.pads) }
                 } else {
-                    SplitPane(axis: .horizontal, share: $splitSide, firstMin: 380, secondMin: 300) { cueList } second: { PadBoardView(board: engine.pads) }
+                    SplitPane(axis: .horizontal, share: $splitSide, firstMin: 580, secondMin: 340) { cueList } second: { PadBoardView(board: engine.pads) }
                 }
             default: cueList
             }
@@ -264,7 +264,7 @@ struct ControlView: View {
             }
             .frame(height: 66) }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 14)
     }
@@ -293,7 +293,7 @@ struct ControlView: View {
             .help("The cue stands by. Its next GO starts where it left off.")
         }
         .buttonWidth(150)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.1))
     }
@@ -372,6 +372,7 @@ struct ControlView: View {
                     .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
+                .padding(.horizontal, 10)
                 .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
                     let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
@@ -403,8 +404,8 @@ struct ControlView: View {
         }
         .font(.caption2.weight(.bold))
         .foregroundStyle(.secondary)
-        .padding(.leading, 28)
-        .padding(.trailing, 29)
+        .padding(.leading, 38)
+        .padding(.trailing, 39)
         .padding(.vertical, 6)
     }
 
@@ -424,12 +425,15 @@ struct ControlView: View {
                 .foregroundStyle(standby ? Color.green : Color.secondary)
                 .frame(width: 28, alignment: .trailing)
             icon(cue, onAir: onAir)
-            Text(cue.name).font(.body).lineLimit(1)
-            if !cue.hotkey.isEmpty { keycap(cue.hotkey) }
+            // The name is the one thing that gives way in a narrow list:
+            // it shortens with dots, the chips and columns never wrap.
+            Text(cue.name).font(.body).lineLimit(1).truncationMode(.tail)
+            if !cue.hotkey.isEmpty { keycap(cue.hotkey).fixedSize() }
             if !cue.fileIsThere {
                 Label("File missing", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
+                    .fixedSize()
             }
             Spacer(minLength: 6)
             // Settings tags, right-aligned against the icon columns.
@@ -440,6 +444,7 @@ struct ControlView: View {
                 if cue.key.mode != .off && cue.kind == .video { chip("KEY", .green) }
                 if cue.obs.action != .none || !cue.obsTriggerScene.isEmpty { chip("OBS", .indigo) }
             }
+            .fixedSize()
             // The pre-wait, as a column: a dash when there is none.
             Text(cue.preWait > 0 ? Timecode.short(cue.preWait) : "\u{2013}")
                 .font(.callout)

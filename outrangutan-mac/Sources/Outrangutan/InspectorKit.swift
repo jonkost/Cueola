@@ -35,7 +35,7 @@ struct InspectorTabs: View {
                 .foregroundStyle(.secondary)
                 .tracking(0.6)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 8)
         .onAppear {
@@ -51,8 +51,8 @@ struct InspectorPage<Content: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) { content }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
         }
     }
 }

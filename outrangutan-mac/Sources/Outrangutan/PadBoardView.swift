@@ -50,7 +50,7 @@ struct PadBoardView: View {
                         }
                     }
                 }
-                .padding(14)
+                .padding(20)
                 }
             }
         }
@@ -96,7 +96,7 @@ struct PadBoardView: View {
                     }
                 }
             }
-            .padding(14)
+            .padding(20)
         }
     }
 
@@ -122,7 +122,7 @@ struct PadBoardView: View {
                 .frame(width: geo.size.width, height: geo.size.height)
         }
         .frame(height: 44)
-        .padding(.horizontal, 14).padding(.vertical, 4)
+        .padding(.horizontal, 20).padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -178,7 +178,9 @@ struct PadBoardView: View {
                 .help("Add a bank")
                 .disabled(board.locked)
             Spacer(minLength: 8)
-            LevelMeterView(meter: board.meter)
+            // The meter is the first thing to go when the board is narrow:
+            // the bar must never spill past its panel.
+            if width >= 460 { LevelMeterView(meter: board.meter) }
             Toggle(isOn: $board.multiTrigger) {
                 if compact { Image(systemName: "square.stack.3d.up") } else { Text("Several at once") }
             }

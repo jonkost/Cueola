@@ -148,7 +148,7 @@ struct MonitorStrip: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.vertical, 10)
     }
 }
