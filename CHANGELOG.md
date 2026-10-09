@@ -57,6 +57,11 @@ The Planda Bear hub header now names the show and its code too.
 - In the black-and-white Planda Bear and Koala themes, Assign positions is
   black on white, and Clear all is a real red.
 
+**The "On this page" strip has a home (Oct 9).** The row of avatars that
+shows who else is in Planda Bear used to float loose between the header and
+the first card, sometimes on top of it. On every Planda Bear page it is now
+one small pill on its own row, with "Elsewhere" set off by a thin divider.
+
 **Sign-in is quicker and says what it is doing (Oct 9).** Jon reported slow
 sign-ins on cueola.live. Three causes, three fixes.
 
