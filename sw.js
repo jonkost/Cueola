@@ -281,7 +281,7 @@ const versionSignature = SHELL_ASSETS
 // 52->53: an empty time or date box shows dashes in Safari instead of the
 // 12:30 PM (or today's date) Safari paints by itself. New cueola-blank-time.js
 // on index.html, dashboard.html and script-operator.html; every window reloads.
-const WORKER_SCHEMA = '53';
+const WORKER_SCHEMA = '54';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 
