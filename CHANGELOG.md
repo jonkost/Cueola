@@ -57,6 +57,15 @@ The Planda Bear hub header now names the show and its code too.
 - In the black-and-white Planda Bear and Koala themes, Assign positions is
   black on white, and Clear all is a real red.
 
+**Look in quietly (Oct 9).** An admin can tap any student's avatar, on the
+rundown bar or in a Planda Bear "On this page" pill, and the student's card
+says where they are right now. If they are in Planda Bear, a new **Look in
+quietly** button opens the same page without the admin showing up there: no
+avatar in anyone's pill, no mark on a field, and nothing in the "Who worked
+on what" log, even if the admin changes something while looking. A yellow
+bar at the top says the quiet look is on, with a Done button. Leaving
+Planda Bear ends it too.
+
 **The "On this page" strip has a home (Oct 9).** The row of avatars that
 shows who else is in Planda Bear used to float loose between the header and
 the first card, sometimes on top of it. On every Planda Bear page it is now

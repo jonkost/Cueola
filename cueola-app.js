@@ -4398,7 +4398,7 @@ function persistWholeClassPreProPatch(patch, section) {
     updates[`prePro.${key}`] = value;
     updates[`prePro._fieldUpdatedAt.${key}`] = now;
   });
-  if (section && window._arrayUnion) updates.preProActivity = preProActivityValue({ section, by:preProActor(), clientId:CLIENT_ID, at:now });
+  if (section && !pbQuietLook && window._arrayUnion) updates.preProActivity = preProActivityValue({ section, by:preProActor(), clientId:CLIENT_ID, at:now });
   window._updateDoc(window._doc(window._db, 'sessions', session.code), updates)
     .catch(err => reportCloudWriteFailure('Planda Bear cloud save', err));
 }
@@ -5125,7 +5125,7 @@ async function saveRoleAssignmentsFromAdmin(rows=pbAssignRows) {
         'prePro.roleAssignments':compatibility,
         'prePro._fieldUpdatedAt.roleAssignments':now,
         'prePro.updatedAt':now,
-        preProActivity:preProActivityValue({ section:'Role Assignments', by:actor.label, clientId:CLIENT_ID, at:now }, sessionSnap.data().preProActivity),
+        ...(pbQuietLook ? {} : { preProActivity:preProActivityValue({ section:'Role Assignments', by:actor.label, clientId:CLIENT_ID, at:now }, sessionSnap.data().preProActivity) }),
       });
     });
 
@@ -7134,9 +7134,10 @@ async function openPersonInfo(name) {
 
   let where = '';
   if (online) {
-    if (newest.pbPage) where = `In Planda Bear · ${PB_PAGE_LABELS[newest.pbPage] || newest.pbPage}`;
+    if (newest.pbPage) where = `In Planda Bear · ${PB_PAGE_LABELS[newest.pbPage] || newest.pbPage}${newest.groupId ? ' · group ' + newest.groupId : ''}`;
     else if (Number.isFinite(newest.idx)) where = `On rundown row ${(newest.idx|0) + 1}`;
   }
+  const quietTarget = online && newest?.pbPage && !session.isDemo && !session.isExpert ? String(newest.pbPage) : '';
   const following = newest?.following && !sameParticipantName(newest.following, name) ? newest.following : '';
 
   // Same truth as the hub card: canonical register first (getRoleAssignments),
@@ -7171,6 +7172,7 @@ async function openPersonInfo(name) {
   body.innerHTML = head + `<div class="pi-sec">Session work</div><div class="pi-card">Loading…</div>`;
   actions.innerHTML = `
     <button class="btn-secondary btn-danger-text" onclick="hideModal('personInfoModal');removePersonFromSession(${esc(JSON.stringify(name))})">Remove from Session</button>
+    ${quietTarget ? `<button class="btn-secondary" onclick="hideModal('personInfoModal');pbQuietLookAt(${esc(JSON.stringify(quietTarget))})" data-tip="Open the page they are on without showing up there or in the log">Look in quietly</button>` : ''}
     <button class="btn-primary" onclick="hideModal('personInfoModal')">Close</button>`;
   showModal('personInfoModal');
 
@@ -21296,7 +21298,7 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps
       reportCloudWriteFailure('Planda Bear cloud save', err);
     });
   }
-  if (section && !_pbSuppressActivity && window._arrayUnion) {
+  if (section && !_pbSuppressActivity && !pbQuietLook && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
     // A group trims against its own log, never the whole-class one.
     window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
@@ -21358,7 +21360,7 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
       reportCloudWriteFailure('Planda Bear cloud save', err);
     });
   }
-  if (section && !_pbSuppressActivity && window._arrayUnion) {
+  if (section && !_pbSuppressActivity && !pbQuietLook && window._arrayUnion) {
     const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
     const grouped = groupActive();
     // A group trims against its own log, and a group's first save may come
@@ -21585,8 +21587,48 @@ function pbOpenPageId() {
   return null;
 }
 
+// ── Quiet look (owner 2026-10-09): an admin opens the page a student is on
+// without showing up there. While it is on, this device writes no page or
+// field marker to presence (it clears its own), and nothing it does lands in
+// the "Who worked on what" log. It ends with the Done button on the yellow
+// bar, or when Planda Bear closes.
+let pbQuietLook = false;
+function pbQuietLookAt(pageId) {
+  if (!adminSession) { toast('Log in as admin to look in quietly.'); return; }
+  pbQuietLook = true;
+  pbRenderQuietBar();
+  // Clear any marker this device left earlier, then open the page with the
+  // marker writes muted.
+  pbWritePresence({ pbPage: null, pbField: null });
+  const open = pbOpenPageId();
+  if (open && open !== 'hub') { pbSaveOnLeave(() => saveOpenPaperworkSection(false)); hidePaperworkEditors(); }
+  if (!document.getElementById('paperworkHubModal')?.classList.contains('on')) openPaperworkHub();
+  if (pageId && pageId !== 'hub') {
+    if (pageId === 'assignments') openPbAssignEditor();
+    else openPaperworkItem(pageId);
+  }
+  toast('Quiet look: nobody sees you here, and nothing is logged.');
+}
+function pbEndQuietLook(silent) {
+  if (!pbQuietLook) return;
+  pbQuietLook = false;
+  pbRenderQuietBar();
+  const page = pbOpenPageId();
+  if (page) pbSetPresencePage(page);   // show up again where you are
+  if (!silent) toast('Quiet look ended. Others can see you again.');
+}
+function pbRenderQuietBar() {
+  const bar = document.getElementById('pbQuietBar');
+  if (bar) bar.hidden = !pbQuietLook;
+}
+
 function pbWritePresence(patch) {
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
+  if (pbQuietLook && patch) {
+    patch = { ...patch };
+    if ('pbPage' in patch) patch.pbPage = null;
+    if ('pbField' in patch) patch.pbField = null;
+  }
   const updates = { [`presence.${presenceId}.lastSeen`]: Date.now() };
   for (const k in patch) {
     updates[`presence.${presenceId}.${k}`] = (patch[k] == null) ? window._deleteField() : patch[k];
@@ -21645,7 +21687,11 @@ function pbRenderPagePresence() {
       const av = pbNormalizeAvatar(p.avatar);
       const art = av && av.type !== 'initials';
       const bg = art ? ` style="background:${pbAvatarBg({ by: p.name, clientId: p.profileId || p.name, avatar: av })}"` : '';
-      return `<span class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}${art ? ' has-art' : ''}" data-fullname="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' · ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' · on this page'}"${bg}>${art ? pbAvatarInner({ by: p.name, avatar: av }) : esc(pbInitials(p.name))}</span>`;
+      // An admin taps an avatar for that person's card (where they are, their
+      // assignment, a quiet look). Everyone else just sees the avatar.
+      const tag = adminSession ? 'button' : 'span';
+      const click = adminSession ? ` type="button" onclick="openPersonInfo(${esc(JSON.stringify(p.name))})"` : '';
+      return `<${tag} class="pb-collab-avatar ${p.role === 'instructor' ? 'inst' : 'stud'}${art ? ' has-art' : ''}" data-fullname="${esc(p.name)}${p.pbPage && p.pbPage !== pageId ? ' · ' + esc(PB_PAGE_LABELS[p.pbPage] || p.pbPage) : ' · on this page'}${adminSession ? ' · tap for info' : ''}"${bg}${click}>${art ? pbAvatarInner({ by: p.name, avatar: av }) : esc(pbInitials(p.name))}</${tag}>`;
     };
     let html = '';
     if (onThisPage.length) html += `<span class="pb-collab-label">On this page</span>${onThisPage.map(avatar).join('')}`;
@@ -22322,6 +22368,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
 // Leave the Planda Bear workspace and clear my page presence so collaborators
 // stop seeing me "here".
 function closePlandaBear() {
+  if (pbQuietLook) { pbQuietLook = false; pbRenderQuietBar(); }
   pbAssignFlush();   // a position change still on its timer saves now
   pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   hidePaperworkEditors();
@@ -22416,7 +22463,7 @@ async function writePlandaBearComments(comments, activitySection='Instructor Com
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) return;
   const ref = window._doc(window._db, 'sessions', session.code);
   window._updateDoc(ref, { preProComments: plandaBearComments }).catch(err => reportCloudWriteFailure('Planda Bear comment save', err));
-  if (activitySection && window._arrayUnion) {
+  if (activitySection && !pbQuietLook && window._arrayUnion) {
     const entry = { section:activitySection, by:preProActor(), clientId:CLIENT_ID, at:Date.now() };
     window._updateDoc(ref, { preProActivity: preProActivityValue(entry) }).catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
@@ -22933,7 +22980,7 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
 }
 
 function pbNotesActivity(section) {
-  if (!section || !window._arrayUnion || !pbNotesCloudSession()) return;
+  if (!section || pbQuietLook || !window._arrayUnion || !pbNotesCloudSession()) return;
   const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { preProActivity: preProActivityValue(entry) })
     .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
