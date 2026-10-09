@@ -156,7 +156,7 @@ struct PadBoardView: View {
                         .lineLimit(1)
                         .padding(.horizontal, 8).padding(.vertical, 5)
                         .frame(width: bankWidth)
-                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .contextMenu {
                             Button("Rename\u{2026}") { newName = bank.name; renaming = bank }
                                 .disabled(board.locked)

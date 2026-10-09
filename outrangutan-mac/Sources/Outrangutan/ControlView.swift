@@ -371,7 +371,7 @@ struct ControlView: View {
                     }
                     .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
                 }
-                .listStyle(.plain)
+                .listStyle(.inset(alternatesRowBackgrounds: true))
                 .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
                     let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
@@ -403,8 +403,8 @@ struct ControlView: View {
         }
         .font(.caption2.weight(.bold))
         .foregroundStyle(.secondary)
-        .padding(.leading, 18)
-        .padding(.trailing, 19)
+        .padding(.leading, 28)
+        .padding(.trailing, 29)
         .padding(.vertical, 6)
     }
 
@@ -467,8 +467,7 @@ struct ControlView: View {
                 .frame(width: 56, alignment: .trailing)
         }
         .padding(.vertical, 4)
-        .listRowSeparator(.visible)
-        .listRowSeparatorTint(Color.primary.opacity(0.08))
+        .listRowSeparator(.hidden)
         .simultaneousGesture(TapGesture().onEnded { touchedPads = false })
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)

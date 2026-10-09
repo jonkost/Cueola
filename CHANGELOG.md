@@ -278,6 +278,14 @@ Everywhere
   SFX buttons, the status capsules and the Multiview's Roll button draw
   in Apple's Liquid Glass on macOS 26. Older Macs keep the plain look.
 
+### Outrangutan for Mac: drawn to Apple's macOS 27 kit
+- Jon pointed at Apple's own macOS 27 design kit. The app's buttons now
+  match its push buttons: 22 points tall, lightly rounded corners, no
+  outline, the default one filled blue, a destructive one red. A sheet's
+  Cancel sits right beside its default button, the Mac's order.
+- The cue list shades every other row the way the Mac's lists do, with
+  no lines between rows, and the column header lines up with the rows.
+
 ### Outrangutan for Mac: buttons that belong together are one size
 - The five show buttons (GO, Pause, Stop, Fade, All Stop) are the same
   width. GO and All Stop stand out by color, not by size.

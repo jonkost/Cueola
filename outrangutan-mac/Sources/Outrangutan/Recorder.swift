@@ -154,11 +154,13 @@ struct RecordSheet: View {
             Text(status).font(.callout).foregroundStyle(recorder.state == .denied ? Color.orange : Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Cancel", role: .cancel) { recorder.reset(); dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
                 if case .done(let url) = recorder.state {
                     Button("Record Again") { try? FileManager.default.removeItem(at: url); recorder.reset() }
+                }
+                Spacer()
+                Button("Cancel", role: .cancel) { recorder.reset(); dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                if case .done(let url) = recorder.state {
                     Button("Put It on the Pad") {
                         board.assign(url: url, slot: slot)
                         dismiss()

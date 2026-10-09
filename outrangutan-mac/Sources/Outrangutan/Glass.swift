@@ -48,10 +48,11 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
-/// Every action button in the app: a rounded rectangle (radius 8, the
-/// big five use 12), never the Mac's capsule, so all of them share one
-/// shape. Prominent ones fill with their color; the rest are clear glass
-/// with a hairline. The text takes the tint when there is one.
+/// Every action button in the app, drawn to Apple's macOS 27 kit: 22
+/// points tall, corners lightly rounded (radius 6, never the Mac's
+/// capsule), no outline. The default one fills with its color, a
+/// destructive one goes red, the rest are plain glass. The text takes
+/// the tint when there is one.
 struct ActionStyle: ButtonStyle {
     var prominent = false
     var tint: Color? = nil
@@ -59,16 +60,16 @@ struct ActionStyle: ButtonStyle {
     @Environment(\.buttonWidth) private var width
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let destructive = configuration.role == .destructive
         configuration.label
-            .font(.body.weight(.medium))
+            .font(.body)
             .lineLimit(1)
             .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .frame(minWidth: width)
-            .foregroundStyle(prominent ? Color.white : (tint ?? Color.primary))
+            .frame(minWidth: width, minHeight: 22)
+            .foregroundStyle(prominent ? Color.white : (destructive ? Color.red : (tint ?? Color.primary)))
             .contentShape(shape)
-            .modifier(TransportSurface(color: tint ?? .accentColor, prominent: prominent, shape: shape))
+            .modifier(TransportSurface(color: tint ?? .accentColor, prominent: prominent, destructive: destructive, shape: shape))
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
@@ -119,6 +120,7 @@ struct TransportStyle: ButtonStyle {
 private struct TransportSurface: ViewModifier {
     let color: Color
     let prominent: Bool
+    var destructive = false
     let shape: RoundedRectangle
 
     func body(content: Content) -> some View {
@@ -126,14 +128,13 @@ private struct TransportSurface: ViewModifier {
             // GO and All Stop are solid color, always, active window or not:
             // a show button must never look gray.
             content.background(color, in: shape)
+        } else if destructive {
+            // Apple's kit: a red-tinted fill under red text.
+            content.background(Color.red.opacity(0.18), in: shape)
         } else if #available(macOS 26, *) {
-            content
-                .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
+            content.glassEffect(.regular.interactive(), in: shape)
         } else {
-            content
-                .background(Color.secondary.opacity(0.14), in: shape)
-                .overlay(shape.strokeBorder(Color.primary.opacity(0.12)))
+            content.background(Color.secondary.opacity(0.16), in: shape)
         }
     }
 }
