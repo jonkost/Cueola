@@ -159,7 +159,7 @@ struct ShowCheckView: View {
                     Spacer()
                     if let fix = item.fix {
                         Button(fix.label) { fix.action(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refresh() } }
-                            .controlSize(.small)
+                            .buttonWidth(150)
                     }
                 }
                 .padding(.vertical, 3)
@@ -170,10 +170,13 @@ struct ShowCheckView: View {
                 Button("Check Again") { refresh() }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                    .buttonStyle(ActionStyle(prominent: true))
             }
             .padding(16)
+            .buttonWidth(120)
         }
         .frame(width: 560, height: 560)
+        .buttonStyle(ActionStyle())
         .onAppear(perform: refresh)
     }
 

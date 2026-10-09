@@ -243,25 +243,23 @@ struct ControlView: View {
             // target however narrow the window is. Pros who drive by keys
             // or deck can hide it (View menu).
             if showTransport { GeometryReader { geo in
-                // GO takes a third of the row, All Stop a sixth, the three in
-                // between share the rest, with a little air around All Stop.
+                // Five buttons, one size: the house rule is that buttons that
+                // belong together are the same size. GO and All Stop stand
+                // out by color, not by width.
                 let gap: CGFloat = 10
-                let go = geo.size.width * 0.32
-                let all = geo.size.width * 0.16
-                let mid = (geo.size.width - go - all - gap * 5) / 3
+                let each = (geo.size.width - gap * 4) / 5
                 GlassGroup(spacing: gap) { HStack(spacing: gap) {
                     transport("GO", symbol: "play.fill", key: keys.name(.go), color: .green, prominent: true) { engine.go() }
-                        .frame(width: go)
+                        .frame(width: each)
                     transport(engine.status == .paused ? "Resume" : "Pause", symbol: engine.status == .paused ? "playpause.fill" : "pause.fill",
                               key: keys.name(.pause), color: .yellow, action: engine.togglePause)
-                        .frame(width: mid)
+                        .frame(width: each)
                     transport("Stop", symbol: "stop.fill", key: keys.name(.stop), color: .orange, action: engine.stop)
-                        .frame(width: mid)
+                        .frame(width: each)
                     transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
-                        .frame(width: mid)
-                    Spacer(minLength: gap)
+                        .frame(width: each)
                     transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
-                        .frame(width: all)
+                        .frame(width: each)
                 } }
             }
             .frame(height: 66) }
@@ -294,6 +292,7 @@ struct ControlView: View {
             .glassButton(prominent: true, tint: .orange)
             .help("The cue stands by. Its next GO starts where it left off.")
         }
+        .buttonWidth(150)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.1))

@@ -46,6 +46,7 @@ struct GoToCueView: View {
                     .buttonStyle(ActionStyle(prominent: true))
                     .disabled(matches.isEmpty)
             }
+            .buttonWidth(120)
         }
         .padding(20)
         .frame(width: 460)

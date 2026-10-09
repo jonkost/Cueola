@@ -66,11 +66,14 @@ struct ConnectView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(ActionStyle(prominent: true))
                 .disabled(working || username.isEmpty || code.isEmpty || (secret.isEmpty && !link.cloud.isSignedIn))
             }
+            .buttonWidth(110)
         }
         .padding(24)
         .frame(width: 420)
+        .buttonStyle(ActionStyle())
     }
 }
 

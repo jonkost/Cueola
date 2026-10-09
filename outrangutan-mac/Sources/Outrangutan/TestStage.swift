@@ -39,9 +39,14 @@ extension TestSnapshot {
                 let both = UserDefaults(suiteName: "live.cueola.outrangutan.test.stage.both")!
                 both.set("both", forKey: "ui.tab"); both.set("side", forKey: "ui.layout"); both.set(false, forKey: "ui.inspector")
                 stage(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), title: "Stage Both", store: both)
+                let sfx = UserDefaults(suiteName: "live.cueola.outrangutan.test.stage.sfx")!
+                sfx.set("pads", forKey: "ui.tab"); sfx.set(true, forKey: "ui.inspector")
+                stage(ControlView(engine: engine, link: link, files: files, scopes: scopes), size: CGSize(width: 1300, height: 860), title: "Stage SFX", store: sfx)
                 stage(GoToCueView(engine: engine), size: CGSize(width: 460, height: 400), title: "Stage Go to Cue")
                 stage(ShowCheckView(engine: engine, link: link), size: CGSize(width: 560, height: 560), title: "Stage Show Check")
-                note("staged 4 windows")
+                stage(RecordSheet(board: engine.pads, slot: 4), size: CGSize(width: 440, height: 300), title: "Stage Record")
+                stage(ConnectView(link: link), size: CGSize(width: 420, height: 420), title: "Stage Connect")
+                note("staged 7 windows")
             }),
             (10.0, { engine.allStop(); note("done") }),
         ]

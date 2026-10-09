@@ -179,6 +179,7 @@ struct WatchFolderSection: View {
                     Spacer()
                     Button("Stop Watching", role: .destructive) { watch.stop() }
                 }
+                .buttonWidth(130)
                 if let last = watch.lastAdded {
                     Text("Last added: \(last)").font(.callout).foregroundStyle(.secondary).lineLimit(2)
                 }

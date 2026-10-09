@@ -278,6 +278,16 @@ Everywhere
   SFX buttons, the status capsules and the Multiview's Roll button draw
   in Apple's Liquid Glass on macOS 26. Older Macs keep the plain look.
 
+### Outrangutan for Mac: buttons that belong together are one size
+- The five show buttons (GO, Pause, Stop, Fade, All Stop) are the same
+  width. GO and All Stop stand out by color, not by size.
+- Every row of related buttons is one width: the SFX bar's add, Record
+  and Stop SFX buttons, the bank buttons, the Show Check's fix buttons
+  and its Check Again and Done, the Go to Cue, Connect and Record sheets'
+  buttons, and the Outputs and Watch a folder rows in Settings.
+- The default button in a sheet (Done, Connect, Stand By) is filled, the
+  way the Mac marks the one Return presses.
+
 ### Outrangutan for Mac: cue hotkeys and Go to Cue
 - A cue can have a hotkey (Inspector, Cue tab). Press it and the cue
   fires from anywhere, wherever the standby is. The key shows on the

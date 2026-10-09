@@ -56,18 +56,43 @@ struct ActionStyle: ButtonStyle {
     var prominent = false
     var tint: Color? = nil
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.buttonWidth) private var width
 
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         configuration.label
             .font(.body.weight(.medium))
+            .lineLimit(1)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
+            .frame(minWidth: width)
             .foregroundStyle(prominent ? Color.white : (tint ?? Color.primary))
             .contentShape(shape)
             .modifier(TransportSurface(color: tint ?? .accentColor, prominent: prominent, shape: shape))
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+    }
+}
+
+/// Buttons that belong together are the same size (the house rule, and
+/// the Mac's): a row of buttons is told one width and every button in it
+/// takes it, however short its word.
+private struct ButtonWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var buttonWidth: CGFloat? {
+        get { self[ButtonWidthKey.self] }
+        set { self[ButtonWidthKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Every action button inside is at least this wide, so a row of
+    /// related buttons comes out one size.
+    func buttonWidth(_ width: CGFloat) -> some View {
+        environment(\.buttonWidth, width)
     }
 }
 

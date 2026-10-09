@@ -118,7 +118,7 @@ struct PadBoardView: View {
         // ViewThatFits inside the split views sent the window into an
         // endless layout loop: the launch crash of Oct 8.)
         GeometryReader { geo in
-            bar(compact: geo.size.width < 700)
+            bar(compact: geo.size.width < 700, width: geo.size.width)
                 .frame(width: geo.size.width, height: geo.size.height)
         }
         .frame(height: 44)
@@ -130,8 +130,17 @@ struct PadBoardView: View {
         if compact { Label(title, systemImage: symbol).labelStyle(.iconOnly) } else { Label(title, systemImage: symbol) }
     }
 
-    private func bar(compact: Bool) -> some View {
-        HStack(spacing: 8) {
+    /// Every bank button is the same width: the widest that fits the room
+    /// left after the controls on the right, up to 110 points.
+    private func bankWidth(room: CGFloat, compact: Bool) -> CGFloat {
+        let controls: CGFloat = compact ? 230 : 390
+        let count = CGFloat(max(1, board.banks.count))
+        return min(110, max(64, (room - controls - 6 * (count - 1)) / count))
+    }
+
+    private func bar(compact: Bool, width: CGFloat) -> some View {
+        let bankWidth = bankWidth(room: width, compact: compact)
+        return HStack(spacing: 8) {
             // A plain row, never a scroll view: a scroll view inside the
             // fit-or-shrink measuring above sent the window into an endless
             // layout loop (the launch crash of Oct 8).
@@ -144,9 +153,10 @@ struct PadBoardView: View {
                             board.selectedPadID = nil
                         }
                         .buttonStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 5)
-                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .frame(width: bankWidth)
+                        .glassSurface(tint: on ? Color.accentColor.opacity(0.6) : nil, interactive: true, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .contextMenu {
                             Button("Rename\u{2026}") { newName = bank.name; renaming = bank }
                                 .disabled(board.locked)
@@ -163,6 +173,7 @@ struct PadBoardView: View {
             Button { board.addBank() } label: { Label("Add Bank", systemImage: "plus") }
                 .labelStyle(.iconOnly)
                 .buttonStyle(ActionStyle())
+                .buttonWidth(40)
                 .fixedSize()
                 .help("Add a bank")
                 .disabled(board.locked)
@@ -179,6 +190,7 @@ struct PadBoardView: View {
                 barLabel("Record", "mic", compact: compact)
             }
             .glassButton()
+            .buttonWidth(compact ? 40 : 104)
             .fixedSize()
             .help("Record a sound effect onto the next empty pad")
             .disabled(board.locked)
@@ -186,6 +198,7 @@ struct PadBoardView: View {
                 barLabel("Stop SFX", "stop.fill", compact: compact)
             }
             .glassButton()
+            .buttonWidth(compact ? 40 : 104)
             .fixedSize()
             .help("Stops every pad that is playing")
         }

@@ -124,6 +124,7 @@ struct OutputSettings: View {
                         devices = AudioDevices.outputs()
                     }
                 }
+                .buttonWidth(150)
             } footer: {
                 Text("A cue picks its output in the Inspector's Picture tab. With one screen, an output opens as a window.")
                     .foregroundStyle(.secondary)

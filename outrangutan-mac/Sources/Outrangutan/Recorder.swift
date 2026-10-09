@@ -167,9 +167,11 @@ struct RecordSheet: View {
                     .keyboardShortcut(.defaultAction)
                 }
             }
+            .buttonWidth(140)
         }
         .padding(24)
         .frame(width: 440)
+        .buttonStyle(ActionStyle())
     }
 
     private var status: String {

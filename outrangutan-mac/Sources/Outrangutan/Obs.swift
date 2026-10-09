@@ -253,6 +253,7 @@ struct ObsSettings: View {
                         Button("Disconnect") { obs.disconnect() }
                     }
                 }
+                .buttonWidth(110)
             } header: {
                 Text("OBS Studio")
             } footer: {
