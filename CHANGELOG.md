@@ -57,6 +57,25 @@ The Planda Bear hub header now names the show and its code too.
 - In the black-and-white Planda Bear and Koala themes, Assign positions is
   black on white, and Clear all is a real red.
 
+**Sign-in is quicker and says what it is doing (Oct 9).** Jon reported slow
+sign-ins on cueola.live. Three causes, three fixes.
+
+- The two cloud functions behind sign-in (the username check and the PIN
+  check) each keep one copy warm, so a sign-in no longer waits for both to
+  wake up from cold. This needs a functions deploy from Jon's Mac and costs
+  a few dollars a month. Until then, the page also nudges both functions
+  awake the moment the sign-in card appears, so they are warm by the time
+  the username is typed.
+- The username Sign in button now reads "Checking…" while it waits, ignores
+  repeat taps, and gives up with a message after 25 seconds. Every call to
+  a sign-in function has a 15 second limit instead of the old 70. Right
+  after the PIN, the card says "Loading your sessions…" instead of "No
+  sessions on your profile yet" while the list is on its way, and says so
+  if it cannot load.
+- On Safari the front page reads straight from the cloud instead of
+  through Safari's local database, which stalls for seconds. The dashboard
+  has done this since Aug 30. Chrome keeps the offline shell.
+
 **Save buttons are red in every theme.** In the black-and-white Koala and
 Planda Bear themes a Save button was painted grey like everything else, so
 it looked turned off. Every Save button (Save Changes in Settings and the

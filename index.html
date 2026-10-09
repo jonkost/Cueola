@@ -7366,7 +7366,7 @@ input.pt-range::-moz-range-thumb,
 <script src="cueola-export-model.js?v=bf11137a90"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=c45ffd2a20"></script>
+<script src="cueola-identity.js?v=9a7b0cde14"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-live-state.js?v=6314983dd7"></script>
@@ -7437,11 +7437,21 @@ initializeCueolaAppCheck(app);
 // Persistent offline cache, multi-tab so the rundown, Outrangutan output, and
 // dashboard tabs share one IndexedDB store. Offline writes queue and survive a
 // reload; snapshots serve from cache while the venue Wi-Fi is down.
+// EXCEPT Safari (owner 2026-08-30 on the dashboard, 2026-10-09 here): Safari's
+// IndexedDB stalls for seconds on the multi-tab lease, and every read after
+// sign-in waited on it. Safari reads straight from the server instead; Chrome
+// and the show surfaces keep the offline shell.
+const safariNoPersist = /safari/i.test(navigator.userAgent) && !/chrome|crios|android|edg|fxios/i.test(navigator.userAgent);
 let db;
 try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
+  if (safariNoPersist) {
+    db = getFirestore(app);
+    console.info('Safari detected: Firestore runs on the in-memory cache for a quick sign-in.');
+  } else {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  }
 } catch (err) {
   console.warn('Persistent Firestore cache unavailable — falling back to memory cache.', err);
   db = getFirestore(app);

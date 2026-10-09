@@ -96,7 +96,10 @@ async function requireAdmin(db, req) {
   return { uid, admin: snap.data() || {} };
 }
 
-exports.signInWithPin = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (req) => {
+// The two sign-in callables keep one instance warm (owner 2026-10-09): on a
+// quiet class site every sign-in was paying two cold starts in a row, several
+// seconds each. One warm copy of each costs a few dollars a month.
+exports.signInWithPin = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, minInstances: 1 }, async (req) => {
   const username = normalizeUsername(req.data && req.data.username);
   const pin = String((req.data && req.data.pin) == null ? '' : req.data.pin);
   if (!username) throw new HttpsError('invalid-argument', 'Enter your username.');
@@ -178,7 +181,7 @@ exports.signInWithPin = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (re
 // plus the display name and avatar for the "continuing as" line. Deliberately
 // does NOT return pinSalt/pinHash, so the hash stops being publicly readable
 // through this path even before Phase 3 moves it out of the profile doc.
-exports.getSignInStage = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (req) => {
+exports.getSignInStage = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, minInstances: 1 }, async (req) => {
   const username = normalizeUsername(req.data && req.data.username);
   if (!username) return { found: false };
   const db = getFirestore();

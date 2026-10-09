@@ -369,11 +369,28 @@
 
   // Call a Cloud Function, or return null when the functions SDK is not wired
   // up (so callers can fall back while Phase 1 rolls out).
+  // 15 s is long enough for a cold start and short enough that a hung call
+  // fails with a message instead of spinning for the SDK's 70 s default.
+  var CALLABLE_TIMEOUT_MS = 15000;
   async function callFn(name, payload) {
     var w = fb();
     if (!w || !w._functions || !w._httpsCallable) return null;
-    var res = await w._httpsCallable(w._functions, name)(payload || {});
+    var res = await w._httpsCallable(w._functions, name, { timeout: CALLABLE_TIMEOUT_MS })(payload || {});
     return (res && res.data) || {};
+  }
+
+  // Wake the username-check function while the person is still typing, so
+  // the real call lands on a warm instance. The call is empty: the server
+  // answers { found:false } at once without touching the database. (The PIN
+  // function rejects an empty call with an error, so it is not pinged here;
+  // its minInstances setting keeps it warm once the functions are deployed.)
+  var signInFunctionsWarmed = false;
+  function warmSignInFunctions() {
+    if (signInFunctionsWarmed) return;
+    var w = fb();
+    if (!w || !w._functions || !w._httpsCallable) return;
+    signInFunctionsWarmed = true;
+    try { w._httpsCallable(w._functions, 'getSignInStage', { timeout: CALLABLE_TIMEOUT_MS })({}).catch(function () {}); } catch (e) {}
   }
 
   async function resolveGate(rawUsername) {
@@ -425,16 +442,17 @@
     // the real doc in the background; the double guard keeps a fresher
     // profile loaded meanwhile (e.g. by the portal) from being clobbered.
     if (!Array.isArray(p.sessions)) {
-      fetchProfile(username).then(function (full) {
+      var settleStub = function (full) {
         var id = identity();
-        if (full && id && id.username === username
-            && cachedProfile && cachedProfile.username === username
-            && !Array.isArray(cachedProfile.sessions)) {
-          cachedProfile = full;
-          announceIdentityChange();
-          renderFrontDoor();
-        }
-      }).catch(function () {});
+        if (!(id && id.username === username && cachedProfile && cachedProfile.username === username
+            && !Array.isArray(cachedProfile.sessions))) return;
+        // No full profile came back: stop the "Loading your sessions" line
+        // and say so, instead of showing an empty list as if it were true.
+        cachedProfile = full || Object.assign({}, cachedProfile, { sessions: [], sessionsUnknown: true });
+        announceIdentityChange();
+        renderFrontDoor();
+      };
+      fetchProfile(username).then(settleStub).catch(function () { settleStub(null); });
     }
     announceIdentityChange();
     adoptProfileLocally(p);
@@ -459,7 +477,7 @@
     var w = fb();
     if (w && w._functions && w._httpsCallable) {
       try {
-        var callable = w._httpsCallable(w._functions, 'signInWithPin');
+        var callable = w._httpsCallable(w._functions, 'signInWithPin', { timeout: CALLABLE_TIMEOUT_MS });
         var res = await callable({ username: username, pin: String(pin) });
         var token = res && res.data && res.data.token;
         if (token && w._authFns && w._authFns.signInWithCustomToken) {
@@ -2051,6 +2069,7 @@
     } catch (e) { return { code: code, showName: '' }; }
   }
   async function renderFrontDoor() {
+    if (!identity()) warmSignInFunctions();   // signed-out or at a gate: wake the sign-in functions now
     var el = frontDoorEl(); if (!el) return;
     var gen = ++frontDoorGen;
     var id = identity();
@@ -2096,9 +2115,16 @@
     var hiddenCodes = all.filter(function (c) { return hidden.indexOf(String(c).toUpperCase()) >= 0; }).reverse();
     var codes = visibleCodes.slice(-FRONT_DOOR_MAX).reverse();
     var showHiddenList = canHide && frontDoorShowHidden && hiddenCodes.length > 0;
-    var emptyMsg = canHide && hiddenCodes.length
-      ? '<div class="ec-desc">Every session on your profile is hidden. Use the hidden link below to bring one back.</div>'
-      : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>';
+    // Right after a PIN sign-in the profile is a stub with no session list
+    // yet; the full profile is on its way. Say that, not "no sessions".
+    var sessionsPending = !Array.isArray(p.sessions);
+    var emptyMsg = sessionsPending
+      ? '<div class="fd-loading">Loading your sessions&hellip;</div>'
+      : p.sessionsUnknown
+        ? '<div class="ec-desc">Could not load your sessions. Check the connection and reload.</div>'
+        : canHide && hiddenCodes.length
+          ? '<div class="ec-desc">Every session on your profile is hidden. Use the hidden link below to bring one back.</div>'
+          : '<div class="ec-desc">No sessions on your profile yet. Your instructor can assign them, or add one with its code.</div>';
     el.innerHTML = '<div class="ec-icon"><svg class="brand-ico"><use href="#ic-cueola"/></svg></div>'
       + frontDoorHead(p)
       + '<div class="fd-sessions" id="fd-sessions">'
@@ -2134,16 +2160,21 @@
     });
     wrap.innerHTML = rows.length ? rows.join('') : emptyMsg;
   }
-  async function frontDoorSignIn() {
-    var el = document.getElementById('fd-username');
-    var err = document.getElementById('fd-err');
-    if (err) err.classList.remove('on');
-    var r = await resolveGate(el && el.value);
-    if (!r.ok) { if (err) { err.innerHTML = r.msg; err.classList.add('on'); } return; }
-    // Persist WHO now; the device stays locked (no unlock marker) until the
-    // second factor passes, so a reload resumes the same gate.
-    rememberIdentity(r.username, r.profile);
-    renderFrontDoor();
+  // The username step runs under the same guard as the PIN step: the button
+  // reads "Checking..." while the cloud function answers, repeat taps are
+  // swallowed, and a hung call gives up after 25 s with a message.
+  function frontDoorSignIn() {
+    return gateGuarded('.fd-go', async function () {
+      var el = document.getElementById('fd-username');
+      var err = document.getElementById('fd-err');
+      if (err) err.classList.remove('on');
+      var r = await resolveGate(el && el.value);
+      if (!r.ok) { if (err) { err.innerHTML = r.msg; err.classList.add('on'); } return; }
+      // Persist WHO now; the device stays locked (no unlock marker) until the
+      // second factor passes, so a reload resumes the same gate.
+      rememberIdentity(r.username, r.profile);
+      renderFrontDoor();
+    });
   }
 
   // The gate card shares the front-door shell: brand mark, a "continuing as"
