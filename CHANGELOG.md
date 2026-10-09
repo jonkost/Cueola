@@ -296,9 +296,11 @@ Everywhere
   no lines between rows, and the column header lines up with the rows.
 
 ### Outrangutan for Mac: the connection status is words, not a pill
-- "Not connected to a show" in the toolbar was a long glass pill that
-  looked like a button. It is now a dot and words, standing apart from
-  the button groups on either side. Clicking it still opens Connect.
+- "Not connected to a show" was a long glass pill in the toolbar that
+  looked like a button and ran across the line where the Inspector's
+  toolbar begins. It is now the window's subtitle, under the show's
+  name at the left: the Mac's own place for a status. Connecting is in
+  the File menu and the Show Check, as before.
 - The scopes (waveform and vectorscope) are off until you turn them on
   in the View menu. The Program preview stays.
 

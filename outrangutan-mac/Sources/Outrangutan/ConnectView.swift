@@ -77,39 +77,3 @@ struct ConnectView: View {
     }
 }
 
-/// The small light in the footer: grey when not connected, green when the
-/// show is heard, orange when something is wrong.
-struct LinkBadge: View {
-    @ObservedObject var link: ShowLink
-    var action: () -> Void
-
-    var body: some View {
-        // A status line, not a button in a pill: a dot and a few words,
-        // apart from the toolbar's button groups. Clicking it still opens
-        // the Connect sheet.
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Circle().fill(color).frame(width: 9, height: 9)
-                Text(link.message).lineLimit(1)
-                    .foregroundStyle(link.phase == .linked ? Color.primary : Color.secondary)
-                if link.directBrowsers > 0 {
-                    Image(systemName: "bolt.fill").foregroundStyle(.yellow)
-                }
-            }
-            .padding(.horizontal, 8)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(link.message + (link.directBrowsers > 0
-              ? ". Cueola on this Mac is also connected directly: its keys arrive here without the internet." : ""))
-    }
-
-    private var color: Color {
-        switch link.phase {
-        case .off: return .gray
-        case .connecting: return .yellow
-        case .linked: return .green
-        case .trouble: return .orange
-        }
-    }
-}
