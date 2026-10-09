@@ -161,8 +161,21 @@ struct ControlView: View {
             .help(engine.locked ? "Editing is locked. The show still runs. Click to unlock (Shift-Command-L)."
                   : "Lock editing for the show, so a stray click changes nothing (Shift-Command-L)")
         }
-        ToolbarItem(placement: .primaryAction) {
-            LinkBadge(link: link) { showConnect = true }
+        // The connection status stands apart from the button groups on
+        // either side: a gap before it and after it keeps the Mac from
+        // folding it into their glass.
+        if #available(macOS 26, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            // No glass behind it: words, not a button.
+            ToolbarItem(placement: .primaryAction) {
+                LinkBadge(link: link) { showConnect = true }
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                LinkBadge(link: link) { showConnect = true }
+            }
         }
         // The Inspector button sits last, at the window's right edge, over
         // the Inspector it opens.

@@ -97,7 +97,7 @@ final class Scopes: ObservableObject {
 struct MonitorStrip: View {
     @ObservedObject var engine: Engine
     @ObservedObject var scopes: Scopes
-    @AppStorage("ui.scopes") private var showScopes = true
+    @AppStorage("ui.scopes") private var showScopes = false
     /// Every box is this tall: the program and waveform at 16:9, the
     /// vectorscope square, side by side from the left with nothing floating.
     static let boxHeight: CGFloat = 148

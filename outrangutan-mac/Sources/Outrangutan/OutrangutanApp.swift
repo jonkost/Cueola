@@ -156,7 +156,7 @@ struct DuplicateButton: View {
 /// View menu: the program preview strip and its scopes.
 struct MonitorToggles: View {
     @AppStorage("ui.monitor") private var showMonitor = true
-    @AppStorage("ui.scopes") private var showScopes = true
+    @AppStorage("ui.scopes") private var showScopes = false
     @AppStorage("ui.tab") private var tab = "cues"
     @AppStorage("ui.layout") private var layout = "side"
     @AppStorage("ui.transport") private var showTransport = true

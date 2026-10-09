@@ -84,15 +84,22 @@ struct LinkBadge: View {
     var action: () -> Void
 
     var body: some View {
+        // A status line, not a button in a pill: a dot and a few words,
+        // apart from the toolbar's button groups. Clicking it still opens
+        // the Connect sheet.
         Button(action: action) {
             HStack(spacing: 8) {
                 Circle().fill(color).frame(width: 9, height: 9)
                 Text(link.message).lineLimit(1)
+                    .foregroundStyle(link.phase == .linked ? Color.primary : Color.secondary)
                 if link.directBrowsers > 0 {
                     Image(systemName: "bolt.fill").foregroundStyle(.yellow)
                 }
             }
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .help(link.message + (link.directBrowsers > 0
               ? ". Cueola on this Mac is also connected directly: its keys arrive here without the internet." : ""))
     }

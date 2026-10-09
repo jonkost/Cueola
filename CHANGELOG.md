@@ -295,6 +295,13 @@ Everywhere
 - The cue list shades every other row the way the Mac's lists do, with
   no lines between rows, and the column header lines up with the rows.
 
+### Outrangutan for Mac: the connection status is words, not a pill
+- "Not connected to a show" in the toolbar was a long glass pill that
+  looked like a button. It is now a dot and words, standing apart from
+  the button groups on either side. Clicking it still opens Connect.
+- The scopes (waveform and vectorscope) are off until you turn them on
+  in the View menu. The Program preview stays.
+
 ### Outrangutan for Mac: one margin everywhere
 - Jon: "Watch the margins." Every edge in the app is now 20 points, the
   Mac's window margin: the show buttons, the monitors, the cue list, the
