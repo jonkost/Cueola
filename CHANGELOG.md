@@ -43,6 +43,20 @@ Outrangutan), the profile portal cards, the resume banner, the Show setup
 launcher, the dashboard's show cards, recently deleted rows and rundown peek.
 The Planda Bear hub header now names the show and its code too.
 
+**Position Assignments page, cleaned up after the first real run (Oct 9).**
+
+- Picking a position or a piece of paperwork no longer reopens the menu on
+  its own. The next pick is a fresh tap.
+- The Student dropdown lists only this show's students. A switch under it,
+  "Show every saved profile", brings in the rest when you need someone who
+  has not joined yet. Old remade accounts stay out of the way.
+- A student who shows up twice from a remade account is one row in the
+  roster and one chip on the paperwork board.
+- Room between the status line, the student picker, the student card and
+  the boards, so nothing sits on top of anything on an iPad.
+- In the black-and-white Planda Bear and Koala themes, Assign positions is
+  black on white, and Clear all is a real red.
+
 **Save buttons are red in every theme.** In the black-and-white Koala and
 Planda Bear themes a Save button was painted grey like everything else, so
 it looked turned off. Every Save button (Save Changes in Settings and the

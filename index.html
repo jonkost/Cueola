@@ -1394,7 +1394,10 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .prepro-grid-times{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 /* Position Assignments page: student picker, position and paperwork chips
    with an add dropdown under each, and the roster of everyone. */
+#pbAssignBody{display:flex;flex-direction:column;gap:16px}
 .pba-pick{display:flex;flex-direction:column;gap:6px;max-width:460px}
+.pba-showall{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3);cursor:pointer;margin-top:2px}
+.pba-showall input{--sw-w:28px;--sw-h:16px}
 .pba-pick .field-in{font-weight:600}
 .pba-hint{margin:4px 0 2px}
 .pba-legacy{padding:8px 11px;border-radius:9px;background:color-mix(in srgb,var(--yellow) 12%,transparent);color:var(--text2)}
@@ -1451,6 +1454,12 @@ button.pb-roster-row:hover{background:var(--s3)}
 .pb-roster-none{color:var(--text3);font-style:italic}
 .pb-assign-edit{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid transparent;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;cursor:pointer;transition:filter .15s var(--ease),transform .12s var(--ease)}
 .pb-assign-edit:hover{filter:brightness(1.08);transform:translateY(-1px)}
+/* Black-and-white Planda Bear themes: the accent is white, so a white
+   button needs dark words, and the danger button keeps a real red. */
+:is([data-plandabear-theme="panda"],[data-plandabear-theme="koala"]) .pb-assign-edit{background:#fff;color:#111}
+:is([data-plandabear-theme="panda"],[data-plandabear-theme="koala"]) .pba-chip{background:rgba(255,255,255,.14);color:#fff}
+.pba-student-head .admin-act-btn.danger{background:rgba(229,68,58,.14);color:#f0675c}
+.pba-student-head .admin-act-btn.danger:hover{background:rgba(229,68,58,.26);color:#ff7a70}
 @media (max-width:640px){
   .pb-roster-row{grid-template-columns:1fr;gap:4px}
   .pb-roster-headrow{display:none}
@@ -7369,7 +7378,7 @@ input.pt-range::-moz-range-thumb,
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=58a223e38b"></script>
+<script src="cueola-app.js?v=8088394c9b"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

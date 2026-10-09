@@ -4442,6 +4442,7 @@ function mergeWholeClassPreProFromParent(server) {
 let pbAssignRows = [];                 // the register as the editor holds it right now
 let pbAssignLegacyRows = [];           // older rows with no saved profile, shown as a note
 let pbAssignSelectedProfileId = '';
+let pbAssignShowAllProfiles = false;   // the dropdown lists this show's students unless asked
 let _pbAssignSaveTimer = null;
 let _pbAssignSaveAgain = false;        // an edit landed while a save was in flight
 const PB_ASSIGN_SAVE_DELAY_MS = 700;
@@ -4509,9 +4510,6 @@ function closePbAssignEditor() {
 function pbAssignSelectStudent(profileId) {
   pbAssignSelectedProfileId = String(profileId || '');
   pbAssignRender();
-  if (pbAssignSelectedProfileId) {
-    document.getElementById('pbAssignAddPosition')?.focus();
-  }
 }
 
 // The student list: profiles tied to this show first, then every other saved
@@ -4528,8 +4526,14 @@ function pbAssignStudentOptionsHTML() {
   };
   let html = `<option value="">Choose a student…</option>`;
   if (inShow.length) html += `<optgroup label="In this show">${inShow.map(option).join('')}</optgroup>`;
-  if (others.length) html += `<optgroup label="Other saved profiles">${others.map(option).join('')}</optgroup>`;
+  // Every other saved profile stays out of the list unless asked for: the
+  // school's whole roster, old remade accounts included, is noise here.
+  if (pbAssignShowAllProfiles && others.length) html += `<optgroup label="Other saved profiles">${others.map(option).join('')}</optgroup>`;
   return html;
+}
+function pbAssignToggleAllProfiles(on) {
+  pbAssignShowAllProfiles = Boolean(on);
+  pbAssignRender();
 }
 
 function pbAssignProfile(profileId) {
@@ -4547,8 +4551,11 @@ function pbAssignRosterGroups(rows) {
   };
   (rows || []).forEach(row => {
     if (!row || !row.person) return;
-    const key = row.profileId || String(row.person).trim().toLowerCase();
+    // Keyed by name: a remade account can leave an older record under the
+    // same student, and the roster should still show that student once.
+    const key = String(row.person).trim().toLowerCase();
     const g = add(key, { profileId:row.profileId || '', person:row.person, username:row.username || '' });
+    if (!g.profileId && row.profileId) g.profileId = row.profileId;
     if (row.position && !g.positions.includes(row.position)) g.positions.push(row.position);
     (row.paperwork || []).forEach(p => { if (p && !g.paperwork.includes(p)) g.paperwork.push(p); });
   });
@@ -4556,8 +4563,8 @@ function pbAssignRosterGroups(rows) {
   assignmentProfiles.forEach(p => {
     const id = pbAssignProfileIdOf(p);
     const name = String(p.fullName || p.username || '').trim();
-    if (!name || groups.has(id) || named.has(name.toLowerCase())) return;
-    add(id, { profileId:id, person:name, username:p.username || '' });
+    if (!name || named.has(name.toLowerCase())) return;
+    add(name.toLowerCase(), { profileId:id, person:name, username:p.username || '' });
     named.add(name.toLowerCase());
   });
   (Array.isArray(sessionParticipantNames) ? sessionParticipantNames : []).forEach(name => {
@@ -4605,6 +4612,7 @@ function pbAssignRender(opts={}) {
     <div class="pba-pick">
       <label class="field-lbl" for="pbAssignStudent">Student</label>
       <select class="field-in" id="pbAssignStudent" onchange="pbAssignSelectStudent(this.value)">${pbAssignStudentOptionsHTML()}</select>
+      <label class="pba-showall"><input type="checkbox" ${pbAssignShowAllProfiles ? 'checked' : ''} onchange="pbAssignToggleAllProfiles(this.checked)"><span>Show every saved profile, not just this show's students</span></label>
     </div>
     ${legacyNote}
     ${pbAssignSelectedProfileId ? pbAssignStudentEditorHTML(pbAssignSelectedProfileId) : `<div class="u-note pba-hint">Choose a student above, or tap a name in the list below.</div>`}
@@ -4703,8 +4711,7 @@ function pbAssignAddPosition(select) {
     }
   }
   pbAssignQueueSave();
-  pbAssignRender();
-  document.getElementById('pbAssignAddPosition')?.focus();
+  pbAssignRender();   // the dropdown closes; the next pick is a fresh tap
 }
 
 function pbAssignRemovePosition(pid, positionId) {
@@ -4718,7 +4725,7 @@ function pbAssignRemovePosition(pid, positionId) {
 function pbAssignAddPaperwork(select) {
   const id = String(select?.value || '').trim();
   const label = select?.selectedOptions?.[0]?.dataset?.paperworkLabel || id;
-  if (pbAssignGivePaperwork(id, label)) document.getElementById('pbAssignAddPaperwork')?.focus();
+  pbAssignGivePaperwork(id, label);
 }
 
 // Put one piece of paperwork on the selected student's list (the dropdown
@@ -4751,8 +4758,8 @@ function pbAssignCoverageHTML(rows, opts={}) {
       const id = byLabel ? byLabel.id : rawId;
       if (!items.has(id)) items.set(id, { id, label, people:[] });
       const entry = items.get(id);
-      const key = row.profileId || String(row.person || '').trim().toLowerCase();
-      if (row.person && !entry.people.some(p => p.key === key)) entry.people.push({ key, profileId:row.profileId || '', person:row.person });
+      const key = String(row.person || '').trim().toLowerCase();
+      if (key && !entry.people.some(p => p.key === key)) entry.people.push({ key, profileId:row.profileId || '', person:row.person });
     });
   });
   const list = [...items.values()];
