@@ -6570,6 +6570,7 @@ function setupFirestore() {
         rundownCloudBeats = d.beats.map(migrateBeat);
         beats = projectPendingRundownBatches(rundownCloudBeats);
         if (!rundownPendingBatches.length) rundownShadowBeats = cloneRundownValue(beats);
+        refreshPrompterFromRundown();
       }
       const projectedShow = rundownPendingBatches.reduce((current, batch) => ({
         name: batch.showPatch.showName ?? current.name,
@@ -6930,6 +6931,7 @@ function syncToFirestore() {
   }
   rundownShadowBeats = cloneRundownValue(beats);
   rundownShadowShow = currentShow;
+  refreshPrompterFromRundown();
   if (!window._firebaseReady||!session.code||session.isDemo||session.isExpert) {
     if (!session.isDemo) setCloudSyncState('local', session.isExpert ? 'Saved in this browser only.' : 'Saved on this computer only. Not connected to the show.');
     return;
@@ -13817,6 +13819,19 @@ function buildPromptFromRundown() {
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
 }
 
+// A rundown edit (this window's or another device's) refreshes a script the
+// rundown built, and the Live screen's show caller pushes it to the talent
+// right away. Before this, the push waited for the next TAKE, so a Script
+// cell edited mid-show did not reach the prompter (Jon, 2026-10-16). A script
+// typed by hand in the Live editor is never overwritten here.
+function refreshPrompterFromRundown() {
+  if (prompterSource !== 'assembled') return false;
+  if (assemblePrompterScriptFromBeats() === prompterText) return false;
+  buildPromptFromRundown();
+  if (document.getElementById('liveshow')?.classList.contains('on') && isShowCaller()) sendToPrompter(false);
+  return true;
+}
+
 let _prompterPingInterval = null;
 let _prompterStorageHandler = null;
 let _prompterOperatorRuntimeActive = false;
@@ -19918,9 +19933,19 @@ function ptSetCueolaStatus(text, isError=false) {
   status.classList.add('on');
 }
 
+// Every reader of the show record (the talent screen, Flowmingo Op) takes its
+// script from here. A script someone typed or cleared by hand (live-edit,
+// cleared, tech-difficulty) is the script. A script the rundown BUILT
+// ('assembled') is only a copy of the rundown as it stood at the last push,
+// so the rows win over it: a Script cell edited after that push used to stay
+// invisible on the talent screen until the next TAKE (Jon, 2026-10-16).
 function ptAssembleCueolaScript(data) {
-  if (data?.prompter && typeof data.prompter.text === 'string') return data.prompter.text;
-  return assemblePrompterScriptFromBeats((data?.beats || []).map(migrateBeat));
+  const saved = data?.prompter;
+  const savedText = saved && typeof saved.text === 'string' ? saved.text : null;
+  const rows = Array.isArray(data?.beats) ? data.beats : [];
+  if (savedText !== null && saved.source !== 'assembled') return savedText;
+  if (savedText !== null && !rows.length) return savedText;
+  return assemblePrompterScriptFromBeats(rows.map(migrateBeat));
 }
 
 async function ptLoadFromCueolaCode(codeOverride='') {

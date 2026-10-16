@@ -2,6 +2,21 @@
 
 ## Next release (not pushed yet)
 
+### The prompter reads the rundown's script again (Oct 16)
+
+**A Script cell edited after the last push now reaches the prompter.** The
+talent screen and Flowmingo Op used to show whatever script was last pushed
+from Live, even after the rundown's Script cells changed, so a show that had
+gone live once kept reading last time's words. Now a script the rundown built
+is only a copy: the rows win over it, on every device, the moment they change.
+A script typed by hand in the Live editor, or cleared with Clear, still wins
+over the rundown until the next TAKE rebuilds it.
+
+- On the Live screen, a rundown change (yours or another device's) refreshes
+  the script box and pushes it to the talent right away instead of waiting
+  for the next TAKE.
+- The signed-in join smoke test now checks which script the talent reads.
+
 ### Position Assignments page + show titles first (Oct 8)
 
 **Positions get their own page in Planda Bear.** The hub's Position

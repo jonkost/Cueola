@@ -74,6 +74,29 @@ const out = await page.evaluate(async () => {
   return { signedIn, modalOn, join, paper };
 });
 
+// The talent screen's script source (Jon, 2026-10-16: "the prompter doesn't see
+// the rundown script"): a script the rundown BUILT earlier is only a copy, so
+// the rows win over it; a script typed or cleared by hand still wins over the rows.
+const scriptSource = await page.evaluate(() => {
+  const seed = window.CueolaBreakRoomKit.buildSessionDocSeed({ code: 'AVTLAB', name: 'AVT Lab', createdBy: 'jonkost' });
+  const row = seed.beats.find(b => b.cues?.script);
+  row.cues.script.text = 'NEW WORDS TYPED IN THE RUNDOWN';
+  const fromRows = ptAssembleCueolaScript({ ...seed, prompter: { text: '[1] OLD PUSH', source: 'assembled' } });
+  const byHand = ptAssembleCueolaScript({ ...seed, prompter: { text: 'HAND TYPED', source: 'live-edit' } });
+  const cleared = ptAssembleCueolaScript({ ...seed, prompter: { text: '', source: 'cleared' } });
+  const noPush = ptAssembleCueolaScript({ ...seed, prompter: undefined });
+  return {
+    fromRows: fromRows.includes('NEW WORDS TYPED IN THE RUNDOWN') && !fromRows.includes('OLD PUSH'),
+    byHand: byHand === 'HAND TYPED',
+    cleared: cleared === '',
+    noPush: noPush.includes('NEW WORDS TYPED IN THE RUNDOWN'),
+  };
+});
+check('talent script: the rundown wins over a script it built earlier', scriptSource.fromRows);
+check('talent script: a hand-typed script still wins over the rundown', scriptSource.byHand);
+check('talent script: a cleared script stays cleared', scriptSource.cleared);
+check('talent script: no push yet reads the rundown', scriptSource.noPush);
+
 check('profile is signed in on this device', out.signedIn);
 check('Join a Session modal opens', out.modalOn);
 check('join by code succeeds (no error shown)', !out.join.err, out.join.err);
