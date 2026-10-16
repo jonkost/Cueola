@@ -2647,25 +2647,30 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #promptypus[data-pt-theme="white"] :is(.pt-btn,.pt-cueola-input,.pt-bar-controls-btn,.pt-back-btn){background:#f4f2ee;color:#000;border-color:#c9c5bd}
 
 /* Top nav bar */
-#pt-bar{position:absolute;top:0;left:0;right:0;height:var(--pt-bar-h,48px);display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:center;gap:8px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom: 1px solid transparent;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:200;transition:opacity .4s;font-family:var(--mono)}
+#pt-bar{position:absolute;top:0;left:0;right:0;height:var(--pt-bar-h,48px);display:grid;grid-template-columns:auto auto 1fr auto auto auto auto;align-items:center;gap:10px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom: 1px solid transparent;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));z-index:200;transition:opacity .4s;font-family:var(--sans)}
 #pt-bar.hidden{opacity:0;pointer-events:none}
-.pt-back-btn{background:none;border: 1px solid transparent;color:var(--pt-accent,#c8a97e);border-radius:7px;padding:4px 11px;cursor:pointer;font-family:var(--mono);font-size:12px;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:5px}
+.pt-back-btn{background:none;border: 1px solid transparent;color:var(--pt-accent,#c8a97e);border-radius:var(--ui-radius-control);height:32px;padding:0 10px;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:4px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
-.pt-bar-title{font-family:var(--syne);font-size:13px;font-weight:700;color:var(--pt-accent,#c8a97e);text-align:center;opacity:.85;letter-spacing:.04em;position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 24px);transform:translate(-50%,-50%);pointer-events:none}
+.pt-bar-title{font-family:var(--syne);font-size:14px;font-weight:800;color:var(--pt-text,#f0ead6);letter-spacing:0;white-space:nowrap}
+/* The bar readout: the row under the read line and the time left in it and in the script, at the talent's speed. */
+.pt-bar-readout{display:flex;align-items:center;justify-content:center;gap:12px;min-width:0;overflow:hidden}
+.pt-bar-row{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--pt-text,#f0ead6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(42vw,520px)}
+.pt-bar-time{font-family:var(--mono);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--pt-text,#f0ead6);opacity:.62;white-space:nowrap}
+.pt-bar-row[hidden],.pt-bar-time[hidden]{display:none}
 .pt-status{display:flex;align-items:center;gap:7px;min-width:0}
-.pt-bar-sync{font-size:11px;font-weight:700;letter-spacing:.03em;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
+.pt-bar-sync{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:0;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
 .pt-bar-sync::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 0 1px transparent}
 .pt-state-bad{color:var(--red,#f05252);background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);border-color:transparent}
 
 @keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.25}}
-.pt-check{font-size:9px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--pt-text,#d6e8f0);opacity:.4;border: 1px solid transparent;border-radius:999px;padding:3px 9px 3px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pt-check{font-size:10px;font-family:var(--sans);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--pt-text,#d6e8f0);opacity:.4;border: 1px solid transparent;border-radius:999px;padding:3px 9px 3px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .pt-check::before{content:"○";font-size:11px;line-height:1}
 .pt-check.ok{opacity:1;color:var(--green,#22d3a0);border-color:transparent;background:color-mix(in srgb,var(--green,#22d3a0) 12%,transparent)}
 .pt-check.ok::before{content:"✓"}
 @media (max-width:700px){.pt-check{display:none}}
 .pt-setup{position:absolute;inset:0;z-index:150;display:none;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--pt-bg,#08090f) 86%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .pt-setup.on{display:flex}
-.pt-setup-card{width:min(440px,94vw);background:var(--pt-ui-bg,rgba(15,15,25,.96));border: 1px solid transparent;border-radius:20px;padding:30px 28px;text-align:center}
+.pt-setup-card{width:min(440px,94vw);background:var(--pt-ui-bg,rgba(15,15,25,.96));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:30px 28px;text-align:center}
 .pt-setup-logo{font-size:64px;line-height:1;margin-bottom:10px}
 .pt-setup-title{font-family:var(--syne);font-size:21px;font-weight:800;color:var(--pt-text,#eef);margin:0 0 6px}
 .pt-setup-sub{font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.72;margin:0 0 18px;line-height:1.5}
@@ -2674,7 +2679,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-setup-input:focus{border-color:var(--pt-accent,#7eb8c8);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#7eb8c8) 25%,transparent)}
 .pt-setup-btn{flex:none;background:var(--pt-accent,#7eb8c8);color:#04121a;border:0;border-radius:12px;padding:0 22px;font-family:var(--syne);font-weight:800;font-size:15px;cursor:pointer;letter-spacing:.03em}
 .pt-setup-btn:hover{filter:brightness(1.08)}
-.pt-setup-status{min-height:17px;font-size:12px;color:var(--pt-accent,#7eb8c8);margin-bottom:14px;font-family:var(--mono)}
+.pt-setup-status{min-height:17px;font-size:12px;color:var(--pt-accent,#7eb8c8);margin-bottom:14px;font-family:var(--sans);font-weight:600}
 .pt-setup-status.warn{color:var(--yellow,#f5b731)}
 .pt-setup-steps{list-style:none;margin:0 0 16px;padding:0;text-align:left;display:flex;flex-direction:column;gap:9px}
 .pt-setup-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.85;line-height:1.35}
@@ -2683,13 +2688,14 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-step-dot.ok::before{content:"✓"}
 .pt-setup-alt{background:none;border:0;color:var(--pt-text,#d6e8f0);opacity:.55;font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--sans)}
 .pt-setup-alt:hover{opacity:.85}
-.pt-bar-controls-btn{background:none;border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:7px;padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:11px;transition:background .15s;opacity:.7}
+.pt-bar-controls-btn{background:none;border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:var(--ui-radius-control);height:32px;padding:0 11px;cursor:pointer;font-family:var(--sans);font-size:12.5px;font-weight:600;transition:background .15s;opacity:.75;white-space:nowrap}
 .pt-bar-controls-btn:hover{background:rgba(200,169,126,.1);opacity:1}
-.pt-bar-controls-btn.icon-only{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;font-size:15px}
+.pt-bar-controls-btn.icon-only{display:inline-flex;align-items:center;justify-content:center;width:32px;padding:0;font-size:16px}
 .pt-bar-controls-btn.icon-only[aria-pressed="true"]{opacity:1}
 
 /* Stage — scrolling area */
 #pt-stage{position:absolute;top:var(--pt-bar-h,48px);left:0;right:0;bottom:0;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;transition:transform .3s;touch-action:none}
+#promptypus.rowinfo-off .pt-row-tag{display:none!important}
 #pt-stage.mirrored{transform:scaleX(-1)}
 /* HOLDING / NEXT chips sit along the bottom edge of the stage (owner 9/15:
    off the read line, so nothing competes with the copy being read), inside
@@ -2716,6 +2722,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #pt-hold-chip .pt-chip-row,#pt-next-chip .pt-chip-row{font-size:18px}
 #promptypus:has(#pt-panel:not(.hidden)) #pt-hold-chip,#promptypus:has(#pt-panel:not(.hidden)) #pt-next-chip{bottom:calc(var(--pt-panel-lift,140px) + 12px + env(safe-area-inset-bottom))}
 }
+/* Narrow windows: the bar keeps the row, drops the time and the check chips. */
+@media(max-width:1000px){.pt-bar-time{display:none}.pt-check{display:none}}
 .pt-chip-label{font-family:var(--mono);font-size:13px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-ovl-fg-dim);line-height:1.15}
 .pt-chip-row{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:0;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 @keyframes ptHoldPulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -2727,11 +2735,28 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #pt-stage::before{top:0;background:linear-gradient(to bottom,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
 #pt-stage::after{bottom:0;background:linear-gradient(to top,var(--pt-bg,#0a0a0a) 0%,transparent 100%)}
 
-#pt-track{width:min(900px,90vw);padding:100vh 0;will-change:transform}
+/* The track is padded by JS so position 0 is the first line ON the read line and the end is the last line there. */
+#pt-track{width:min(var(--pt-width,900px),92vw);padding:50vh 0;will-change:transform}
 #pt-text{font-family:var(--display);font-size:var(--pt-size,52px);font-weight:600;line-height:1.55;text-align:var(--pt-align,center);color:var(--pt-text,#f0ead6);white-space:pre-wrap;word-break:break-word;transition:text-align .2s;letter-spacing:0}
-#pt-text p{margin:0;min-height:1.55em;white-space:pre-wrap}
-/* Script formatting shared by the talent screen, operator preview, and Flowmingo preview */
-#pt-text p{margin:0 0 .14em;min-height:1.62em}
+#pt-text p{margin:0 0 .14em;min-height:1.62em;white-space:pre-wrap}
+/* Rows: one box per rundown row, its number and name in the same words as the rundown.
+   The ON AIR row carries a red tag; the row under the read line is .reading. */
+.pt-row{position:relative;margin:0 0 .85em}
+.pt-row-head{display:block;text-align:var(--pt-align,center);font-family:var(--sans);font-size:.34em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:var(--pt-text,#f0ead6);opacity:.52;margin:0 0 .5em;padding-top:.9em;border-top:1px solid color-mix(in srgb,currentColor 30%,transparent)}
+.pt-row:first-child .pt-row-head{border-top:0;padding-top:0}
+.pt-row-head>*{display:inline-block;vertical-align:middle;margin-right:.6em}
+.pt-row-head>*:last-child{margin-right:0}
+.pt-row-num{font-family:var(--mono);font-variant-numeric:tabular-nums;min-width:2.1em;text-align:center;padding:.12em .5em;border-radius:999px;background:color-mix(in srgb,currentColor 14%,transparent)}
+.pt-row-name{max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-row-name-empty{opacity:.7}
+.pt-row-tag{display:none;padding:.12em .6em;border-radius:999px;font-weight:800;letter-spacing:.1em}
+.pt-row.live .pt-row-head{opacity:1}
+.pt-row.live .pt-row-num{background:var(--pt-accent,#7eb8c8);color:var(--pt-bg,#08090f)}
+.pt-row.live .pt-row-tag,.pt-row.next .pt-row-tag{display:inline-block}
+.pt-row.live .pt-row-tag{background:var(--red,#f05252);color:#fff}
+.pt-row.next .pt-row-tag{background:color-mix(in srgb,currentColor 16%,transparent)}
+.pt-row.reading .pt-row-head{opacity:.9}
+.pt-row-blank{min-height:.6em!important}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
 .scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
@@ -2740,7 +2765,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* Reading line */
 /* Read line center = stage center (bar-h + half the stage), the same point
    every JS readY uses; the old bar-h + 50% sat half a bar too low. */
-#pt-read-line{position:absolute;left:0;right:0;top:calc(50% + var(--pt-bar-h,48px) / 2);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
+#pt-read-line{position:absolute;left:0;right:0;top:var(--pt-read,50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent,#c8a97e) 18%,var(--pt-accent,#c8a97e) 82%,transparent 100%);opacity:.75;pointer-events:none;z-index:9}
 #pt-read-line::before,#pt-read-line::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:0;height:0;opacity:1}
 #pt-read-line::before{left:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:13px solid var(--pt-accent,#c8a97e)}
 #pt-read-line::after{right:14px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-right:13px solid var(--pt-accent,#c8a97e)}
@@ -2749,7 +2774,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #pt-progress{position:absolute;top:env(safe-area-inset-top);left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none}
 
 /* Floating control panel */
-#pt-panel{position:absolute;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:18px;padding:6px 18px 14px;display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:10px;backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));transition:opacity .4s;font-family:var(--mono);font-size:11px;width:max-content;max-width:min(96vw,1100px);transform:translateX(-50%) scale(var(--pt-panel-scale,1));transform-origin:bottom center}
+#pt-panel{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom));left:50%;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:4px 16px 14px;display:flex;flex-direction:column;align-items:stretch;gap:10px;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));transition:opacity .4s;font-family:var(--sans);font-size:12px;width:max-content;max-width:min(96vw,1180px);transform:translateX(-50%) scale(var(--pt-panel-scale,1));transform-origin:bottom center}
+.pt-panel-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 18px}
 #pt-panel.hidden{opacity:0;pointer-events:none}
 /* Movable cards: dragging the grip strip writes the vars and floats the card; unset vars keep the stock spot */
 #pt-panel.pt-floating{left:var(--pt-panel-x);top:var(--pt-panel-y);bottom:auto;transform:scale(var(--pt-panel-scale,1));transform-origin:top left}
@@ -2757,31 +2783,39 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-card-grip{position:relative;flex:1 1 100%;display:flex;align-items:center;justify-content:center;min-height:26px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .pt-card-grip:active{cursor:grabbing}
 .pt-grip-bar{width:44px;height:5px;border-radius:999px;background:color-mix(in srgb,var(--pt-text,#f0ead6) 30%,transparent);pointer-events:none}
-.pt-hint .pt-card-grip{margin:-8px -10px 6px}
+.pt-hint .pt-card-grip{margin:-10px -6px 4px}
+.pt-hint-title{font-family:var(--syne);font-size:13px;font-weight:800;color:var(--pt-text,#f0ead6);margin:0 0 6px}
 .pt-panel-zoom{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:4px}
 .pt-zoom-btn{padding:1px 8px;font-size:12px}
 .pt-zoom-val{min-width:38px;text-align:center;font-size:10px;opacity:.65;letter-spacing:.04em}
-.pt-hint{position:absolute;top:68px;right:24px;z-index:120;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:16px;padding:18px 22px;backdrop-filter:blur(var(--liquid-blur));-webkit-backdrop-filter:blur(var(--liquid-blur));font-family:var(--mono);font-size:13px;transition:opacity .4s}
+.pt-hint{position:absolute;top:calc(var(--pt-bar-h,48px) + 10px);right:14px;z-index:120;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:14px 18px 16px;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));font-family:var(--sans);font-size:12.5px;transition:opacity .2s}
 .pt-hint.hidden{opacity:0;pointer-events:none}
-.pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:28px;line-height:2.15}
-.pt-hint-key{color:var(--pt-accent,#c8a97e);font-weight:700;white-space:nowrap;letter-spacing:.04em}
-.pt-hint-desc{color:var(--pt-text,#f0ead6);opacity:.58;white-space:nowrap;text-align:right}
+.pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:22px;line-height:1.95}
+.pt-hint-key{color:var(--pt-accent,#c8a97e);font-family:var(--mono);font-weight:700;white-space:nowrap;letter-spacing:0}
+.pt-hint-desc{color:var(--pt-text,#f0ead6);opacity:.66;white-space:nowrap;text-align:right}
 .pt-ctrl-group{display:flex;align-items:center;gap:8px}
-.pt-ctrl-group:last-child{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.pt-ctrl-label{color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:11px;min-width:44px}
+.pt-ctrl-label{color:var(--pt-text,#f0ead6);opacity:.62;font-family:var(--sans);font-weight:700;text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;white-space:nowrap}
+.pt-ctrl-num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;min-width:2.4em;text-align:right;color:var(--pt-text,#f0ead6)}
+.pt-ctrl-slider .pt-range{width:120px;min-width:120px}
+/* A segmented group: same-size buttons, one picked */
+.pt-seg{display:inline-flex;gap:0;padding:2px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--pt-text,#f0ead6) 7%,transparent)}
+.pt-seg .pt-btn{background:transparent;border-radius:calc(var(--ui-radius-control) - 2px);min-width:60px}
+.pt-seg .pt-btn.active{background:color-mix(in srgb,var(--pt-text,#f0ead6) 16%,transparent);color:var(--pt-text,#f0ead6)}
+#promptypus .pt-step{width:34px;min-width:34px;padding:0;font-size:16px}
 /* Talent panel switch (Row info). Prompter-accented like the rest of the panel. */
-.pt-switch{display:inline-flex;align-items:center;gap:8px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;font-size:11px;cursor:pointer;user-select:none}
+.pt-switch{display:inline-flex;align-items:center;gap:8px;height:34px;color:var(--pt-text,#f0ead6);opacity:.85;font-family:var(--sans);font-weight:700;text-transform:uppercase;letter-spacing:.07em;font-size:10.5px;cursor:pointer;user-select:none}
 .pt-switch input{--sw-on:var(--pt-accent,var(--accent));--sw-w:32px;--sw-h:18px}
-.pt-btn{background:color-mix(in srgb,var(--pt-text,var(--text)) 8%,transparent);border:1px solid transparent;color:color-mix(in srgb,var(--pt-text,var(--text2)) 82%,transparent);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:var(--mono);font-size:12px;transition:background .15s,border-color .15s,color .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-.pt-btn .sf-symbol{font-size:1.25em}
+.pt-btn{background:color-mix(in srgb,var(--pt-text,var(--text)) 9%,transparent);border:1px solid transparent;color:color-mix(in srgb,var(--pt-text,var(--text2)) 86%,transparent);border-radius:var(--ui-radius-control);height:34px;padding:0 13px;cursor:pointer;font-family:var(--sans);font-size:12.5px;font-weight:600;letter-spacing:0;transition:background .15s,border-color .15s,color .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;user-select:none;-webkit-user-select:none;touch-action:manipulation;white-space:nowrap}
+.pt-btn .sf-symbol{font-size:1.2em}
 .pt-btn:disabled{opacity:.42;cursor:default}
 .pt-btn:hover{background:color-mix(in srgb,var(--pt-text,var(--text)) 15%,transparent);border-color:transparent;color:var(--pt-text,var(--text))}
 .pt-btn:disabled:hover{background:color-mix(in srgb,var(--pt-text,var(--text)) 8%,transparent);border-color:transparent}
 .pt-btn.active{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,transparent);border-color:transparent;color:var(--pt-accent,var(--accent))}
 .pt-icon-btn{width:34px;height:34px;padding:0;flex:0 0 auto}
-#pt-play-btn{width:100%;padding:8px;font-size:14px;background:color-mix(in srgb,var(--pt-accent,var(--accent)) 16%,transparent);border-color:transparent;color:var(--pt-accent,var(--accent));border-radius:10px}
-#pt-play-btn.active{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 26%,transparent)}
-input.pt-range{-webkit-appearance:none;appearance:none;flex:1;min-width:120px;height:18px;background:transparent;border-radius:2px;outline:none;cursor:pointer;touch-action:pan-y}
+#pt-play-btn{min-width:104px;font-size:13px;background:var(--pt-accent,var(--accent));border-color:transparent;color:var(--pt-bg,#08090f)}
+#pt-play-btn:hover{filter:brightness(1.08);color:var(--pt-bg,#08090f)}
+#pt-play-btn.active{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 26%,transparent);color:var(--pt-accent,var(--accent))}
+input.pt-range{-webkit-appearance:none;appearance:none;flex:1;min-width:100px;height:18px;background:transparent;border-radius:2px;outline:none;cursor:pointer;touch-action:pan-y}
 input.pt-range:focus-visible{outline:2px solid color-mix(in srgb,var(--pt-accent,#c8a97e) 78%,white);outline-offset:2px}
 input.pt-range::-webkit-slider-runnable-track{height:5px;background:rgba(200,169,126,.28);border-radius:999px}
 input.pt-range::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8.5px;border-radius:50%;background:var(--pt-accent,#c8a97e);border:2px solid var(--pt-bg,#0a0a0a);cursor:grab}
@@ -3526,8 +3560,8 @@ input.pt-range::-moz-range-thumb,
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:250;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #pt-edit-overlay.open{display:flex}
-#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:18px;padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
-#pt-edit-box h2{font-family:var(--mono);font-size:12px;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.12em;margin:0}
+#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
+#pt-edit-box h2{font-family:var(--sans);font-size:11.5px;font-weight:800;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;margin:0}
 #pt-script-input{background:rgba(0,0,0,.5);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:10px;padding:14px;font-size:13px;font-family:var(--mono);resize:vertical;min-height:200px;outline:none;line-height:1.6;width:100%}
 #pt-script-input:focus{border-color:var(--pt-accent,#c8a97e);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#c8a97e) 25%,transparent)}
 #pt-script-input::placeholder{color:rgba(200,169,126,.35)}
@@ -3538,12 +3572,12 @@ input.pt-range::-moz-range-thumb,
 /* An <hr> IS the line: with a transparent rule it renders nothing at all. */
 .pt-modal-sep{border:none;border-top: 1px solid var(--pt-ui-border,rgba(200,169,126,.25));margin:0}
 .pt-cueola-bar{display:grid;grid-template-columns:auto minmax(120px,1fr) auto auto;gap:8px;align-items:center}
-.pt-cueola-label{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--pt-accent,#c8a97e);opacity:.65;white-space:nowrap}
+.pt-cueola-label{font-family:var(--sans);font-weight:800;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--pt-accent,#c8a97e);opacity:.65;white-space:nowrap}
 .pt-cueola-input{background:rgba(0,0,0,.45);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;outline:none;min-width:0}
 .pt-cueola-input:focus{border-color:var(--pt-accent,#c8a97e);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#c8a97e) 25%,transparent)}
 .pt-cueola-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;white-space:nowrap}
 .pt-cueola-status.on{opacity:1}
-.pt-cueola-help{font-family:var(--mono);font-size:10px;line-height:1.55;color:var(--pt-text,#f0ead6);opacity:.58;background:rgba(0,0,0,.18);border: 1px solid transparent;border-radius:9px;padding:9px 11px}
+.pt-cueola-help{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--pt-text,#f0ead6);opacity:.58;background:rgba(0,0,0,.18);border: 1px solid transparent;border-radius:9px;padding:9px 11px}
 .pt-edit-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .pt-edit-actions .pt-btn{padding:7px 18px}
 .pt-save-btn{background:rgba(200,169,126,.15);border-color:transparent;color:var(--pt-accent,#c8a97e)}
@@ -3664,7 +3698,7 @@ input.pt-range::-moz-range-thumb,
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(150%);
 }
 #promptypus #pt-bar{box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
-#promptypus #pt-panel{border-radius:24px}
+#promptypus #pt-panel{border-radius:var(--ui-radius-panel)}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn){
   background:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 48%,transparent);
   border-color:var(--flow-glass-edge);
@@ -3678,6 +3712,12 @@ input.pt-range::-moz-range-thumb,
   border-color:transparent;
   color:var(--pt-accent,#7eb8c8);
 }
+/* The Play button is the one filled control on the talent panel. */
+#promptypus #pt-play-btn{background:var(--pt-accent,#7eb8c8);color:var(--pt-bg,#08090f);border-color:transparent;box-shadow:none}
+#promptypus #pt-play-btn:hover{background:var(--pt-accent,#7eb8c8);filter:brightness(1.08);color:var(--pt-bg,#08090f)}
+#promptypus #pt-play-btn.active{background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 22%,var(--flow-glass-strong));color:var(--pt-accent,#7eb8c8)}
+#promptypus .pt-seg .pt-btn{background:transparent;border-color:transparent;box-shadow:none}
+#promptypus .pt-seg .pt-btn.active{background:color-mix(in srgb,var(--pt-text,#f0ead6) 16%,transparent);color:var(--pt-text,#f0ead6)}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):focus-visible{
   outline:2px solid color-mix(in srgb,var(--pt-accent,#7eb8c8) 78%,white);
   outline-offset:2px;
@@ -5537,44 +5577,53 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <!-- Progress bar -->
   <div id="pt-progress"></div>
 
-  <!-- Navigation bar -->
+  <!-- Top bar -->
   <div id="pt-bar">
     <button class="pt-back-btn" onclick="exitPrompter()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cueola</span></button>
     <div class="pt-bar-title">Flowmingo</div>
+    <div class="pt-bar-readout" aria-live="polite">
+      <span class="pt-bar-row" id="pt-row-readout" hidden></span>
+      <span class="pt-bar-time" id="pt-time-left" hidden></span>
+    </div>
     <div class="pt-status">
       <span class="pt-bar-sync pt-state-bad" id="pt-sync-label">Not connected</span>
       <span class="pt-check" id="pt-check-show" data-tip="Connected to your show">Show</span>
       <span class="pt-check" id="pt-check-script" data-tip="A script is loaded">Script</span>
     </div>
     <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Link a show</button>
-    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptTogglePanel()" data-tip="Show or hide controls" aria-label="Show or hide controls" aria-pressed="true"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
+    <button class="pt-bar-controls-btn icon-only" id="pt-keys-btn" onclick="ptToggleKeys()" data-tip="Keyboard shortcuts (K)" aria-label="Show the keyboard shortcuts" aria-pressed="false"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>
+    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptTogglePanel()" data-tip="Show or hide controls (H)" aria-label="Show or hide controls" aria-pressed="true"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
   </div>
 
-  <!-- Reading line -->
-  <div id="pt-read-line"></div>
-
-  <div class="pt-hint" id="pt-hint">
+  <!-- Keyboard shortcuts (K): a popover under the bar, hidden until asked -->
+  <div class="pt-hint hidden" id="pt-hint" role="dialog" aria-label="Keyboard shortcuts">
     <div class="pt-card-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-hint')"><span class="pt-grip-bar" aria-hidden="true"></span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">OPT + DOWN</span><span class="pt-hint-desc">reverse</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">OPT + UP</span><span class="pt-hint-desc">forward</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">fullscreen</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">script</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">hide controls</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">mirror mode</span></div>
+    <div class="pt-hint-title">Keys</div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">Double tap a line</span><span class="pt-hint-desc">Cue that line</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">L</span><span class="pt-hint-desc">Read line center / high</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">W</span><span class="pt-hint-desc">Text width</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Fullscreen</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide controls</span></div>
+    <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">Link a show, load a script</span></div>
   </div>
 
-  <!-- Stage -->
+  <!-- Stage: the copy rolls under the read line -->
   <div id="pt-stage">
     <div id="pt-track">
       <div id="pt-text"></div>
     </div>
+    <div id="pt-read-line" aria-hidden="true"></div>
     <!-- Persistent cue state, inside #pt-stage so beam-splitter mirroring
          flips it with the copy; visible in element-fullscreen. NEXT names the
-         row coming up (dimmed, left gutter); HOLDING names the row the
-         free-run is waiting at (right gutter) and hides NEXT while it shows. -->
+         row coming up (left); HOLDING names the row the free run is waiting
+         at (right) and hides NEXT while it shows. -->
     <div id="pt-next-chip" hidden><span class="pt-chip-label">Next</span><span class="pt-chip-row"></span></div>
     <div id="pt-hold-chip" hidden><span class="pt-chip-label">Holding</span><span class="pt-chip-row"></span></div>
   </div>
@@ -5594,7 +5643,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     </div>
   </div>
 
-  <!-- Connect & Ready setup card (shown until joined to a show or a script is loaded) -->
+  <!-- Connect card (shown until joined to a show or a script is loaded) -->
   <div id="pt-setup" class="pt-setup">
     <div class="pt-setup-card">
       <div class="pt-setup-logo"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
@@ -5616,7 +5665,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     </div>
   </div>
 
-  <!-- Floating control panel -->
+  <!-- Floating control panel: one glass bubble, every button the same size -->
   <div id="pt-panel">
     <div class="pt-card-grip" id="pt-panel-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-panel')">
       <span class="pt-grip-bar" aria-hidden="true"></span>
@@ -5626,39 +5675,62 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <button class="pt-btn pt-zoom-btn" onclick="ptAdjustPanelScale(0.1)" data-tip="Grow this panel" aria-label="Grow the control panel">+</button>
       </span>
     </div>
-    <div class="pt-ctrl-group">
-      <button class="pt-btn" id="pt-play-btn" onclick="ptTogglePlay()">
-        <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
-        Play
-      </button>
+    <div class="pt-panel-row">
+      <div class="pt-ctrl-group pt-ctrl-transport">
+        <button class="pt-btn pt-primary" id="pt-play-btn" onclick="ptTogglePlay()" aria-label="Play or pause">
+          <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
+          <span>Play</span>
+        </button>
+        <button class="pt-btn" onclick="ptResetScroll()" data-tip="Back to the top of the script (R)"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Top</span></button>
+      </div>
+      <div class="pt-ctrl-group pt-ctrl-slider" role="group" aria-label="Prompter speed">
+        <span class="pt-ctrl-label">Speed</span>
+        <button class="pt-btn pt-step" onclick="ptAdjustSpeed(-5)" data-tip="Scroll slower" aria-label="Decrease speed">−</button>
+        <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)" aria-label="Prompter speed">
+        <button class="pt-btn pt-step" onclick="ptAdjustSpeed(5)" data-tip="Scroll faster" aria-label="Increase speed">+</button>
+        <output class="pt-ctrl-num" id="pt-speed-value" for="pt-speed-slider">60</output>
+      </div>
+      <div class="pt-ctrl-group pt-ctrl-slider" role="group" aria-label="Prompter text size">
+        <span class="pt-ctrl-label">Size</span>
+        <button class="pt-btn pt-step" onclick="ptAdjustSize(-4)" data-tip="Make the text smaller" aria-label="Decrease text size">−</button>
+        <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)" aria-label="Prompter text size">
+        <button class="pt-btn pt-step" onclick="ptAdjustSize(4)" data-tip="Make the text larger" aria-label="Increase text size">+</button>
+        <output class="pt-ctrl-num" id="pt-size-value" for="pt-size-slider">52</output>
+      </div>
     </div>
-    <div class="pt-ctrl-group" role="group" aria-label="Prompter speed">
-      <span class="pt-ctrl-label">Speed</span>
-      <button class="pt-btn" onclick="ptAdjustSpeed(-5)" data-tip="Scroll slower" aria-label="Decrease speed">−</button>
-      <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)" aria-label="Prompter speed">
-      <button class="pt-btn" onclick="ptAdjustSpeed(5)" data-tip="Scroll faster" aria-label="Increase speed">+</button>
-    </div>
-    <div class="pt-ctrl-group" role="group" aria-label="Prompter text size">
-      <span class="pt-ctrl-label">Size</span>
-      <button class="pt-btn" onclick="ptAdjustSize(-4)" data-tip="Make the text smaller" aria-label="Decrease text size">−</button>
-      <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)" aria-label="Prompter text size">
-      <button class="pt-btn" onclick="ptAdjustSize(4)" data-tip="Make the text larger" aria-label="Increase text size">+</button>
-    </div>
-    <div class="pt-ctrl-group">
-      <span class="pt-ctrl-label">Align</span>
-      <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" data-tip="Align the script left" aria-label="Align script left">Left</button>
-      <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" data-tip="Center the script" aria-label="Align script center">Center</button>
-      <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" data-tip="Align the script right" aria-label="Align script right">Right</button>
-    </div>
-    <div class="pt-ctrl-group">
-      <button class="pt-btn" onclick="ptResetScroll()"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Reset</span></button>
-      <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()">Mirror</button>
-      <button class="pt-btn" onclick="ptToggleFullscreen()"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
-      <label class="pt-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom"><input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)"><span>Row info</span></label>
+    <div class="pt-panel-row">
+      <div class="pt-ctrl-group" role="group" aria-label="Align">
+        <span class="pt-ctrl-label">Align</span>
+        <div class="pt-seg">
+          <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" data-tip="Align the script left" aria-label="Align script left" aria-pressed="false">Left</button>
+          <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" data-tip="Center the script" aria-label="Align script center" aria-pressed="true">Center</button>
+          <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" data-tip="Align the script right" aria-label="Align script right" aria-pressed="false">Right</button>
+        </div>
+      </div>
+      <div class="pt-ctrl-group" role="group" aria-label="Read line">
+        <span class="pt-ctrl-label">Read line</span>
+        <div class="pt-seg">
+          <button class="pt-btn active" id="pt-readline-c" onclick="ptSetReadLine('center')" data-tip="Read line in the middle of the screen" aria-pressed="true">Center</button>
+          <button class="pt-btn" id="pt-readline-h" onclick="ptSetReadLine('high')" data-tip="Read line in the upper third, nearer the lens" aria-pressed="false">High</button>
+        </div>
+      </div>
+      <div class="pt-ctrl-group" role="group" aria-label="Text width">
+        <span class="pt-ctrl-label">Width</span>
+        <div class="pt-seg">
+          <button class="pt-btn" id="pt-width-n" onclick="ptSetWidth('narrow')" data-tip="Narrow copy, short lines" aria-pressed="false">Narrow</button>
+          <button class="pt-btn active" id="pt-width-no" onclick="ptSetWidth('normal')" data-tip="Normal width" aria-pressed="true">Normal</button>
+          <button class="pt-btn" id="pt-width-w" onclick="ptSetWidth('wide')" data-tip="Wide copy, long lines" aria-pressed="false">Wide</button>
+        </div>
+      </div>
+      <div class="pt-ctrl-group">
+        <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()" data-tip="Flip the copy for a beam splitter (M)">Mirror</button>
+        <button class="pt-btn" onclick="ptToggleFullscreen()" data-tip="Fullscreen (F)"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
+        <label class="pt-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom"><input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)"><span>Row info</span></label>
+      </div>
     </div>
   </div>
 
-  <!-- Script editor overlay -->
+  <!-- Link a show / load a script sheet -->
   <input type="file" id="pt-file-input" accept=".pdf,.docx,.pages,.txt,.md" style="display:none">
   <div id="pt-edit-overlay">
     <div id="pt-edit-box">
@@ -7389,12 +7461,13 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
+<script src="cueola-prompter-engine.js?v=84164f9c24"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
 <script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=f6b8e6ca73"></script>
+<script src="cueola-app.js?v=e7d73d28c1"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

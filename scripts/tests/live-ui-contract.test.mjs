@@ -931,53 +931,39 @@ test('8/19 round: per-app addresses, workspace launcher, talent display placemen
 });
 
 test('prompter scrub eases toward an accumulating target instead of teleporting', () => {
-  // seek_line rides the jog smoother: each command moves the target, one rAF
-  // loop eases the screen toward it, and the text never jumps under the
-  // talent's eye. A command arriving mid-travel extends the SAME travel.
-  const seek = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('function ptNoteLiveRow'));
-  assert.match(seek, /ptJogBy\(n \* ptLinePitch\(\)\)/);   // measured pitch, not a 1.55em guess (9/4 A3)
-  assert.doesNotMatch(seek.slice(0, seek.indexOf('function ptJogBy')), /ptApplyScrollOffset/);
-  assert.match(seek, /const base = ptJog \? ptJog\.target : ptOffset/);
-  assert.match(seek, /if \(ptJog\) \{ ptJog\.target = target; return; \}/);
-  assert.match(seek, /Math\.exp\(-dt \/ 80\)/);
-  // Hidden/occluded windows get no animation frames: a watchdog lands the
-  // move instantly there, and ONLY there. A visible window's stall (script
-  // push re-layout, heavy shared-thread work) re-arms instead of teleporting.
-  assert.match(seek, /ptJog\.watchdog = setTimeout\(ptJogWatchdog, 350\)/);
-  assert.match(seek, /function ptJogLand\(\)/);
-  const watchdog = seek.slice(seek.indexOf('function ptJogWatchdog'), seek.indexOf('function ptJogBy'));
-  assert.match(watchdog, /visibilityState === 'hidden'\) \{ ptJogLand\(\); return; \}/);
-  assert.match(watchdog, /setTimeout\(ptJogWatchdog, 350\)/);
-  // Settling publishes the landed position, and mid-ease reporting carries the
-  // jog TARGET (acks and heartbeats must not park the operator rail short).
-  assert.match(seek, /function ptReportedOffset\(\) \{ return ptJog \? ptJog\.target : ptOffset; \}/);
-  assert.match(app.slice(app.indexOf('function ptJogLand'), app.indexOf('function ptReportedOffset')), /setTransport\(/);
+  // One engine (cueola-prompter-engine.js) owns the position: the dial moves
+  // the engine's target from where the screen is HEADED, a cue bends any
+  // travel in flight, and nothing writes the transform but ptPaint.
+  assert.match(html, /<script src="cueola-prompter-engine\.js\?v=/);
+  assert.match(app, /const ptMotion = PT_ENGINE\.createMotion\(\{ speed: 60 \}\);/);
+  const seek = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('function ptReportedOffset'));
+  assert.match(seek, /ptJogBy\(n \* ptLinePitch\(\)\)/);   // measured pitch, not a 1.55em guess
+  assert.match(seek, /ptMotion\.moveBy\(Number\(deltaPx\) \|\| 0\)/);
+  assert.doesNotMatch(seek, /ptStopPlay|jumpTo/);
+  // Mid-travel the honest position is the destination (acks and heartbeats
+  // must not park the operator rail short).
+  assert.match(app, /function ptReportedOffset\(\) \{ return ptMotion\.reportedPos\(\); \}/);
   assert.match(app, /position:ptReportedOffset\(\), targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, lastCommandId:controlId/);
   assert.match(app, /offset: Math\.round\(ptReportedOffset\(\)\)/);
-  // Pause freezes a mid-ease scrub where the screen is; a boot prime never
-  // replays a stale RELATIVE scrub; a seeded position outranks in-flight travel.
-  assert.match(app.slice(app.indexOf('function ptStopPlay()'), app.indexOf('function ptTogglePlay')), /ptCancelJog\(\)/);
+  // The transform is written in exactly one place.
+  assert.equal((app.match(/style\.transform = `translate3d\(0,\$\{-pos\}px,0\)`/g) || []).length, 1);
+  assert.doesNotMatch(app, /track\.style\.transform = `translateY/);
+  // Pause freezes a travel where the screen is; a boot prime never replays a
+  // stale RELATIVE scrub; a seeded position goes through the one hard-set path.
+  assert.match(app.slice(app.indexOf('function ptStopPlay()'), app.indexOf('function ptTogglePlay')), /if \(ptMotion\.travelling\(\)\) ptMotion\.jumpTo\(ptMotion\.get\(\)\.pos\);/);
   assert.match(app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce')), /isCollaborativePrompterControl\(action\) && !action\.startsWith\('seek_line_'\) && !action\.startsWith\('seek_set_'\)\) fresh\.push\(newest\)/);
-  const seedBlock = app.slice(app.indexOf('const seedPct = Number(message.positionPct)'), app.indexOf('ptTargetSpeed = state.targetSpeed'));
-  assert.ok((seedBlock.match(/ptCancelJog\(\)/g) || []).length >= 2);
+  const seedBlock = app.slice(app.indexOf('const seedPct = Number(message.positionPct)'), app.indexOf('ptSetSpeed(state.targetSpeed)'));
+  assert.ok((seedBlock.match(/ptApplyScrollOffset\(/g) || []).length >= 2);
   // The scrub write queue holds 24 commands: at the dial's 10 writes/s, an
   // 8-deep queue lost relative moves after any 0.8s listener gap.
   assert.match(app, /_prompterControlQueue = \[\..._prompterControlQueue, stamped\]\.slice\(-24\)/);
-  // Scrub keeps the established repositioning contract: it overrides travel
-  // in flight, drops a superseded advance's auto-resume, and re-baselines the
-  // row holds once, on landing.
-  assert.match(seek, /ptCancelGlide\(\)/);
-  assert.match(seek, /ptPendingHoldResume = false/);
-  assert.match(seek, /ptRecalcRowHolds\(\)/);
-  // Mutual exclusion mirrors ptGlide everywhere position is owned or reset.
-  assert.match(app, /if \(ptGlide \|\| ptJog\) \{/);                        // free-run defers
-  assert.match(app, /ptCancelGlide\(\);   \/\/ an explicit position set overrides any travel in flight\n  ptCancelJog\(\);/);
-  assert.match(app, /ptCancelJog\(\);   \/\/ an explicit destination \(row cue, find\) outranks a scrub/);
-  assert.match(app.slice(app.indexOf('function ptResetScroll()'), app.indexOf('function ptProgressPct')), /ptCancelJog\(\)/);
-  // A mid-scrub script push shifts the jog target with the content, both in
-  // the anchor-preserving path and the proportional fallback.
-  assert.match(app, /if \(ptJog\) ptJog\.target = Math\.max\(0, Math\.min\(max, ptJog\.target \+ delta\)\)/);
-  assert.match(app, /if \(ptJog\) ptJog\.target \*= ratio/);
+  // The dial drops a superseded TAKE's auto-resume and any cue landing callback.
+  assert.match(seek, /_ptLandCallback = null;/);
+  assert.match(seek, /ptPendingHoldResume = false;/);
+  // A layout shift carries position and travel together, in the engine.
+  const shift = app.slice(app.indexOf('function ptShiftScrollBy(delta)'), app.indexOf('let ptLastAnchor'));
+  assert.match(shift, /ptMotion\.shift\(/);
+  assert.match(shift, /ptPaint\(\);\n  ptUpdateProgress\(\);\n  ptRecalcRowHolds\(\);/);
 });
 
 test('seq-gated live record: sessions/{CODE}.live is the room\'s truth, the director publishes, everyone adopts once (3.0)', () => {
@@ -1331,8 +1317,10 @@ test('talent overlay CSS: theme tokens, stage-relative banners, honest read line
   assert.match(rule('.pt-slate-title'), /color:#f0ead6/);
   assert.match(rule('.pt-slate-sub'), /color:#f0ead6/);
   assert.match(css, /#pt-slate\{background:#07090f/);
-  // The drawn read line is the stage center, the same point JS readY uses.
-  assert.match(rule('#pt-read-line'), /top:calc\(50% \+ var\(--pt-bar-h,48px\) \/ 2\)/);
+  // The drawn read line lives inside the stage at the Center / High setting
+  // (--pt-read), and JS readY measures the drawn line itself.
+  assert.match(rule('#pt-read-line'), /top:var\(--pt-read,50%\)/);
+  assert.match(html, /<div id="pt-read-line" aria-hidden="true"><\/div>\n    <!-- Persistent cue state, inside #pt-stage/);
   // Clock and question live inside #pt-stage: offsets are stage relative
   // (no bar-h term) and mirror flips only the slate on its own.
   assert.match(clock, /top:24px/);
@@ -1473,7 +1461,7 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   assert.match(apply, /const wantRunning = viaDoc \? false : Boolean\(state\.running\);/);
   assert.match(apply, /if \(wantRunning && !ptPlaying\) ptStartPlay\(\);/);
   assert.doesNotMatch(apply, /if \(state\.running && !ptPlaying\) ptStartPlay\(\)/);
-  assert.match(apply, /const liveRenderer = ptHasScript\(\) && \(ptPlaying \|\| !!ptGlide \|\| !!ptJog\);/);
+  assert.match(apply, /const liveRenderer = ptHasScript\(\) && \(ptPlaying \|\| ptMotion\.travelling\(\)\);/);
   assert.match(apply, /if \(seed && !liveRenderer\) \{/);
   assert.match(apply, /ptWriteTalentApplied\(applied\)/);
   // The talent door retargets the doc seed once (fresh boot) and applies it
@@ -1543,21 +1531,20 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   // flags AHEAD beyond that. Explicit cues keep the unconditional glide.
   const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
   assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
-  assert.match(seek, /if \(top <= targetY \+ 8 && afterTop > readY\) \{/);
+  assert.match(seek, /if \(delta <= 8 && afterTop > readY\) \{/);
   assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);/);
   assert.match(seek, /if \(resume\) ptStartPlay\(\);/);
-  assert.match(seek, /if \(afterTop <= readY\) \{\n        if \(!ptGlide\) ptPendingHoldResume = false;\n        ptNoteLiveRow\(n\);\n        ptAheadOfLive = ptAutoHeldRow !== n \+ 1;/);
-  assert.match(seek, /ptAheadOfLive = false;   \/\/ a seek that moves puts the talent back in step/);
-  assert.match(seek, /ptGlideToOffset\(ptOffset \+ delta, \(\) => \{/);
+  assert.match(seek, /if \(afterTop <= readY\) \{\n        \/\/[^\n]*\n        \/\/[^\n]*\n        if \(!ptMotion\.travelling\(\)\) ptPendingHoldResume = false;\n        ptNoteLiveRow\(n\);\n        ptAheadOfLive = ptAutoHeldRow !== n \+ 1;/);
+  assert.match(seek, /ptAheadOfLive = false;   \/\/ a cue that moves puts the talent back in step/);
+  assert.match(seek, /ptGlideToOffset\(ptMotion\.get\(\)\.pos \+ delta, \(\) => \{/);
   // A seek whose header is not rendered yet parks for ONE retry after the
   // next script render; the render also rebuilds the hold boundaries.
   assert.match(seek, /if \(n <= total && !\(payload && payload\.retry\)\) ptPendingSeekRow = \{ row:n, payload:\{ \.\.\.\(payload \|\| \{\}\), retry:true \} \};/);
-  const update = app.slice(app.indexOf('function ptUpdateFromCueola('), app.indexOf('// Connection state for the talent setup/ready indicator.'));
-  assert.match(update, /ptUpdateProgress\(\);\n    [^\n]*\n[^\n]*\n[^\n]*\n    ptRecalcRowHolds\(\);/);
-  assert.match(update, /ptSeekToRow\(pending\.row, pending\.payload\)/);
+  const render = app.slice(app.indexOf('function ptRenderScript('), app.indexOf('function ptSetScriptText('));
+  assert.match(render, /ptSeekToRow\(pending\.row, pending\.payload\)/);
   // Hold-release fallback lives in the two doc-adoption callers, never in
   // ptNoteLiveRow; the baseline adopts the live row when a caller is live.
-  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback (owner 9/3)'));
+  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback'));
   assert.doesNotMatch(note, /ptSeekToRow|ptStartPlay|ptGlideToOffset/);
   assert.match(note, /ptRenderNextChip\(\);/);
   const fallback = app.slice(app.indexOf('function ptArmHoldReleaseFallback('), app.indexOf('function ptCallerIsLiveOnDoc('));
@@ -1568,7 +1555,7 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   assert.equal((app.match(/if \(ptCallerIsLiveOnDoc\((?:d|data)\)\) ptNoteLiveRow\(rowDisplayNumber\(liveIdx(?:Doc)?, listDoc\)\);/g) || []).length, 2);
   assert.equal((app.match(/ptArmHoldReleaseFallback\(newRow\);/g) || []).length, 2);
   // ptReadY is the one read-line number: stage center, innerHeight fallback.
-  assert.match(app, /function ptReadY\(\) \{\n  const stage = ptEl\('pt-stage'\);/);
+  assert.match(app, /function ptReadY\(\) \{\n  const line = ptEl\('pt-read-line'\);/);
   assert.match(app, /return r\.top \+ r\.height \/ 2;/);
   assert.equal((app.match(/window\.innerHeight \/ 2 \+ 24/g) || []).length, 1);
   assert.ok((app.match(/const readY = ptReadY\(\);/g) || []).length >= 7);
@@ -1577,10 +1564,9 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   assert.match(html, /<div id="pt-next-chip" hidden><span class="pt-chip-label">Next<\/span><span class="pt-chip-row"><\/span><\/div>/);
   assert.match(html, /<div id="pt-hold-chip" hidden><span class="pt-chip-label">Holding<\/span><span class="pt-chip-row"><\/span><\/div>/);
   assert.match(app, /function ptNextHeader\(\)/);
-  assert.match(app, /function ptRowNameFromHeader\(el\)/);
-  const nextChip = app.slice(app.indexOf('function ptRenderNextChip('), app.indexOf('function ptStartPlay('));
+  const nextChip = app.slice(app.indexOf('function ptRenderNextChip('), app.indexOf('function ptRenderRowStates('));
   assert.match(nextChip, /const next = \(Number\.isFinite\(ptLiveRowNum\) && ptAutoHeldRow == null\) \? ptNextHeader\(\) : null;/);
-  assert.match(nextChip, /ptRowNameFromHeader\(next\.el\) \|\| `Row \$\{next\.row\}`/);
+  assert.match(nextChip, /next\.name \|\| `Row \$\{next\.row\}`/);
   const holdChip = app.slice(app.indexOf('function ptRenderHoldChip('), app.indexOf('function ptRenderNextChip('));
   assert.match(holdChip, /name \|\| `Row \$\{ptAutoHeldRow\}`/);
   assert.match(holdChip, /ptRenderNextChip\(\);/);
@@ -1637,39 +1623,39 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
 });
 
 test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (9/4 slice A3)', () => {
-  // 1. Crawl delta is clamped and the clock restarts on visibility resume.
-  const loop = app.slice(app.indexOf('function ptScrollLoop(ts, fromFallback=false)'), app.indexOf('function ptElementAtReadLine'));
-  // 9/8 C10: a worker-driven fallback step (occluded window) may span a full tick; frames stay clamped at 100.
-  assert.match(loop, /const delta = Math\.min\(ts - ptLastTime, fromFallback \? PT_FREERUN_FALLBACK_MS \* 2 : 100\);/);
-  assert.match(loop, /const step = \(ptLiveSpeed \/ 60\) \* \(delta \/ 16\.67\);/);
-  assert.match(loop, /Math\.exp\(-delta \/ 270\)/);
-  assert.match(loop, /document\.addEventListener\('visibilitychange', \(\) => \{\n  if \(document\.visibilityState === 'visible'\) ptLastTime = null;/);
+  // 1. One frame function steps the engine with a clamped delta; the clock
+  //    restarts on visibility resume; a hidden window steps on a worker tick.
+  const loop = app.slice(app.indexOf('function ptFrame(ts, fromFallback=false)'), app.indexOf('function _ptFreeRunFallbackTick'));
+  assert.match(loop, /const dt = Math\.min\(Math\.max\(0, ts - _ptLastTs\), fromFallback \? PT_FREERUN_FALLBACK_MS \* 2 : 100\);/);
+  assert.match(loop, /const r = ptMotion\.step\(dt, fromFallback \? PT_FREERUN_FALLBACK_MS \* 2 : 100\);/);
+  assert.match(loop, /ptMotion\.hold\('brake', ptBraking\);/);
+  assert.match(app, /document\.addEventListener\('visibilitychange', \(\) => \{\n  if \(document\.visibilityState === 'visible'\) \{ _ptLastTs = null; ptKick\(\); \}/);
   assert.doesNotMatch(loop, /\* 0\.06/);
   // 2. No unrequested transport from a doc seed (pinned by A1's wantRunning).
   assert.match(app, /const wantRunning = viaDoc \? false : Boolean\(state\.running\);/);
   // 3. Only the first source in a renderer with no protocol state resets to top;
   //    live pushes never reset.
   assert.equal((app.match(/if \(firstApply && !_lastAppliedPrompterSnapshotId\) ptSetScriptText\(text\);/g) || []).length, 1);
-  const liveUpdate = app.slice(app.indexOf('function ptApplyCueolaLiveUpdate('), app.indexOf('const _ptLibraryLoads'));
-  assert.doesNotMatch(liveUpdate, /ptResetScroll/);
+  const liveUpdate = app.slice(app.indexOf('function ptApplyCueolaLiveUpdate('), app.indexOf('function ptInitScriptFromCueola('));
+  assert.doesNotMatch(liveUpdate, /ptResetScroll|reset:true/);
+  const update = app.slice(app.indexOf('function ptUpdateFromCueola('), app.indexOf('function ptUpdateFromCueola(') + 400);
+  assert.match(update, /ptRenderScript\(text \|\| '', \{ reset:false \}\);/);
   // 4. Every relayout is anchor-preserving and rebaselines holds: size changes
-  //    hold the element under the read line by reference; script pushes restore
-  //    synchronously and ALWAYS write the transform; viewport changes restore
-  //    from the continuously kept anchor.
+  //    hold the element under the read line by reference; a push redraws only
+  //    the rows whose words changed and puts the anchored line back; viewport
+  //    changes restore from the continuously kept anchor.
   const setSize = app.slice(app.indexOf('function ptSetSize(val)'), app.indexOf('function ptAdjustSize('));
   assert.match(setSize, /const anchor = next !== ptFontSize \? ptSizeAnchorCapture\(\) : null;/);
   assert.match(setSize, /text\.style\.transition = 'none'/);
   assert.match(setSize, /const delta = ptAnchorDelta\(anchor\);\n    if \(delta != null\) ptShiftScrollBy\(delta\);/);
   const shift = app.slice(app.indexOf('function ptShiftScrollBy(delta)'), app.indexOf('let ptLastAnchor'));
-  assert.match(shift, /track\.style\.transform = `translateY\(-\$\{ptOffset\}px\)`;\n  ptUpdateProgress\(\);\n  ptRecalcRowHolds\(\);/);
-  assert.match(shift, /if \(ptGlide\) \{ ptGlide\.from \+= delta;/);
-  const update = app.slice(app.indexOf('function ptUpdateFromCueola('), app.indexOf('// Connection state for the talent setup/ready indicator.'));
-  assert.match(update, /const anchor = track && prevHeight > 0 \? ptCaptureLineAnchor\(el\) : null;/);
-  assert.match(update, /const delta = anchor \? ptAnchorScreenDelta\(el, anchor\) : null;/);
-  assert.match(update, /ptShiftScrollBy\(delta\);/);
-  assert.match(update, /    track\.style\.transform = `translateY\(-\$\{ptOffset\}px\)`;\n    ptUpdateProgress\(\);/);
-  assert.doesNotMatch(update, /if \(!ptPlaying && !ptGlide\) track\.style\.transform/);
-  assert.doesNotMatch(update, /requestAnimationFrame/);
+  assert.match(shift, /ptMotion\.shift\(Number\.isFinite\(delta\) \? delta : 0\);/);
+  const render = app.slice(app.indexOf('function ptRenderScript('), app.indexOf('function ptSetScriptText('));
+  assert.match(render, /const diff = PT_ENGINE\.diffRows\(ptRows, next\);/);
+  assert.match(render, /if \(op\.type === 'keep' && el && !reset\) \{\n        frag\.appendChild\(el\);/);
+  assert.match(render, /const delta = anchor \? ptAnchorScreenDelta\(anchor\) : null;/);
+  assert.match(render, /ptShiftScrollBy\(delta\)/);
+  assert.doesNotMatch(render, /requestAnimationFrame/);
   const viewport = app.slice(app.indexOf('function ptOnViewportChange()'), app.indexOf("window.addEventListener('resize', ptOnViewportChange)"));
   assert.match(viewport, /const delta = ptAnchorDelta\(anchor\);/);
   assert.match(viewport, /ptShiftScrollBy\(delta \+ crawl\);/);
@@ -1677,33 +1663,34 @@ test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (
   assert.match(app, /function ptUpdateProgress\(\) \{[\s\S]{0,400}ptNoteAnchor\(\);/);
   // Pause markers re-derive from geometry (never a cleared set) and the
   // crossing test survives a bounded leap.
-  const recalc = app.slice(app.indexOf('function ptRecalcRowHolds('), app.indexOf('function ptRenderHoldChip('));
+  const recalc = app.slice(app.indexOf('function ptRecalcRowHolds('), app.indexOf('function ptRecalcSeenRowHolds('));
   assert.match(recalc, /ptRecalcPauseMarkers\(\);/);
-  const markers = app.slice(app.indexOf('function ptRecalcPauseMarkers()'), app.indexOf('let _ptProgPaintAt'));
+  const markers = app.slice(app.indexOf('function ptRecalcPauseMarkers()'), app.indexOf('function ptCheckRowHold()'));
   assert.match(markers, /if \(cand\.el\.getBoundingClientRect\(\)\.top <= readY \+ 2\) seen\.add\(cand\.key\);/);
-  assert.match(markers, /if \(rect\.top <= readY\) \{/);
+  assert.match(markers, /if \(cand\.el\.getBoundingClientRect\(\)\.top <= readY\) \{/);
   assert.doesNotMatch(markers, /rect\.bottom >= readY/);
-  // 5. Speed eases while rolling; a paused talent starts at the set speed.
+  // 5. Speed eases while rolling (the engine ramps); a paused talent starts at the set speed.
   const speed = app.slice(app.indexOf('function ptSetSpeed(val)'), app.indexOf('function ptAdjustSpeed('));
+  assert.match(speed, /ptTargetSpeed = ptMotion\.setSpeed\(parseFloat\(val\)\);/);
   assert.match(speed, /if \(!ptPlaying\) ptLiveSpeed = ptTargetSpeed;/);
-  assert.doesNotMatch(speed, /\n  ptLiveSpeed = ptTargetSpeed;/);
-  // 6. Per-frame work stays cached; progress paint stays throttled.
-  const frameWork = app.slice(app.indexOf('function ptCheckAutoPauseMarkers()'), app.indexOf('function ptSyncPlayIcons('));
-  assert.ok((frameWork.match(/ptLoopCache\(\)/g) || []).length >= 2);
+  // 6. Per-frame work stays cached; progress paint stays throttled; the loop
+  //    stops when the screen is still.
+  const frameWork = app.slice(app.indexOf('function ptCheckAutoPauseMarkers()'), app.indexOf('function ptRecalcRowHolds('));
   assert.doesNotMatch(frameWork, /innerText|querySelectorAll/);
-  assert.match(frameWork, /ts - _ptProgPaintAt > 100/);
+  assert.match(loop, /ts - _ptProgPaintAt > 100/);
+  assert.match(loop, /if \(ptLoopWanted\(\)\) \{\n    _ptRaf = requestAnimationFrame\(ptFrame\);/);
   // 8. Heartbeat and ack batching ride worker timers, and the heartbeat says
-  //    when the window is hidden instead of reporting a running crawl.
+  //    when the window is hidden or stalled instead of reporting a running crawl.
   assert.match(app, /ptHeartbeatInterval = P\?\.createSteadyInterval\n      \? P\.createSteadyInterval\(ptTalentHeartbeat, PROMPTER_HEARTBEAT_MS\)/);
   assert.match(app, /_ptAckTimer = steadyTimeout\(\(\) => \{[\s\S]{0,700}\}, 300\);/);
-  // 9/8 C10: stalled = playing with no frame AND no fallback step in the last second (hidden alone no longer stalls).
-  assert.match(app, /visibility:document\.visibilityState,\n(?:[^\n]*\n){3}    stalled:ptFreeRunStalled\(\),/);
-  assert.match(app, /function ptFreeRunStalled\(\) \{\n  if \(!ptPlaying \|\| ptGlide \|\| ptJog\) return false;/);
-  // 10. Scrub never pauses or glides.
-  const scrub = app.slice(app.indexOf('function ptSeekToProgress(pct)'), app.indexOf('// ── Jog smoother'));
-  assert.doesNotMatch(scrub, /ptStopPlay|ptGlideToOffset/);
-  const jogBy = app.slice(app.indexOf('function ptJogBy(deltaPx)'), app.indexOf('// The live-row context feeding the hold-at-next-cue behavior'));
-  assert.doesNotMatch(jogBy, /ptStopPlay|ptGlideToOffset/);
+  assert.match(app, /visibility:document\.visibilityState,/);
+  assert.match(app, /stalled:ptFreeRunStalled\(\),/);
+  assert.match(app, /function ptFreeRunStalled\(\) \{\n  if \(!ptPlaying \|\| ptMotion\.travelling\(\)\) return false;/);
+  // 10. Scrub never pauses or glides: a hard set or a dial move, never a cue.
+  const scrub = app.slice(app.indexOf('function ptSeekToProgress(pct)'), app.indexOf('function ptGlideToOffset('));
+  assert.doesNotMatch(scrub, /ptStopPlay|moveTo\(/);
+  const jogBy = app.slice(app.indexOf('function ptJogBy(deltaPx)'), app.indexOf('function ptReportedOffset'));
+  assert.doesNotMatch(jogBy, /ptStopPlay|moveTo\(/);
   // 11. Recovery is sync scope; the doc seed is honest without a talent mirror.
   assert.match(app, /scope = scope \|\| \(\(reason === 'ready' \|\| reason === 'initial-state' \|\| reason === 'connect'\) \? 'seed' : 'sync'\);/);
   assert.match(app, /docMessage\.positionPct = null;/);
@@ -1719,18 +1706,16 @@ test('talent scroll engine invariants: no jumps, no lurches, no unasked resets (
   assert.match(fail, /if \(myLoad !== _ptLoadGen \|\| !isFlowmingoTalentActive\(\)\) return;/);
   assert.match(link, /\}, fail\);\n    \} catch \(err\) \{\n      fail\(err\);/);
   assert.equal((link.match(/ptShowTechSlate\(\)/g) || []).length, 1);   // the not-found branch only
-  // 14. Line pitch is measured, not assumed.
-  const lines = app.slice(app.indexOf('function ptSeekByLines(lines)'), app.indexOf('// ── Jog smoother'));
+  // 14. Line pitch is measured, not assumed, and forgotten on every re-layout.
+  const lines = app.slice(app.indexOf('function ptLinePitch()'), app.indexOf('function ptRowAtReadLine()'));
   assert.doesNotMatch(lines, /\* 1\.55/);
-  assert.match(lines, /function ptLinePitch\(\)/);
-  assert.match(lines, /if \(cache\) cache\.pitch = pitch;/);
-  assert.match(setSize, /_ptLoopCache\.pitch = 0/);
-  // 15. The same script pushed again is a no-op on both talent feeds.
+  assert.match(lines, /_ptLinePitch = pitch;/);
+  assert.match(setSize, /ptInvalidateLayout\(\)/);
+  // 15. The same script pushed again is a no-op on both talent feeds, and a
+  //     push that changes nothing redraws nothing.
   assert.match(link, /if \(text !== ptLastCueolaScript\) \{/);
   assert.match(app, /if \(prompterText !== ptLastCueolaScript\) \{/);
-  // Skipped from the lane-9 checklist: item 2's queue prime age gate (refuted:
-  // accepts() already drops stale targeted transport), item 9's ptGetMaxScroll
-  // --pt-bar-h read (still the 48 literal; readY itself is one helper, A2).
+  assert.match(render, /if \(reset \|\| !host\.children\.length \|\| diff\.changed\) \{/);
 });
 
 test('talent door: your shows, signed-out link path, stale script honesty, launcher link (9/4 slice A3)', () => {
@@ -1778,7 +1763,7 @@ test('talent door: your shows, signed-out link path, stale script honesty, launc
   // Stale saved script: restored copy is a placeholder (card stays up), the
   // unlinked-with-script pill warns, Keep this script dismisses.
   const restore = app.slice(app.indexOf('function ptLoadSavedOrDefault()'), app.indexOf('// Talent heartbeat: a state-bearing ping'));
-  assert.match(restore, /ptSetScriptHTML\(saved\);\n    ptScriptRestored = true;\n    ptScriptIsPlaceholder = true;\n    ptUpdateReady\(\);\n    return;/);
+  assert.match(restore, /if \(savedText\) ptSetScriptText\(savedText\);\n    else ptSetScriptHTML\(savedHtml\);\n    ptScriptRestored = true;\n    ptScriptIsPlaceholder = true;\n    ptUpdateReady\(\);\n    return;/);
   assert.match(app, /else if \(hasScript\)                    \{ state = 'warn';       text = 'Local script, not linked'; \}/);
   assert.doesNotMatch(app, /text = 'Script loaded'/);
   assert.match(app, /if \(keep\) keep\.hidden = !\(ptScriptIsPlaceholder && ptScriptRestored\);/);
@@ -2187,10 +2172,10 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
   assert.match(seek, /const backward = Number\.isFinite\(ptLiveRowNum\)\n    && \(n < ptLiveRowNum \|\| \(n === ptLiveRowNum && Number\.isFinite\(ptLiveRowPrev\) && n < ptLiveRowPrev\)\);/);
   assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
-  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);\n        ptCancelGlide\(\);\n        ptPendingHoldResume = false;/);
+  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);\n        _ptLandCallback = null;\n        ptPendingHoldResume = false;/);
   // C6: the seen-holds set rebuilds on every live-row CHANGE, without the
   // pause-marker re-baseline; ptRecalcRowHolds composes the two.
-  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback (owner 9/3)'));
+  const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback'));
   assert.match(note, /if \(Number\.isFinite\(n\) && n >= 1 && n !== ptLiveRowNum\) \{\n    ptLiveRowPrev = ptLiveRowNum;\n    ptLiveRowNum = n;/);
   assert.match(note, /ptRecalcSeenRowHolds\(\);/);
   assert.doesNotMatch(note, /ptRecalcPauseMarkers|ptRecalcRowHolds\(\)/);
@@ -2203,9 +2188,9 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   const viewport = app.slice(app.indexOf('function ptOnViewportChange()'), app.indexOf("window.addEventListener('resize', ptOnViewportChange)"));
   assert.match(viewport, /if \(!_ptViewportTimer\) _ptViewportAnchor = ptLastAnchor;\n  clearTimeout\(_ptViewportTimer\);/);
   assert.match(viewport, /const anchor = _ptViewportAnchor;\n    _ptViewportAnchor = null;\n    if \(!isFlowmingoTalentActive\(\)\) return;/);
-  assert.match(viewport, /const crawl = Number\.isFinite\(anchor\.offset\) \? ptOffset - anchor\.offset : 0;\n    ptShiftScrollBy\(delta \+ crawl\);/);
+  assert.match(viewport, /const crawl = Number\.isFinite\(anchor\.offset\) \? ptMotion\.get\(\)\.pos - anchor\.offset : 0;\n    ptShiftScrollBy\(delta \+ crawl\);/);
   assert.doesNotMatch(viewport, /ptAnchorDelta\(ptLastAnchor\)/);
-  assert.match(app, /return \{ el, rel: el\.getBoundingClientRect\(\)\.top - readY, offset: ptOffset \};/);
+  assert.match(app, /return \{ el, rel: el\.getBoundingClientRect\(\)\.top - readY, offset: ptMotion\.get\(\)\.pos \};/);
   // C10: the linked code rides the URL (Flowmingo-routed); the reload verb
   // stashes a one-shot relink key the boot route honors and drops.
   const link = app.slice(app.indexOf('function ptWriteCodeIntoUrl('), app.indexOf('async function ptOfferAssignedSessions('));
@@ -2365,7 +2350,7 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   const transport = app.slice(app.indexOf('function scriptOpTransportPaneHTML()'), app.indexOf('function scriptOpDisplayPaneHTML()'));
   assert.match(transport, /poTransportSectionHTML\('lsq'\)\}\$\{poDisplaySectionHTML\('lsq'\)\}\$\{scriptOpMoreHTML\(poTransportExtrasHTML\(\) \+ poScreenSectionHTML\(\)\)/);
   const display = app.slice(app.indexOf('function scriptOpDisplayPaneHTML()'), app.indexOf('function setLiveTextZoomPct('));
-  assert.match(display, /\$\{formatting\}\$\{panelText\}\$\{scriptOpMoreHTML\(poAlignSectionHTML\(\) \+ poThemeSectionHTML\(\)\)\}/);
+  assert.match(display, /\$\{formatting\}\$\{panelText\}\$\{scriptOpMoreHTML\(poAlignSectionHTML\(\) \+ poLayoutSectionHTML\('lsq'\) \+ poThemeSectionHTML\(\)\)\}/);
   assert.match(app, /return `<details class="cc-more sop-more"><summary>More<\/summary>\$\{inner\}<\/details>`;/);
   const onAir = app.slice(app.indexOf('function liveActionsHTML('), app.indexOf('function poFindInScript('));
   assert.match(onAir, /\$\{rowCue\}\n\s*<details class="cc-more sop-more"><summary>More<\/summary>\n\s*<div class="flow-control-section flow-control-onair">/);

@@ -2,6 +2,40 @@
 
 ## Next release (not pushed yet)
 
+### The prompter, rebuilt (Oct 16)
+
+**The talent screen moves as one piece now.** It used to have three separate
+movers (the roll, the glide on a TAKE, and the dial), each cancelling the
+others, and every TAKE redrew the whole script and then tried to put the
+read line back. That was the jump the talent saw cue by cue. Now one engine
+owns the position: a TAKE glides the new row's first line to the read line
+while the roll carries on through the move, the dial folds its turns into one
+continuous move, and a push only redraws the rows whose words changed. The
+engine lives in its own small file with its own tests.
+
+- **Rows, not a wall of text.** Each rundown row is its own box on the talent
+  screen with the same number and name as the rundown. The ON AIR row wears a
+  red tag, the row after it says NEXT, so the talent sees the same words as
+  the Live screen.
+- **Time left.** The top bar names the row under the read line and how long is
+  left in it, and in the whole script, at the current speed (paused, at the
+  set speed). The Script Op status line and the talent rail say the same.
+- **Read line: Center or High.** Many rigs want the eye line up near the lens.
+  The L key, the talent panel, Script Op and Flowmingo Op all set it.
+- **Text width: Narrow, Normal or Wide.** The W key, or any control panel.
+- **Double tap a line** on the talent screen to bring it to the read line.
+- **Play starts soft.** Play, a speed change, brake and boost all ramp instead
+  of stepping.
+- **Top means the top.** Position 0 is the first line on the read line and the
+  end is the last line there, so the progress bar and the operator's position
+  slider mean exactly that.
+- **A fresh look.** The bar, the control panel, the keys card and the connect
+  card use the app's own type, corners and glass. Every button on the panel is
+  the same size. The keys card is a popover behind the i button (or K) instead
+  of a card that is always up.
+- The hold at the next row, the NEXT and HOLDING chips, the break markers,
+  the slates, clocks, question cards, themes and mirror all work as before.
+
 ### The prompter reads the rundown's script again (Oct 16)
 
 **A Script cell edited after the last push now reaches the prompter.** The

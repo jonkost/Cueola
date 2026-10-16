@@ -13872,6 +13872,8 @@ function buildCompletePrompterState() {
       rowInfoOn:ptRowInfoOn,
       panelVisible:ptPanelVisible,
       overlaySize:Math.max(0, Math.min(4, Number(ptClockState?.size ?? 1))),
+      readLine:ptReadLinePos,
+      width:ptTextWidth,
     }
   };
 }
@@ -13986,7 +13988,7 @@ function applyCompletePrompterState(message, options={}) {
   // touch its transport. A READY re-handshake from a reloaded operator, or a
   // same-machine ping burst, used to yank a rolling talent back by up to a
   // heartbeat and kill its in-flight row glide.
-  const liveRenderer = ptHasScript() && (ptPlaying || !!ptGlide || !!ptJog);
+  const liveRenderer = ptHasScript() && (ptPlaying || ptMotion.travelling());
   const state = prompterSessionController.applySnapshot(message.state, outputId);
   if (state.productionCode) {
     ptLinkedCueolaCode = state.productionCode;
@@ -14023,6 +14025,8 @@ function applyCompletePrompterState(message, options={}) {
     if (typeof display.mirrored === 'boolean' && display.mirrored !== ptMirrored) ptToggleMirror();
     if (typeof display.rowInfoOn === 'boolean') ptSetRowInfo(display.rowInfoOn);
     if (Number.isFinite(Number(display.overlaySize))) ptSetOverlaySize(Number(display.overlaySize));
+    if (display.readLine) ptSetReadLine(display.readLine);
+    if (display.width) ptSetWidth(display.width);
   }
   // Position and transport: seed scope only, and never for a live renderer
   // (script/display/identity only, above). Doc-delivered seeds never start
@@ -14036,29 +14040,16 @@ function applyCompletePrompterState(message, options={}) {
       // Percent survives re-layout (different window size, font, script
       // edits); resolve it against THIS talent's geometry after layout.
       requestAnimationFrame(() => {
-        // The seeded position is truth: any travel still in flight (a glide,
-        // or a jog replayed from a stale queue) must not drag us off it.
-        ptCancelGlide();
-        ptCancelJog();
+        // The seeded position is truth: any travel still in flight (a cue,
+        // or a dial move replayed from a stale queue) must not drag us off it.
         const max = ptGetMaxScroll();
-        if (max > 0) ptOffset = (Math.min(100, seedPct) / 100) * max;
-        const track = ptEl('pt-track');
-        if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-        ptUpdateProgress();
-        ptRecalcRowHolds();
+        ptApplyScrollOffset(max > 0 ? (Math.min(100, seedPct) / 100) * max : 0);
       });
     } else if (!viaDoc && Number.isFinite(Number(state.position))) {
       // Raw pixels are another window's geometry: same-machine fallback only.
-      ptCancelGlide();
-      ptCancelJog();
-      ptOffset = Math.max(0, Number(state.position));
-      requestAnimationFrame(() => {
-        const track = ptEl('pt-track');
-        if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-        ptUpdateProgress();
-      });
+      requestAnimationFrame(() => ptApplyScrollOffset(Math.max(0, Number(state.position))));
     }
-    ptTargetSpeed = state.targetSpeed;
+    ptSetSpeed(state.targetSpeed);
     ptLiveSpeed = state.effectiveSpeed;
     const wantRunning = viaDoc ? false : Boolean(state.running);
     if (wantRunning && !ptPlaying) ptStartPlay();
@@ -14205,6 +14196,8 @@ function adoptPrompterTalentState(state={}) {
   }
   if (typeof state.mirrored === 'boolean') ptMirrored = state.mirrored;
   if (typeof state.rowInfoOn === 'boolean') ptRowInfoOn = state.rowInfoOn;
+  if (PT_READ_LINES[state.readLine]) ptReadLinePos = state.readLine;
+  if (PT_WIDTHS[state.width]) ptTextWidth = state.width;
   // Overlay reconciliation: acks carry slate/question/clock state so every
   // operator window trues up to talent truth (multiple operators stay honest).
   if (typeof state.techSlateOn === 'boolean' || typeof state.colorBarsOn === 'boolean') {
@@ -14612,6 +14605,8 @@ function _noteTalentRegistry(outputId, msg={}) {
     heldAtRow: (msg.state?.heldAtRow != null && Number(msg.state.heldAtRow) >= 1) ? Number(msg.state.heldAtRow) : null,
     rowNum: (msg.state?.rowNum != null && Number(msg.state.rowNum) >= 1) ? Number(msg.state.rowNum) : null,
     ahead: msg.state?.ahead === true,
+    rowLeftSec: Number.isFinite(Number(msg.state?.rowLeftSec)) ? Number(msg.state.rowLeftSec) : null,
+    scriptLeftSec: Number.isFinite(Number(msg.state?.scriptLeftSec)) ? Number(msg.state.scriptLeftSec) : null,
     snapshotId: String(msg.snapshotId || ''),
     senderClient: String(msg.senderClient || ''),
   };
@@ -14647,7 +14642,9 @@ function _talentStatusLine() {
   const row = entry.heldAtRow || entry.rowNum || _talentRowAtPct(entry.pct);
   const transport = entry.heldAtRow ? 'holding' : entry.ahead ? 'ahead' : entry.running === true ? 'rolling' : entry.running === false ? 'paused' : '';
   const seen = ageS < 2 ? 'seen just now' : `seen ${ageS}s ago`;
-  return [head, row ? `row ${row}` : '', transport, seen].filter(Boolean).join(' · ');
+  // How long is left in the row the talent is reading, at their speed.
+  const left = (entry.rowLeftSec != null && !entry.heldAtRow) ? `${window.CueolaPrompterEngine.formatSeconds(entry.rowLeftSec)} left in row` : '';
+  return [head, row ? `row ${row}` : '', transport, left, seen].filter(Boolean).join(' · ');
 }
 // Rebind evidence for a heartbeat from an output other than the pinned one.
 // Returns '' (keep the pinned talent), 'silent' (evidence a) or 'echo'
@@ -14711,7 +14708,9 @@ function renderTalentPositionIndicator() {
   // blank lines and wrapping make char and pixel percents diverge).
   const rowNum = Number.isFinite(_talentRowNum) ? _talentRowNum : (marker ? Number(marker[1]) : null);
   const holding = Number.isFinite(_talentHeldAtRow) ? ` · holding at row ${_talentHeldAtRow}` : (_talentAhead ? ' · ahead of the rundown' : '');
-  if (label) label.textContent = `Talent · ${rowNum ? 'row ' + rowNum + ' · ' : ''}${pct}%${holding}`;
+  const entry = _talentRegistryEntry();
+  const left = entry && entry.rowLeftSec != null && !Number.isFinite(_talentHeldAtRow) ? ` · ${window.CueolaPrompterEngine.formatSeconds(entry.rowLeftSec)} left in row` : '';
+  if (label) label.textContent = `Talent · ${rowNum ? 'row ' + rowNum + ' · ' : ''}${pct}%${holding}${left}`;
   const editor = document.getElementById('lsPrompterText');
   const follow = document.getElementById('lsTalentPosFollow');
   if (editor && follow?.checked && document.activeElement !== editor && !livePrompterDraftDirty) {
@@ -14845,6 +14844,16 @@ function patchScriptOpPrompterControls(region) {
   });
   region.querySelectorAll('[data-prompter-rowinfo]').forEach(box => {
     if (box.checked !== ptRowInfoOn) box.checked = ptRowInfoOn;
+  });
+  region.querySelectorAll('[data-prompter-readline]').forEach(button => {
+    const active = button.dataset.prompterReadline === ptReadLinePos;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  region.querySelectorAll('[data-prompter-width]').forEach(button => {
+    const active = button.dataset.prompterWidth === ptTextWidth;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 }
 
@@ -15642,6 +15651,8 @@ function isCollaborativePrompterControl(action) {
       || action.startsWith('slate_')
       || action.startsWith('overlays_')   // master clear for every overlay
       || action.startsWith('rowinfo_')    // NEXT / HOLDING chips on the talent
+      || action.startsWith('readline_')   // read line height on the talent
+      || action.startsWith('width_')      // text width on the talent
       || action.startsWith('seek_');   // cue to row / scrub position
 }
 
@@ -16023,7 +16034,8 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
   if (!action) return;
   if (!(action.startsWith('slate_') || action.startsWith('question_')
       || action.startsWith('clock_') || action.startsWith('wrapup_')
-      || action.startsWith('overlays_') || action.startsWith('rowinfo_'))) return;
+      || action.startsWith('overlays_') || action.startsWith('rowinfo_')
+      || action.startsWith('readline_') || action.startsWith('width_'))) return;
   if (origin === 'flowop') {
     flowOpApplyControlPreview(action, true, payload);
     return;
@@ -16040,6 +16052,10 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
     applyQuestionAction(action, 'talent', payload?.text);
   } else if (action.startsWith('rowinfo_')) {
     ptRowInfoOn = action === 'rowinfo_on';
+  } else if (action.startsWith('readline_')) {
+    ptReadLinePos = PT_READ_LINES[action.slice('readline_'.length)] ? action.slice('readline_'.length) : ptReadLinePos;
+  } else if (action.startsWith('width_')) {
+    ptTextWidth = PT_WIDTHS[action.slice('width_'.length)] ? action.slice('width_'.length) : ptTextWidth;
   } else {
     applyClockActionToState(action, 'talent');
   }
@@ -16333,12 +16349,14 @@ function ptHandleCueolaMessage(msg) {
 function ptLoadSavedOrDefault() {
   const textEl = ptEl('pt-text');
   if (!textEl || textEl.textContent.trim()) return;
-  const saved = (() => { try { return localStorage.getItem('cueola_prompter_script_html') || localStorage.getItem('promptypus_script_html'); } catch { return null; } })();
-  if (saved) {
+  const savedText = (() => { try { return localStorage.getItem('cueola_prompter_script_text'); } catch { return null; } })();
+  const savedHtml = savedText ? null : (() => { try { return localStorage.getItem('cueola_prompter_script_html') || localStorage.getItem('promptypus_script_html'); } catch { return null; } })();
+  if (savedText || savedHtml) {
     // Yesterday's script is not a linked show: keep the Connect card up (with
     // the show rows) and the pill honest until a code links or the talent
     // taps Keep this script. It used to boot as a green 'Script loaded'.
-    ptSetScriptHTML(saved);
+    if (savedText) ptSetScriptText(savedText);
+    else ptSetScriptHTML(savedHtml);
     ptScriptRestored = true;
     ptScriptIsPlaceholder = true;
     ptUpdateReady();
@@ -16378,6 +16396,10 @@ function ptTalentHeartbeat() {
     // Measured row truth: the header at/above the read line, and whether an
     // advance left the talent ahead of the rundown.
     rowNum:ptCurrentRowNum(), ahead:!!ptAheadOfLive,
+    readLine:ptReadLinePos, width:ptTextWidth,
+    // Time left in the row under the read line and in the script, at the
+    // speed the talent is reading (or would read, when paused).
+    ...ptTimeFields(),
     // A hidden or occluded talent window gets no animation frames: say so
     // instead of reporting a running crawl that is not moving.
     visibility:document.visibilityState,
@@ -16439,6 +16461,9 @@ function ptInitReceiver() {
 
 function stopPrompterTalentRuntime() {
   ptStopPlay();
+  if (_ptRaf) cancelAnimationFrame(_ptRaf);
+  _ptRaf = null;
+  _ptStopFreeRunFallback();
   if (ptHeartbeatInterval) ptHeartbeatInterval.cancel();
   ptHeartbeatInterval = null;
   ptPingBurstTimers.forEach(clearTimeout);
@@ -16469,159 +16494,288 @@ function stopPrompterTalentRuntime() {
   prompterSessionController.setStatus('closed');
 }
 
-function ptGetMaxScroll() {
-  const track = ptEl('pt-track');
-  return track ? track.scrollHeight - (window.innerHeight - 48) : 0;
+// ═══════════════════════════════════════════════════════════════════════════
+// TALENT SCREEN CORE (October 2026 rebuild)
+//
+// One scroll position, one velocity, one loop. cueola-prompter-engine.js owns
+// the numbers (the crawl, row cues and the dial all move the same position
+// through one step()); this file owns the DOM: the script as rundown rows,
+// the read line, the holds, the chips and the readouts.
+//
+// What the talent sees on a TAKE: the copy glides so the new row's first
+// line sits on the read line, the roll carries on through the move, and the
+// rest of the script is left exactly as it was (only rows whose words changed
+// are redrawn). Before this rebuild every TAKE redrew the whole script, then
+// three separate movers fought over where the read line should be.
+// ═══════════════════════════════════════════════════════════════════════════
+const PT_ENGINE = window.CueolaPrompterEngine;
+const ptMotion = PT_ENGINE.createMotion({ speed: 60 });
+
+// Read line height and text width: talent-local looks that an operator can
+// also set (readline_* / width_* controls). Both persist like the theme.
+const PT_READ_LINES = { center: 0.5, high: 0.36 };
+const PT_WIDTHS = { narrow: 680, normal: 900, wide: 1240 };
+let ptReadLinePos = (() => { try { const v = localStorage.getItem('cueola_prompter_readline'); return PT_READ_LINES[v] ? v : 'center'; } catch { return 'center'; } })();
+let ptTextWidth = (() => { try { const v = localStorage.getItem('cueola_prompter_width'); return PT_WIDTHS[v] ? v : 'normal'; } catch { return 'normal'; } })();
+
+// Rows on screen: parsed from the script text, one <section class="pt-row">
+// per rundown row, keyed by row number so a push can reuse the boxes that
+// did not change.
+let ptRows = [];                 // the parsed rows currently rendered
+let _ptRowCache = null;          // [{ el, head, body, row, key, name }] in document order
+let _ptMarkerCache = null;       // [{ el, key }] lines that carry an auto-pause marker
+let _ptLinePitch = 0;            // one single-line paragraph's rendered pitch, per size
+let _ptMax = 0;                  // the furthest scroll position (last line on the read line)
+let _ptMaxDirty = true;
+let _ptLandCallback = null;      // runs once when the current cue travel lands
+
+function ptInvalidateLayout() {
+  _ptRowCache = null;
+  _ptMarkerCache = null;
+  _ptLinePitch = 0;
+  _ptMaxDirty = true;
 }
 
+function ptRowsCache() {
+  if (_ptRowCache) return _ptRowCache;
+  const text = ptEl('pt-text');
+  if (!text) return [];
+  _ptRowCache = Array.from(text.children).filter(el => el.classList.contains('pt-row')).map(el => ({
+    el,
+    head: el.querySelector('.pt-row-head'),
+    body: el.querySelector('.pt-row-body'),
+    row: el.dataset.row ? parseInt(el.dataset.row, 10) : null,
+    key: el.dataset.key || '',
+    name: el.dataset.name || '',
+  }));
+  return _ptRowCache;
+}
+// The numbered rows only (hold boundaries, cue targets, the NEXT chip).
+function ptHeaders() {
+  return ptRowsCache().filter(r => Number.isFinite(r.row));
+}
+function ptMarkerLines() {
+  if (_ptMarkerCache) return _ptMarkerCache;
+  const text = ptEl('pt-text');
+  _ptMarkerCache = [];
+  if (text) {
+    text.querySelectorAll('.pt-row-body p').forEach((p, i) => {
+      const t = p.textContent || '';
+      if (FLOWMINGO_AUTO_PAUSE_RE.test(t)) _ptMarkerCache.push({ el: p, key: `${i}:${t}` });
+    });
+  }
+  return _ptMarkerCache;
+}
+
+// ── Geometry ────────────────────────────────────────────────────────────────
+// The read line is the one number every hold, cue, anchor and readout
+// measures against: the center of the drawn line (which follows the
+// Center / High setting), with the stage as the fallback.
+function ptReadY() {
+  const line = ptEl('pt-read-line');
+  if (line) {
+    const r = line.getBoundingClientRect();
+    if (r.width > 0) return r.top + r.height / 2;
+  }
+  const stage = ptEl('pt-stage');
+  if (stage) {
+    const r = stage.getBoundingClientRect();
+    if (r.height > 0) return r.top + r.height * (PT_READ_LINES[ptReadLinePos] || 0.5);
+  }
+  return window.innerHeight / 2 + 24;
+}
+// The track is padded so position 0 puts the first line ON the read line and
+// the furthest position puts the last line there: progress 0 to 100 means
+// exactly that, and a reset never lands on a blank screen.
+function ptMeasureTrack() {
+  const track = ptEl('pt-track');
+  const stage = ptEl('pt-stage');
+  if (!track || !stage) return 0;
+  const sr = stage.getBoundingClientRect();
+  if (sr.height > 0) {
+    const padTop = Math.round(sr.height * (PT_READ_LINES[ptReadLinePos] || 0.5));
+    const padBottom = Math.max(0, Math.round(sr.height - padTop));
+    if (track.style.paddingTop !== padTop + 'px') track.style.paddingTop = padTop + 'px';
+    if (track.style.paddingBottom !== padBottom + 'px') track.style.paddingBottom = padBottom + 'px';
+  }
+  _ptMax = Math.max(0, track.scrollHeight - sr.height);
+  _ptMaxDirty = false;
+  ptMotion.setMax(_ptMax);
+  return _ptMax;
+}
+function ptGetMaxScroll() {
+  if (_ptMaxDirty) ptMeasureTrack();
+  return _ptMax;
+}
+// Rendered pitch of one single-line paragraph, measured once per render and
+// size: what one dial detent and one "line" of scrub move.
+function ptLinePitch() {
+  if (_ptLinePitch > 0) return _ptLinePitch;
+  let pitch = 0;
+  const text = ptEl('pt-text');
+  if (text) {
+    let best = null;
+    const ps = text.querySelectorAll('.pt-row-body p');
+    for (let i = 0; i < ps.length && i < 60; i++) {
+      const h = ps[i].getBoundingClientRect().height;
+      if (h > 0 && (!best || h < best.h)) best = { h, p: ps[i] };
+    }
+    if (best) {
+      const cs = getComputedStyle(best.p);
+      pitch = best.h + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+    }
+  }
+  if (!(pitch > 0)) pitch = (ptFontSize || 22) * 1.76;
+  _ptLinePitch = pitch;
+  return pitch;
+}
+// The row whose box starts at or above the read line: the talent's measured
+// row (rides heartbeats and acks as rowNum), never a character estimate.
+function ptRowAtReadLine() {
+  const rows = ptHeaders();
+  if (!rows.length) return null;
+  const readY = ptReadY();
+  let hit = null;
+  for (const r of rows) {
+    if (r.el.getBoundingClientRect().top <= readY + 2) hit = r;
+    else break;   // rows are in document order
+  }
+  return hit;
+}
+function ptCurrentRowNum() {
+  const r = ptRowAtReadLine();
+  return r ? r.row : null;
+}
+// The first row past the live row still below the read line: where the
+// free run will hold next, and what the NEXT chip names.
+function ptNextHeader() {
+  const readY = ptReadY();
+  const live = Number.isFinite(ptLiveRowNum) ? ptLiveRowNum : 0;
+  for (const r of ptHeaders()) {
+    if (r.row <= live) continue;
+    if (r.el.getBoundingClientRect().top > readY) return r;
+  }
+  return null;
+}
+// Where a row's first line of copy sits now, relative to the read line.
+function ptRowLandingDelta(r) {
+  const readY = ptReadY();
+  const target = (r.body && r.body.firstElementChild) || r.head || r.el;
+  return target.getBoundingClientRect().top - readY;
+}
+
+// ── Paint ───────────────────────────────────────────────────────────────────
+let _ptPaintedPos = null;
+function ptPaint() {
+  const pos = ptMotion.get().pos;
+  if (pos === _ptPaintedPos) return;
+  _ptPaintedPos = pos;
+  const track = ptEl('pt-track');
+  if (track) track.style.transform = `translate3d(0,${-pos}px,0)`;
+}
+function ptProgressPct() {
+  const max = ptGetMaxScroll();
+  const pos = ptMotion.get().pos;
+  return max > 0 ? Math.round(Math.min(100, Math.max(0, (pos / max) * 100))) : 0;
+}
+// Progress bar, operator scrubber mirror and the continuous anchor: every
+// settle point and the 10 Hz tick come through here.
 function ptUpdateProgress() {
   const max = ptGetMaxScroll();
-  const pct = max > 0 ? Math.min(100, (ptOffset / max) * 100) : 0;
+  const pos = ptMotion.get().pos;
+  ptOffset = pos;
+  const pct = max > 0 ? Math.min(100, (pos / max) * 100) : 0;
   const prog = ptEl('pt-progress');
   if (prog) prog.style.width = pct + '%';
-  ptNoteAnchor();   // every settle point (and the 10Hz tick) refreshes the viewport anchor
-  // Keep the operator cue scrubber tracking the live position (unless being dragged).
-  // Only when there's a real scrollable track here — in the Script Op (no rendered talent
-  // track, max=0) leave the scrubber where the operator set it instead of snapping to 0.
+  ptNoteAnchor();
   if (max > 0) ['lsq-seek'].forEach(id => {
     const s = document.getElementById(id);
     if (s && document.activeElement !== s && s.dataset.seekDragging !== '1') s.value = Math.round(pct);
   });
 }
 
-function ptResetAutoPauseMarkers() {
-  ptSeenPauseMarkers = new Set();
-  _ptLoopCache = null;   // the script DOM changed: re-scan markers/headers on next use
-}
-
-// 2026-08-24 smoothness round: the scroll loop used to run innerText (a forced
-// style+layout pass) over EVERY <p> and query every header EVERY FRAME —
-// O(script length) reflows per frame, the single largest cause of lumpy talent
-// scroll on long shows. The candidate lists are scanned ONCE per script render
-// (textContent, no layout) and cached; per-frame work is one or two
-// getBoundingClientRect calls on actual candidates.
-let _ptLoopCache = null;
-// The read line is the vertical center of #pt-stage (the bar sits above the
-// stage, safe-area inset included), which is exactly where the drawn
-// #pt-read-line sits. Every hold, seek, anchor and row readout measures
-// against this one number; the old innerHeight / 2 + 24 constant ignored the
-// inset and drifted from the drawn line on notched displays.
-function ptReadY() {
-  const stage = ptEl('pt-stage');
-  if (stage) {
-    const r = stage.getBoundingClientRect();
-    if (r.height > 0) return r.top + r.height / 2;
-  }
-  return window.innerHeight / 2 + 24;
-}
-// Row number and name from a rendered [N] header element.
-function ptHeaderRow(el) {
-  const m = /^\[(\d+)\]/.exec(String(el?.textContent || '').trim());
-  const row = m ? parseInt(m[1], 10) : NaN;
-  return Number.isFinite(row) ? row : null;
-}
-function ptRowNameFromHeader(el) {
-  return String(el?.textContent || '').trim().replace(/^\[\d+\]\s*/, '').trim();
-}
-// The row whose header sits at or above the read line: the talent's own
-// measured truth (rides heartbeats and acks as rowNum), never a character
-// offset estimate.
-function ptCurrentRowNum() {
-  const cache = ptLoopCache();
-  if (!cache || !cache.headers.length) return null;
-  const readY = ptReadY();
-  let row = null;
-  for (const h of cache.headers) {
-    if (h.el.getBoundingClientRect().top <= readY + 2) row = h.row;
-    else break;   // headers are in document order
-  }
-  return row;
-}
-// The first header past the live row that is still below the read line: the
-// row the free-run will hold at next, and what the NEXT chip names.
-function ptNextHeader() {
-  const cache = ptLoopCache();
-  if (!cache) return null;
-  const readY = ptReadY();
-  const live = Number.isFinite(ptLiveRowNum) ? ptLiveRowNum : 0;
-  for (const h of cache.headers) {
-    if (h.row <= live) continue;
-    if (h.el.getBoundingClientRect().top > readY) return h;
-  }
-  return null;
-}
-
-function ptLoopCache() {
-  if (_ptLoopCache) return _ptLoopCache;
-  const text = ptEl('pt-text');
-  if (!text) return null;
-  const pauseLines = [];
-  text.querySelectorAll('p').forEach((p, i) => {
-    const t = p.textContent || '';
-    if (FLOWMINGO_AUTO_PAUSE_RE.test(t)) pauseLines.push({ el: p, key: `${i}:${t}` });
-  });
-  const headers = [];
-  text.querySelectorAll('.scr-header').forEach(h => {
-    const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
-    if (!m) return;
-    const row = parseInt(m[1], 10);
-    if (Number.isFinite(row)) headers.push({ el: h, row });
-  });
-  _ptLoopCache = { pauseLines, headers };
-  return _ptLoopCache;
-}
-
-// Seen pause markers come from geometry, not a cleared set: every marker at
-// or above the read line counts as passed (a re-render, a scrub, or a seed
-// re-baselines here), so a fast frame cannot skip a break and a resume
-// on a break never re-pauses on the same line.
-function ptRecalcPauseMarkers() {
-  const cache = ptLoopCache();
-  if (!cache) return;
-  const readY = ptReadY();
-  const seen = new Set();
-  for (const cand of cache.pauseLines) {
-    if (cand.el.getBoundingClientRect().top <= readY + 2) seen.add(cand.key);
-  }
-  ptSeenPauseMarkers = seen;
-}
-
-function ptCheckAutoPauseMarkers() {
-  if (!ptPlaying) return false;
-  const cache = ptLoopCache();
-  if (!cache || !cache.pauseLines.length) return false;
-  const readY = ptReadY();
-  for (const cand of cache.pauseLines) {
-    if (ptSeenPauseMarkers.has(cand.key)) continue;
-    const rect = cand.el.getBoundingClientRect();
-    // Crossed or on the line: a bounded leap past the band still pauses.
-    if (rect.top <= readY) {
-      ptSeenPauseMarkers.add(cand.key);
-      ptStopPlay();
-      toast('Flowmingo auto-paused at break.');
-      return true;
-    }
-  }
-  return false;
-}
-
-let _ptProgPaintAt = 0;
-let _ptNextChipPaintAt = 0;
-// Free-run fallback (9/8 sweep C10): an occluded or hidden talent window gets
-// no animation frames, so the crawl froze while state.running stayed true.
-// A worker timer steps the same loop whenever no frame has landed for 250 ms.
+// ── The loop ────────────────────────────────────────────────────────────────
+// Runs while the crawl is on or a travel is in flight, and stops when the
+// screen is still. A worker timer steps the same frame when the window is
+// hidden or occluded (no animation frames arrive there), so a talent display
+// the OS considers hidden keeps rolling.
 const PT_FREERUN_FALLBACK_MS = 250;
+let _ptRaf = null;
+let _ptLastTs = null;
 let _ptLastFrameAt = 0;      // performance.now() of the last rAF-driven step
 let _ptLastFallbackAt = 0;   // performance.now() of the last worker-driven step
 let _ptFreeRunFallback = null;
+let _ptProgPaintAt = 0;
+let _ptReadoutAt = 0;
+
+function ptLoopWanted() {
+  const st = ptMotion.get();
+  return st.rolling || !!st.target || Math.abs(st.vel) > 0.01;
+}
+function ptKick() {
+  if (_ptRaf) return;
+  if (!ptLoopWanted()) { ptPaint(); return; }
+  _ptLastTs = null;
+  _ptRaf = requestAnimationFrame(ptFrame);
+  _ptStartFreeRunFallback();
+}
+function ptFrame(ts, fromFallback=false) {
+  _ptRaf = null;
+  if (!isFlowmingoTalentActive()) { _ptStopFreeRunFallback(); return; }
+  if (!fromFallback) _ptLastFrameAt = ts;
+  if (_ptLastTs === null) _ptLastTs = ts;
+  // Clamped: a hidden window gets no frames, and the first frame back must
+  // never apply the whole hidden span as one leap. A fallback step may span
+  // a full tick.
+  const dt = Math.min(Math.max(0, ts - _ptLastTs), fromFallback ? PT_FREERUN_FALLBACK_MS * 2 : 100);
+  _ptLastTs = ts;
+  // The held modifiers are plain flags (keys, the stage drag, the operator):
+  // the engine reads them every frame.
+  ptMotion.hold('brake', ptBraking);
+  ptMotion.hold('boost', ptBoosting);
+  ptMotion.hold('reverse', ptReversing);
+  if (_ptMaxDirty) ptMeasureTrack();
+  const r = ptMotion.step(dt, fromFallback ? PT_FREERUN_FALLBACK_MS * 2 : 100);
+  ptOffset = r.pos;
+  ptLiveSpeed = Math.abs(r.vel);
+  ptPaint();
+  if (r.landed) {
+    const fn = _ptLandCallback;
+    _ptLandCallback = null;
+    ptUpdateProgress();
+    ptRecalcRowHolds();
+    if (fn) fn();
+  }
+  if (r.ended) {
+    // The end of the script: the roll stops there.
+    ptStopPlay();
+    return;
+  }
+  if (ts - _ptProgPaintAt > 100) { _ptProgPaintAt = ts; ptUpdateProgress(); }
+  if (ptPlaying && !ptMotion.travelling()) {
+    if (ptCheckAutoPauseMarkers()) return;
+    if (ptCheckRowHold()) return;
+  }
+  if (ts - _ptReadoutAt > 400) { _ptReadoutAt = ts; ptRenderReadout(); }
+  if (ptLoopWanted()) {
+    _ptRaf = requestAnimationFrame(ptFrame);
+  } else {
+    // Still: one last honest paint of everything that reads geometry.
+    ptUpdateProgress();
+    ptRenderReadout();
+    _ptStopFreeRunFallback();
+    prompterSessionController.setTransport({ running:ptPlaying, position:ptMotion.get().pos, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:ptPlaying ? 'running' : 'paused' });
+  }
+}
 function _ptFreeRunFallbackTick() {
-  if (!ptPlaying) { _ptStopFreeRunFallback(); return; }
-  if (ptGlide || ptJog) return;   // travel has its own hidden-landing watchdogs
+  if (!ptLoopWanted()) { _ptStopFreeRunFallback(); return; }
   const now = performance.now();
   if (now - Math.max(_ptLastFrameAt, _ptLastFallbackAt) < PT_FREERUN_FALLBACK_MS) return;
   _ptLastFallbackAt = now;
-  if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
-  ptScrollLoop(now, true);
+  if (_ptRaf) cancelAnimationFrame(_ptRaf);
+  _ptRaf = null;
+  ptFrame(now, true);
+  if (ptLoopWanted() && !_ptRaf) _ptRaf = requestAnimationFrame(ptFrame);
 }
 function _ptStartFreeRunFallback() {
   if (_ptFreeRunFallback) return;
@@ -16634,114 +16788,62 @@ function _ptStopFreeRunFallback() {
   try { _ptFreeRunFallback?.cancel?.(); } catch {}
   _ptFreeRunFallback = null;
 }
-// Honest stalled flag for the heartbeat: playing, not travelling, and no
+// Honest stalled flag for the heartbeat: rolling, not travelling, and no
 // step of either kind in the last second.
 function ptFreeRunStalled() {
-  if (!ptPlaying || ptGlide || ptJog) return false;
+  if (!ptPlaying || ptMotion.travelling()) return false;
   return (performance.now() - Math.max(_ptLastFrameAt, _ptLastFallbackAt)) > 1000;
 }
-function ptScrollLoop(ts, fromFallback=false) {
-  if (!ptPlaying) return;
-  if (!fromFallback) _ptLastFrameAt = ts;
-  if (ptGlide || ptJog) {
-    // A glide (or an in-flight jog scrub) owns the position while it travels;
-    // keep the loop alive so the crawl resumes seamlessly from where it lands.
-    ptLastTime = ts;
-    ptAnimFrame = requestAnimationFrame(ptScrollLoop);
-    return;
-  }
-  if (ptLastTime === null) ptLastTime = ts;
-  // Clamped: a hidden or occluded window gets no frames, and the first frame
-  // back used to apply the whole hidden span as one leap. The ease below
-  // already clamped; the step did not. A fallback step may span a full tick.
-  const delta = Math.min(ts - ptLastTime, fromFallback ? PT_FREERUN_FALLBACK_MS * 2 : 100);
-  ptLastTime = ts;
-
-  if (ptBraking) {
-    ptLiveSpeed = Math.max(ptTargetSpeed * 0.25, 2);
-  } else if (ptBoosting) {
-    ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300);
-  } else {
-    // dt-normalized ease (~270ms time constant, matching the old 0.06/frame at
-    // 60Hz): a per-frame constant ramped twice as fast on 120Hz displays and
-    // stalled through frame drops — the ramp is what the operator FEELS on
-    // every speed change.
-    ptLiveSpeed += (ptTargetSpeed - ptLiveSpeed) * (1 - Math.exp(-delta / 270));
-    if (Math.abs(ptLiveSpeed - ptTargetSpeed) < 0.5) ptLiveSpeed = ptTargetSpeed;
-  }
-
-  const step = (ptLiveSpeed / 60) * (delta / 16.67);
-  ptOffset += ptReversing ? -step : step;
-  const max = ptGetMaxScroll();
-  if (ptOffset >= max) {
-    ptOffset = max;
-    ptStopPlay();
-  } else {
-    if (ptOffset < 0) ptOffset = 0;
-    const track = ptEl('pt-track');
-    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    // Progress/scrubber sync at ~10Hz, not per frame: it reads scrollHeight and
-    // touches three elements — needless per-frame work for a thin bar.
-    if (ts - _ptProgPaintAt > 100) { _ptProgPaintAt = ts; ptUpdateProgress(); }
-    if (ptCheckAutoPauseMarkers()) return;
-    if (ptCheckRowHold()) return;
-    if (ts - _ptNextChipPaintAt > 500) { _ptNextChipPaintAt = ts; ptRenderNextChip(); }
-    ptAnimFrame = requestAnimationFrame(ptScrollLoop);
-  }
-}
-// Coming back from hidden starts the clock fresh (ptScrollLoop tolerates null).
+// Coming back from hidden starts the clock fresh.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') ptLastTime = null;
+  if (document.visibilityState === 'visible') { _ptLastTs = null; ptKick(); }
 });
 
-// ── Anchor-preserving re-layouts (9/4 A3) ───────────────────────────────────
-// The element under the read line, found by binary search over #pt-text's
-// children (document order, monotonic tops), and its offset from the read
-// line. A size change, a viewport change, or a script push measures the same
-// element after the re-layout and shifts the track by the difference, so the
-// line the talent is reading never moves.
-function ptElementAtReadLine(text, readY) {
-  const kids = text.children;
-  let lo = 0, hi = kids.length - 1, hit = -1;
+// ── Anchors: re-layouts never move the line being read ─────────────────────
+// The element under the read line and its offset from the line. A size
+// change, a viewport change, a read-line change or a push measures the same
+// element after the re-layout and shifts the track by the difference.
+function ptElementAtReadLine(readY) {
+  const text = ptEl('pt-text');
+  if (!text) return null;
+  const lines = text.querySelectorAll('.pt-row-head, .pt-row-body > *');
+  let lo = 0, hi = lines.length - 1, hit = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if (kids[mid].getBoundingClientRect().top <= readY + 2) { hit = mid; lo = mid + 1; }
+    if (lines[mid].getBoundingClientRect().top <= readY + 2) { hit = mid; lo = mid + 1; }
     else hi = mid - 1;
   }
-  return kids[hit < 0 ? 0 : hit] || null;
+  return lines[hit < 0 ? 0 : hit] || null;
 }
 function ptSizeAnchorCapture() {
   if (!isFlowmingoTalentActive()) return null;
   const text = ptEl('pt-text'), track = ptEl('pt-track');
   if (!text || !track || !text.children.length || !(track.scrollHeight > 0)) return null;
   const readY = ptReadY();
-  const el = ptElementAtReadLine(text, readY);
+  const el = ptElementAtReadLine(readY);
   if (!el) return null;
-  return { el, rel: el.getBoundingClientRect().top - readY, offset: ptOffset };
+  return { el, rel: el.getBoundingClientRect().top - readY, offset: ptMotion.get().pos };
 }
 function ptAnchorDelta(anchor) {
   if (!anchor || !anchor.el || !anchor.el.isConnected) return null;
   return (anchor.el.getBoundingClientRect().top - ptReadY()) - anchor.rel;
 }
-// Shift the scroll by a measured delta: clamp, carry any glide or jog with
-// the content, ALWAYS write the transform (a queued crawl frame otherwise
-// paints the old offset against the new layout), then re-baseline progress,
-// holds and pause markers from the new geometry.
+// Shift the scroll by a measured delta: the engine carries any travel with
+// the content, the transform is ALWAYS written, then progress, holds and
+// pause markers re-baseline from the new geometry.
 function ptShiftScrollBy(delta) {
-  const track = ptEl('pt-track');
-  if (!track) return;
-  const max = ptGetMaxScroll();
-  delta = Number.isFinite(delta) ? delta : 0;
-  ptOffset = Math.max(0, Math.min(max, ptOffset + delta));
-  if (ptGlide) { ptGlide.from += delta; ptGlide.to = Math.max(0, Math.min(max, ptGlide.to + delta)); }
-  if (ptJog) ptJog.target = Math.max(0, Math.min(max, ptJog.target + delta));
-  track.style.transform = `translateY(-${ptOffset}px)`;
+  ptInvalidateLayout();
+  ptMeasureTrack();
+  ptMotion.shift(Number.isFinite(delta) ? delta : 0);
+  _ptPaintedPos = null;
+  ptPaint();
   ptUpdateProgress();
   ptRecalcRowHolds();
+  ptRenderReadout();
 }
-// Viewport changes (resize, fullscreen in or out, rotation) move the 100vh
-// top pad and the read line at once. The anchor is kept continuously (every
-// progress update, 10Hz while rolling), so the restore has a before picture.
+// Viewport changes (resize, fullscreen in or out, rotation) move the read
+// line and the track padding at once. The anchor is kept continuously (every
+// progress update), so the restore has a before picture.
 let ptLastAnchor = null;
 let _ptViewportTimer = null;
 let _ptViewportAnchor = null;   // the anchor VALUE from the first event of a burst
@@ -16750,13 +16852,6 @@ function ptNoteAnchor() {
   if (a) ptLastAnchor = a;
 }
 function ptOnViewportChange() {
-  // Snapshot the anchor VALUE on the first event of a burst: the resize event
-  // runs before that frame's rAF callbacks, so ptLastAnchor still holds the
-  // last pre-resize capture here, while the 10Hz progress tick (and every
-  // jog frame) would overwrite it with post-resize geometry before the 80ms
-  // debounce fires and leave the restore with a ~0 delta (the copy shifted by
-  // half the height change under the talent's eye, and the holds at any
-  // header pushed above the read line were silently skipped).
   if (!_ptViewportTimer) _ptViewportAnchor = ptLastAnchor;
   clearTimeout(_ptViewportTimer);
   _ptViewportTimer = setTimeout(() => {
@@ -16764,10 +16859,12 @@ function ptOnViewportChange() {
     const anchor = _ptViewportAnchor;
     _ptViewportAnchor = null;
     if (!isFlowmingoTalentActive()) return;
+    ptInvalidateLayout();
+    ptMeasureTrack();
     const delta = ptAnchorDelta(anchor);
-    if (delta == null) { ptRecalcRowHolds(); return; }
-    // The crawl/jog since the capture is real travel, not layout: keep it.
-    const crawl = Number.isFinite(anchor.offset) ? ptOffset - anchor.offset : 0;
+    if (delta == null) { ptRecalcRowHolds(); ptPaint(); return; }
+    // The crawl since the capture is real travel, not layout: keep it.
+    const crawl = Number.isFinite(anchor.offset) ? ptMotion.get().pos - anchor.offset : 0;
     ptShiftScrollBy(delta + crawl);
   }, 80);
 }
@@ -16776,36 +16873,712 @@ window.addEventListener('orientationchange', ptOnViewportChange);
 document.addEventListener('fullscreenchange', ptOnViewportChange);
 document.addEventListener('webkitfullscreenchange', ptOnViewportChange);
 
-// Hold at the next cue (pre-show fix plan, item 2): the free-run stops when the
-// header of a row BEYOND the live rundown row reaches the read line, and waits
-// for the next advance instead of racing ahead. Needs rundown context (row
-// seeks / prompter.activeIdx) — a hand-pasted script without [N] headers, or a
-// talent that has never heard the live row, free-runs exactly as before.
+// ── Auto-pause markers and the hold at the next row ────────────────────────
+// Seen pause markers come from geometry, not a cleared set: every marker at
+// or above the read line counts as passed, so a fast frame cannot skip a
+// break and a resume on a break never re-pauses on the same line.
+function ptRecalcPauseMarkers() {
+  const readY = ptReadY();
+  const seen = new Set();
+  for (const cand of ptMarkerLines()) {
+    if (cand.el.getBoundingClientRect().top <= readY + 2) seen.add(cand.key);
+  }
+  ptSeenPauseMarkers = seen;
+}
+function ptCheckAutoPauseMarkers() {
+  if (!ptPlaying) return false;
+  const marks = ptMarkerLines();
+  if (!marks.length) return false;
+  const readY = ptReadY();
+  for (const cand of marks) {
+    if (ptSeenPauseMarkers.has(cand.key)) continue;
+    if (cand.el.getBoundingClientRect().top <= readY) {
+      ptSeenPauseMarkers.add(cand.key);
+      ptStopPlay();
+      toast('Prompter paused at the break.');
+      return true;
+    }
+  }
+  return false;
+}
+// Hold at the next row: the free run stops when a row BEYOND the live
+// rundown row reaches the read line, and waits for the next TAKE instead of
+// racing ahead. Needs rundown context (row cues or the show record); a
+// hand-pasted script, or a talent that has never heard the live row, free
+// runs exactly as before.
 function ptCheckRowHold() {
   if (!ptPlaying || ptReversing) return false;
   if (!Number.isFinite(ptLiveRowNum)) return false;
-  const cache = ptLoopCache();
-  if (!cache) return false;
   const readY = ptReadY();
-  for (const { el: h, row } of cache.headers) {
-    if (row <= ptLiveRowNum) continue;
-    if (ptSeenRowHolds.has(row)) continue;
-    const rect = h.getBoundingClientRect();
-    // Trigger once the header's top passes the read line; a fast frame that
-    // overshoots the band still holds (top is far above readY by then).
-    if (rect.top <= readY) {
-      ptSeenRowHolds.add(row);
+  for (const r of ptHeaders()) {
+    if (r.row <= ptLiveRowNum) continue;
+    if (ptSeenRowHolds.has(r.row)) continue;
+    const top = r.el.getBoundingClientRect().top;
+    if (top <= readY) {
+      ptSeenRowHolds.add(r.row);
       ptStopPlay();               // clears provenance, so set the hold AFTER
-      ptAutoHeldRow = row;
+      ptAutoHeldRow = r.row;
       ptAheadOfLive = false;      // holding at the boundary IS in step with the rundown
       ptRenderHoldChip();
       return true;
     }
-    // Headers are in document order: the first one still below the read line
-    // means nothing further can have crossed yet.
-    break;
+    break;   // rows are in document order: nothing further has crossed yet
   }
   return false;
+}
+function ptRecalcRowHolds() {
+  ptRecalcSeenRowHolds();
+  ptRecalcPauseMarkers();
+}
+// The seen-holds set alone: every row beyond the live row that already sits
+// at/above the read line is a boundary the talent has crossed, never a hold
+// to engage. Rebuilt on every live-row CHANGE and every reposition.
+function ptRecalcSeenRowHolds() {
+  const seen = new Set();
+  if (Number.isFinite(ptLiveRowNum)) {
+    const readY = ptReadY();
+    for (const r of ptHeaders()) {
+      if (r.row > ptLiveRowNum && r.el.getBoundingClientRect().top <= readY) seen.add(r.row);
+    }
+  }
+  ptSeenRowHolds = seen;
+  ptRenderNextChip();
+  ptRenderRowStates();
+}
+
+// ── Chips, row states and the readout ───────────────────────────────────────
+// The persistent HOLD state on the talent output itself (a toast is
+// transient and invisible in fullscreen). The chips live inside #pt-stage so
+// a beam splitter flips them with the copy.
+function ptRenderHoldChip() {
+  const chip = ptEl('pt-hold-chip');
+  if (!chip) return;
+  const on = ptAutoHeldRow != null;
+  chip.hidden = !on;
+  if (on) {
+    const hit = ptHeaders().find(r => r.row === ptAutoHeldRow);
+    const rowEl = chip.querySelector('.pt-chip-row');
+    const name = hit ? hit.name : '';
+    if (rowEl) rowEl.textContent = name || `Row ${ptAutoHeldRow}`;
+  }
+  ptRenderNextChip();   // never name the same row twice: NEXT hides while holding
+}
+// The NEXT chip names the row coming up. Hidden while holding, when no live
+// row is known yet, and past the last row.
+function ptRenderNextChip() {
+  const chip = ptEl('pt-next-chip');
+  if (!chip) return;
+  const next = (Number.isFinite(ptLiveRowNum) && ptAutoHeldRow == null) ? ptNextHeader() : null;
+  chip.hidden = !next;
+  if (!next) return;
+  const rowEl = chip.querySelector('.pt-chip-row');
+  if (rowEl) rowEl.textContent = next.name || `Row ${next.row}`;
+}
+// Row boxes carry their state in class names: .live is the rundown's ON AIR
+// row (its header tag says so), .reading is the row under the read line.
+function ptRenderRowStates() {
+  const rows = ptRowsCache();
+  if (!rows.length) return;
+  const reading = ptRowAtReadLine();
+  for (const r of rows) {
+    const live = Number.isFinite(ptLiveRowNum) && r.row === ptLiveRowNum;
+    const next = Number.isFinite(ptLiveRowNum) && r.row === ptLiveRowNum + 1;
+    r.el.classList.toggle('live', live);
+    r.el.classList.toggle('next', next && !live);
+    r.el.classList.toggle('reading', r === reading);
+    const tag = r.head && r.head.querySelector('.pt-row-tag');
+    if (tag) {
+      const label = live ? 'On air' : next ? 'Next' : '';
+      if (tag.textContent !== label) tag.textContent = label;
+    }
+  }
+}
+// The bar readout: the row under the read line and how long is left in it
+// (and in the whole script) at the current speed. Paused, the estimate uses
+// the set speed, so it answers "how long will this row take".
+function ptReadout() {
+  const st = ptMotion.get();
+  const cur = ptRowAtReadLine();
+  const v = st.rolling ? Math.max(Math.abs(st.vel), 1) : st.speed;
+  const readY = ptReadY();
+  const rowLeft = cur ? PT_ENGINE.secondsForPixels(cur.el.getBoundingClientRect().bottom - readY, v) : null;
+  const scriptLeft = PT_ENGINE.secondsForPixels(Math.max(0, st.max - st.pos), v);
+  return { row: cur ? cur.row : null, name: cur ? cur.name : '', rowLeft, scriptLeft };
+}
+// The time fields the heartbeat and every ack carry.
+function ptTimeFields() {
+  if (!isFlowmingoTalentActive() || !ptHasScript()) return { rowLeftSec:null, scriptLeftSec:null, rowName:'' };
+  const info = ptReadout();
+  return {
+    rowLeftSec: info.rowLeft != null ? Math.round(info.rowLeft) : null,
+    scriptLeftSec: info.scriptLeft != null ? Math.round(info.scriptLeft) : null,
+    rowName: info.name || '',
+  };
+}
+let _ptReadoutKey = '';
+function ptRenderReadout() {
+  const rowEl = ptEl('pt-row-readout');
+  const timeEl = ptEl('pt-time-left');
+  if (!rowEl && !timeEl) return;
+  const info = ptHasScript() ? ptReadout() : { row:null, name:'', rowLeft:null, scriptLeft:null };
+  const rowText = info.row ? `Row ${info.row}${info.name ? ' · ' + info.name : ''}` : '';
+  const left = [
+    info.rowLeft != null && info.row ? `${PT_ENGINE.formatSeconds(info.rowLeft)} in row` : '',
+    info.scriptLeft != null ? `${PT_ENGINE.formatSeconds(info.scriptLeft)} left` : '',
+  ].filter(Boolean).join(' · ');
+  const key = rowText + '|' + left;
+  if (key === _ptReadoutKey) return;
+  _ptReadoutKey = key;
+  if (rowEl) { rowEl.textContent = rowText; rowEl.hidden = !rowText; }
+  if (timeEl) { timeEl.textContent = left; timeEl.hidden = !left; }
+  ptRenderRowStates();
+}
+
+// ── Transport ───────────────────────────────────────────────────────────────
+function ptStartPlay() {
+  if (ptPlaying) return;
+  ptAutoHeldRow = null;
+  ptRenderHoldChip();
+  ptRecalcRowHolds();
+  ptPlaying = true;
+  ptMotion.setSpeed(ptTargetSpeed);
+  ptMotion.roll(true);
+  prompterSessionController.setTransport({ running:true, position:ptMotion.get().pos, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
+  ptSyncPlayIcons(true);
+  _ptLastFrameAt = _ptLastFallbackAt = performance.now();
+  ptKick();
+  notifyControlSurfaceState();
+}
+function ptStopPlay() {
+  ptPlaying = false;
+  ptMotion.roll(false);
+  // A pause freezes travel too: a cue mid-flight stops where the screen is.
+  if (ptMotion.travelling()) ptMotion.jumpTo(ptMotion.get().pos);
+  _ptLandCallback = null;
+  // An explicit stop (pause command, slate, live exit) clears hold provenance
+  // so the next TAKE can never auto-resume over the operator's intent. The
+  // hold path itself re-sets ptAutoHeldRow AFTER calling this.
+  ptAutoHeldRow = null;
+  ptPendingHoldResume = false;
+  ptRenderHoldChip();
+  _ptStopFreeRunFallback();
+  ptUpdateProgress();
+  ptRenderReadout();
+  prompterSessionController.setTransport({ running:false, position:ptMotion.get().pos, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
+  ptSyncPlayIcons(false);
+  notifyControlSurfaceState();
+}
+function ptTogglePlay() {
+  ptPlaying ? ptStopPlay() : ptStartPlay();
+}
+// Pop-out parity: the operator speed/size slider rows show the live number.
+function syncPrompterSliderReadouts() {
+  document.querySelectorAll('[data-prompter-speed-value]').forEach(el => { el.textContent = String(Math.round(ptTargetSpeed)); });
+  document.querySelectorAll('[data-prompter-size-value]').forEach(el => { el.textContent = String(Math.round(ptFontSize)); });
+}
+function ptSetSpeed(val) {
+  ptTargetSpeed = ptMotion.setSpeed(parseFloat(val));
+  // Rolling: the engine eases toward the new speed, so a dial spin reads as
+  // one ramp, not a staircase. Paused: the next play starts at this speed.
+  if (!ptPlaying) ptLiveSpeed = ptTargetSpeed;
+  const sl = ptEl('pt-speed-slider');
+  if (sl) sl.value = ptTargetSpeed;
+  const out = ptEl('pt-speed-value');
+  if (out) out.textContent = String(Math.round(ptTargetSpeed));
+  syncPrompterSliderReadouts();
+  _ptReadoutKey = '';
+  ptRenderReadout();
+}
+function ptAdjustSpeed(delta) {
+  ptSetSpeed(Math.max(PT_ENGINE.SPEED_MIN, Math.min(PT_ENGINE.SPEED_MAX, ptTargetSpeed + delta)));
+}
+function ptSetSize(val) {
+  const next = parseInt(val);
+  if (!Number.isFinite(next)) return;
+  // Anchor-preserving: hold the element under the read line across the
+  // re-layout so a size change never moves the line being read, never trips
+  // a hold, and never fakes an end-of-script stop.
+  const text = ptEl('pt-text');
+  const anchor = next !== ptFontSize ? ptSizeAnchorCapture() : null;
+  if (anchor && text) text.style.transition = 'none';
+  ptFontSize = next;
+  const screen = ptEl('promptypus');
+  if (screen) screen.style.setProperty('--pt-size', next + 'px');
+  document.documentElement.style.setProperty('--pt-size', next + 'px');
+  const sl = ptEl('pt-size-slider');
+  if (sl) sl.value = next;
+  const out = ptEl('pt-size-value');
+  if (out) out.textContent = String(next);
+  try { localStorage.setItem('cueola_prompter_size', String(ptFontSize)); } catch {}
+  syncPrompterSliderReadouts();
+  ptInvalidateLayout();
+  if (anchor) {
+    const delta = ptAnchorDelta(anchor);
+    if (delta != null) ptShiftScrollBy(delta);
+    else { ptMeasureTrack(); ptRecalcRowHolds(); }
+    if (text) requestAnimationFrame(() => { text.style.transition = ''; });
+  } else if (isFlowmingoTalentActive()) {
+    ptMeasureTrack();
+  }
+}
+function ptAdjustSize(delta) {
+  ptSetSize(Math.max(24, Math.min(120, ptFontSize + delta)));
+}
+function ptSetAlign(a) {
+  ptAlign = ['left','center','right'].includes(a) ? a : 'center';
+  const screen = ptEl('promptypus');
+  if (screen) screen.style.setProperty('--pt-align', ptAlign);
+  document.documentElement.style.setProperty('--pt-align', ptAlign);
+  try { localStorage.setItem('cueola_prompter_align', ptAlign); } catch {}
+  ['l','c','r'].forEach(x => {
+    const btn = ptEl('pt-align-' + x);
+    if (btn) { btn.classList.toggle('active', x === ptAlign[0]); btn.setAttribute('aria-pressed', x === ptAlign[0] ? 'true' : 'false'); }
+  });
+}
+// Read line height: Center, or High (the upper third, the way many
+// prompter rigs are set so the eye line stays near the lens).
+function ptSetReadLine(pos, { persist=true } = {}) {
+  const next = PT_READ_LINES[pos] ? pos : 'center';
+  const anchor = next !== ptReadLinePos ? ptSizeAnchorCapture() : null;
+  ptReadLinePos = next;
+  const screen = ptEl('promptypus');
+  if (screen) {
+    screen.style.setProperty('--pt-read', (PT_READ_LINES[next] * 100) + '%');
+    screen.dataset.ptReadline = next;
+  }
+  ['center','high'].forEach(k => {
+    const btn = ptEl('pt-readline-' + k[0]);
+    if (btn) { btn.classList.toggle('active', k === next); btn.setAttribute('aria-pressed', k === next ? 'true' : 'false'); }
+  });
+  if (persist) { try { localStorage.setItem('cueola_prompter_readline', next); } catch {} }
+  ptInvalidateLayout();
+  if (anchor) {
+    ptMeasureTrack();
+    const delta = ptAnchorDelta(anchor);
+    if (delta != null) ptShiftScrollBy(delta);
+  } else if (isFlowmingoTalentActive()) {
+    ptMeasureTrack();
+    ptRecalcRowHolds();
+  }
+}
+function ptToggleReadLine() { ptSetReadLine(ptReadLinePos === 'high' ? 'center' : 'high'); }
+// Text width: Narrow, Normal or Wide copy, anchor-preserving like a size change.
+function ptSetWidth(name, { persist=true } = {}) {
+  const next = PT_WIDTHS[name] ? name : 'normal';
+  const text = ptEl('pt-text');
+  const anchor = next !== ptTextWidth ? ptSizeAnchorCapture() : null;
+  ptTextWidth = next;
+  const screen = ptEl('promptypus');
+  if (screen) {
+    screen.style.setProperty('--pt-width', PT_WIDTHS[next] + 'px');
+    screen.dataset.ptWidth = next;
+  }
+  ['narrow','normal','wide'].forEach(k => {
+    const btn = ptEl('pt-width-' + k[0]);
+    if (btn) { btn.classList.toggle('active', k === next); btn.setAttribute('aria-pressed', k === next ? 'true' : 'false'); }
+  });
+  if (persist) { try { localStorage.setItem('cueola_prompter_width', next); } catch {} }
+  ptInvalidateLayout();
+  if (anchor) {
+    if (text) text.style.transition = 'none';
+    ptMeasureTrack();
+    const delta = ptAnchorDelta(anchor);
+    if (delta != null) ptShiftScrollBy(delta);
+    if (text) requestAnimationFrame(() => { text.style.transition = ''; });
+  } else if (isFlowmingoTalentActive()) {
+    ptMeasureTrack();
+  }
+}
+function ptCycleWidth() {
+  const order = ['narrow', 'normal', 'wide'];
+  ptSetWidth(order[(order.indexOf(ptTextWidth) + 1) % order.length]);
+}
+
+// ── Repositioning ───────────────────────────────────────────────────────────
+// Top means the first line on the read line, ready to read.
+function ptResetScroll() {
+  ptStopPlay();
+  ptInvalidateLayout();
+  ptMeasureTrack();
+  ptMotion.jumpTo(0);
+  ptSeenRowHolds = new Set();
+  ptAutoHeldRow = null;
+  _ptPaintedPos = null;
+  ptPaint();
+  ptUpdateProgress();
+  ptRecalcRowHolds();
+  ptRenderReadout();
+}
+// A hard set: the position slider, a seed from the operator. Never pauses,
+// never glides, and re-baselines the hold boundaries so the slider can never
+// insta-hold on a boundary it just dragged past.
+function ptApplyScrollOffset(offset) {
+  _ptLandCallback = null;
+  ptPendingHoldResume = false;
+  ptMotion.setMax(ptGetMaxScroll());
+  ptMotion.jumpTo(Number(offset) || 0);
+  ptPaint();
+  ptUpdateProgress();
+  ptRecalcRowHolds();
+  ptRenderReadout();
+  ptKick();
+}
+function ptSeekToProgress(pct) {
+  const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
+  const max = ptGetMaxScroll();
+  ptApplyScrollOffset(max > 0 ? (p / 100) * max : 0);
+}
+// A cue travel to a position, with a landing callback. The engine bends any
+// travel already in flight into the new one; the velocity never steps.
+function ptGlideToOffset(target, onDone=null) {
+  ptMotion.setMax(ptGetMaxScroll());
+  const dest = Math.max(0, Math.min(ptMotion.get().max, Number(target) || 0));
+  if (Math.abs(dest - ptMotion.get().pos) < 3 && !ptMotion.travelling()) {
+    ptMotion.jumpTo(dest);
+    ptPaint();
+    ptUpdateProgress();
+    onDone?.();
+    return;
+  }
+  _ptLandCallback = onDone;
+  ptMotion.moveTo(dest);
+  ptKick();
+}
+// Relative scrub: the dial moves by N lines from wherever the screen is
+// headed. Pure repositioning: never pauses, never writes a marker.
+function ptSeekByLines(lines) {
+  const n = Math.max(-200, Math.min(200, parseFloat(lines) || 0));
+  if (!n) return;
+  ptJogBy(n * ptLinePitch());
+}
+function ptJogBy(deltaPx) {
+  _ptLandCallback = null;        // the hand on the wheel overrides any cue in flight
+  ptPendingHoldResume = false;   // and cancels a superseded TAKE's auto-resume
+  ptMotion.setMax(ptGetMaxScroll());
+  ptMotion.moveBy(Number(deltaPx) || 0);
+  ptKick();
+}
+// Where the talent is provably headed: mid-travel, the destination.
+function ptReportedOffset() { return ptMotion.reportedPos(); }
+// Cue one line (a tap on it): bring that line to the read line.
+function ptCueElement(el) {
+  if (!el || !isFlowmingoTalentActive()) return false;
+  const line = el.closest ? el.closest('.pt-row-body > *, .pt-row-head') : null;
+  if (!line) return false;
+  ptPendingHoldResume = false;
+  const delta = line.getBoundingClientRect().top - ptReadY();
+  ptGlideToOffset(ptMotion.get().pos + delta, () => ptRecalcRowHolds());
+  return true;
+}
+
+// ── Rundown context ─────────────────────────────────────────────────────────
+// The live-row context feeding the hold-at-next-cue behavior. Learned from
+// row cues and from the show record; null until either lands.
+function ptNoteLiveRow(rowNum) {
+  const n = parseInt(rowNum, 10);
+  if (Number.isFinite(n) && n >= 1 && n !== ptLiveRowNum) {
+    ptLiveRowPrev = ptLiveRowNum;
+    ptLiveRowNum = n;
+    // Rebuild the seen-holds set from geometry on every CHANGE: a row already
+    // behind the read line is crossed, never a ghost hold on the next frame.
+    ptRecalcSeenRowHolds();
+  }
+  ptRenderNextChip();
+  ptRenderRowStates();
+}
+// Hold-release fallback: a lost or evicted cue must not strand the talent at
+// HOLDING while the rundown already moved onto (or past) the held boundary.
+// The record's row CHANGE arms a short grace window so the real cue lands
+// first; if the hold is still set when the window closes, the talent
+// releases on the record alone, through the same TAKE path.
+let _ptHoldReleaseTimer = null;
+function ptArmHoldReleaseFallback(newRow) {
+  if (_ptHoldReleaseTimer) { try { _ptHoldReleaseTimer.cancel(); } catch {} _ptHoldReleaseTimer = null; }
+  const n = parseInt(newRow, 10);
+  if (!Number.isFinite(n) || ptAutoHeldRow == null || ptPlaying || !(ptAutoHeldRow <= n)) return;
+  const held = ptAutoHeldRow;
+  _ptHoldReleaseTimer = steadyTimeout(() => {
+    _ptHoldReleaseTimer = null;
+    if (ptAutoHeldRow !== held || ptPlaying) return;
+    ptSeekToRow(n, { advance:true });
+  }, 600);
+}
+// "A caller is calling this show right now": the show caller heartbeats
+// busExecutor every 5s while on the Live screen. A stamp within 60s means a
+// talent linking now adopts the live row at once.
+function ptCallerIsLiveOnDoc(data) {
+  const ts = Number(data?.busExecutor?.ts);
+  return Number.isFinite(ts) && Math.abs(Date.now() - ts) < 60000;
+}
+
+// Find in script: glide the first line containing the text to the read line.
+// Searches FORWARD from the read position first, wrapping to the top, so
+// repeated finds walk through repeats of a phrase.
+function ptSeekToText(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return Promise.resolve(false);
+  return new Promise(resolve => requestAnimationFrame(() => {
+    const text = ptEl('pt-text');
+    if (!text) { resolve(false); return; }
+    const readY = ptReadY();
+    const lines = Array.from(text.querySelectorAll('.pt-row-body > *, .pt-row-head'));
+    if (!lines.length) { resolve(false); return; }
+    const firstAhead = lines.findIndex(l => l.getBoundingClientRect().top > readY + 4);
+    const order = firstAhead > 0 ? [...lines.slice(firstAhead), ...lines.slice(0, firstAhead)] : lines;
+    const target = order.find(l => (l.textContent || '').toLowerCase().includes(q));
+    if (!target) { resolve(false); return; }
+    ptPendingHoldResume = false;
+    const delta = target.getBoundingClientRect().top - readY;
+    ptGlideToOffset(ptMotion.get().pos + delta, () => ptRecalcRowHolds());
+    resolve(true);
+  }));
+}
+
+// A row cue. payload.advance marks a rundown TAKE (a strictly forward move):
+// on the talent a TAKE never travels backward. Already reading inside row n:
+// stay put and release any hold. Past row n: stay put, note the live row,
+// say AHEAD. Everything else (Back, Cue here, Cue Now, the deck's cue key)
+// glides unconditionally.
+function ptSeekToRow(rowNum, payload=null) {
+  const n = parseInt(rowNum, 10);
+  if (!Number.isFinite(n) || n < 1) return Promise.resolve(false);
+  const backward = Number.isFinite(ptLiveRowNum)
+    && (n < ptLiveRowNum || (n === ptLiveRowNum && Number.isFinite(ptLiveRowPrev) && n < ptLiveRowPrev));
+  const advance = !!(payload && payload.advance === true) && !backward;
+  return new Promise(resolve => requestAnimationFrame(() => {
+    const rows = ptHeaders();
+    const target = rows.find(r => r.row === n);
+    if (!target) {
+      // The row exists in the rundown but is not rendered yet (the cue beat
+      // the text): park it for one retry after the next render.
+      const total = Math.max(rowDisplayTotal(), ptDocRowTotal);
+      if (n <= total && !(payload && payload.retry)) ptPendingSeekRow = { row:n, payload:{ ...(payload || {}), retry:true } };
+      resolve(false);
+      return;
+    }
+    const readY = ptReadY();
+    const delta = ptRowLandingDelta(target);      // first line of copy to the read line
+    const top = target.el.getBoundingClientRect().top;
+    if (advance) {
+      const after = rows.find(r => r.row > n);
+      const afterTop = after ? after.el.getBoundingClientRect().top : Infinity;
+      if (delta <= 8 && afterTop > readY) {
+        // Inside row n already: release the hold where the talent is. A
+        // superseded TAKE's travel may carry the resume intent; honor it.
+        const resume = !ptPlaying && (ptAutoHeldRow != null || ptPendingHoldResume);
+        _ptLandCallback = null;
+        ptPendingHoldResume = false;
+        ptNoteLiveRow(n);
+        ptAutoHeldRow = null;
+        ptAheadOfLive = false;
+        ptRenderHoldChip();
+        ptRecalcRowHolds();
+        if (resume) ptStartPlay();
+        resolve(true);
+        return;
+      }
+      if (afterTop <= readY) {
+        // Past row n: stay put. A hold sitting exactly at n+1 is the designed
+        // state (the next TAKE releases it); anything further is AHEAD.
+        if (!ptMotion.travelling()) ptPendingHoldResume = false;
+        ptNoteLiveRow(n);
+        ptAheadOfLive = ptAutoHeldRow !== n + 1;
+        ptRecalcRowHolds();
+        ptRenderHoldChip();
+        resolve(true);
+        return;
+      }
+    }
+    void top;
+    ptAheadOfLive = false;   // a cue that moves puts the talent back in step
+    // A talent auto-holding at a boundary resumes reading once the travel
+    // lands (a manual pause stays paused: ptStopPlay clears the flag). The
+    // intent is a module flag so a rapid second TAKE that bends this travel
+    // cannot swallow it: whichever travel lands honors it.
+    if (ptAutoHeldRow != null && !ptPlaying) ptPendingHoldResume = true;
+    else if (!ptMotion.travelling()) ptPendingHoldResume = false;
+    ptNoteLiveRow(n);
+    ptAutoHeldRow = null;
+    ptRenderHoldChip();
+    ptGlideToOffset(ptMotion.get().pos + delta, () => {
+      ptRecalcRowHolds();
+      if (ptPendingHoldResume && !ptPlaying) {
+        ptPendingHoldResume = false;
+        ptStartPlay();
+      } else {
+        ptPendingHoldResume = false;
+      }
+    });
+    resolve(true);
+  }));
+}
+
+// ── Rendering the script as rows ────────────────────────────────────────────
+function ptRowHTML(row) {
+  const numbered = row.num != null;
+  const head = numbered
+    ? `<header class="pt-row-head"><span class="pt-row-num">${row.num}</span><span class="pt-row-name${row.name ? '' : ' pt-row-name-empty'}">${row.name ? esc(row.name) : 'Row ' + row.num}</span><span class="pt-row-tag" aria-hidden="true"></span></header>`
+    : '';
+  const body = row.lines.length
+    ? row.lines.map(line => `<p>${formatScriptLine(line) || '&nbsp;'}</p>`).join('')
+    : '<p class="pt-row-blank">&nbsp;</p>';
+  return `${head}<div class="pt-row-body">${body}</div>`;
+}
+function ptMakeRowEl(row) {
+  const el = document.createElement('section');
+  el.className = 'pt-row';
+  el.dataset.key = row.key;
+  if (row.num != null) el.dataset.row = String(row.num);
+  el.dataset.name = row.name || '';
+  el.innerHTML = ptRowHTML(row);
+  return el;
+}
+// Anchor for a push: the row under the read line, the line inside it, and
+// where that line sat on screen. After the re-render the same line (by row
+// key and index, clamped inside the row) goes back to the same spot.
+function ptCaptureLineAnchor() {
+  const text = ptEl('pt-text');
+  if (!text || !text.children.length) return null;
+  const readY = ptReadY();
+  const el = ptElementAtReadLine(readY);
+  if (!el) return null;
+  const section = el.closest('.pt-row');
+  if (!section) return null;
+  const inBody = el.parentElement && el.parentElement.classList.contains('pt-row-body');
+  const lineIdx = inBody ? Array.from(el.parentElement.children).indexOf(el) : -1;
+  return { key: section.dataset.key, lineIdx, screenY: el.getBoundingClientRect().top };
+}
+function ptAnchorScreenDelta(anchor) {
+  if (!anchor) return null;
+  const text = ptEl('pt-text');
+  const section = text ? text.querySelector(`.pt-row[data-key="${anchor.key}"]`) : null;
+  if (!section) return null;
+  let el = section.querySelector('.pt-row-head');
+  if (anchor.lineIdx >= 0) {
+    const body = section.querySelector('.pt-row-body');
+    const kids = body ? body.children : [];
+    el = kids[Math.min(anchor.lineIdx, kids.length - 1)] || el || section;
+  }
+  if (!el) el = section;
+  return el.getBoundingClientRect().top - anchor.screenY;
+}
+// Draw the script. reset: a fresh script, start at the top. Otherwise only
+// the rows whose words changed are redrawn, and the line under the read line
+// stays where it is.
+function ptRenderScript(text, { reset=false } = {}) {
+  const host = ptEl('pt-text');
+  if (!host) return;
+  const next = PT_ENGINE.parseRows(text);
+  const diff = PT_ENGINE.diffRows(ptRows, next);
+  const anchor = (!reset && host.children.length) ? ptCaptureLineAnchor() : null;
+  if (reset || !host.children.length || diff.changed) {
+    const existing = new Map();
+    Array.from(host.children).forEach(el => { if (el.dataset.key) existing.set(el.dataset.key, el); });
+    const frag = document.createDocumentFragment();
+    for (const op of diff.ops) {
+      let el = existing.get(op.key);
+      if (op.type === 'keep' && el && !reset) {
+        frag.appendChild(el);
+      } else if (op.type === 'replace' && el && !reset) {
+        el.dataset.name = op.row.name || '';
+        el.innerHTML = ptRowHTML(op.row);
+        frag.appendChild(el);
+      } else {
+        frag.appendChild(ptMakeRowEl(op.row));
+      }
+    }
+    host.replaceChildren(frag);
+  }
+  ptRows = next;
+  ptInvalidateLayout();
+  ptMeasureTrack();
+  if (reset) {
+    ptMotion.jumpTo(0);
+    ptSeenRowHolds = new Set();
+    ptAutoHeldRow = null;
+    _ptPaintedPos = null;
+    ptPaint();
+    ptUpdateProgress();
+    ptRecalcRowHolds();
+  } else {
+    const delta = anchor ? ptAnchorScreenDelta(anchor) : null;
+    if (delta != null && Math.abs(delta) > 0.5) ptShiftScrollBy(delta);
+    else { _ptPaintedPos = null; ptPaint(); ptUpdateProgress(); ptRecalcRowHolds(); }
+  }
+  ptRenderRowStates();
+  _ptReadoutKey = '';
+  ptRenderReadout();
+  // A cue that arrived before its row was rendered retries once now.
+  if (ptPendingSeekRow) {
+    const pending = ptPendingSeekRow;
+    ptPendingSeekRow = null;
+    ptSeekToRow(pending.row, pending.payload);
+  }
+}
+function ptSetScriptText(text) {
+  const clean = String(text || '');
+  prompterText = clean;
+  ptScriptIsPlaceholder = false;
+  ptScriptRestored = false;
+  try { localStorage.setItem('cueola_prompter_script_text', clean); } catch {}
+  ptRenderScript(clean, { reset:true });
+  ptUpdateSyncLabel();
+}
+// Rich imports (DOCX, Pages, a saved page) arrive as HTML: read them back to
+// script text, one line per block, headers as [N] lines, then draw as rows.
+function ptHtmlToScriptText(html) {
+  const doc = new DOMParser().parseFromString(ptSanitizeHTML(html || ''), 'text/html');
+  const out = [];
+  let line = '';
+  const flush = () => { out.push(line.replace(/ /g, ' ').replace(/[ \t]+$/, '')); line = ''; };
+  const BLOCK = new Set(['P','DIV','H1','H2','H3','H4','H5','H6','LI','BLOCKQUOTE','SECTION','HEADER','HR','UL','OL']);
+  const walk = node => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) { line += child.nodeValue; continue; }
+      if (child.nodeName === 'BR') { flush(); continue; }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
+      if (child.classList.contains('pt-row-head')) {
+        if (line.trim()) flush();
+        const num = child.querySelector('.pt-row-num')?.textContent || '';
+        const name = child.querySelector('.pt-row-name:not(.pt-row-name-empty)')?.textContent || '';
+        line = num ? `[${num}] ${name}`.trim() : name;
+        flush();
+        continue;
+      }
+      if (child.tagName === 'STRONG' || child.tagName === 'B') { line += '**' + child.textContent + '**'; continue; }
+      const block = BLOCK.has(child.tagName);
+      if (block && line.trim()) flush();
+      walk(child);
+      if (block) flush();
+    }
+  };
+  walk(doc.body);
+  if (line.trim()) flush();
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function ptSetScriptHTML(html, sourceText) {
+  ptSetScriptText(sourceText != null ? sourceText : ptHtmlToScriptText(html));
+}
+// Plain text of what is on screen, for the editor and the downloads.
+function ptExtractText() {
+  return prompterText || '';
+}
+// A pushed update WITHOUT resetting scroll or playback: the rows that changed
+// are redrawn, the line under the read line stays put, the roll carries on.
+function ptApplyCueolaLiveUpdate(text) {
+  prompterText = text || '';
+  try { localStorage.setItem('cueola_prompter_script_text', prompterText); } catch {}
+  ptUpdateFromCueola(prompterText);
+}
+function ptInitScriptFromCueola(text) {
+  ptSetScriptText(text || '');
+  ptUpdateSyncLabel();
+}
+function ptUpdateFromCueola(text) {
+  if (!ptEl('pt-text')) return;
+  if (text && text.trim()) ptScriptIsPlaceholder = false;
+  ptRenderScript(text || '', { reset:false });
+  ptUpdateSyncLabel();
 }
 
 function ptSyncPlayIcons(isPlaying) {
@@ -16892,6 +17665,19 @@ function poAlignSectionHTML() {
       </div>
     </div>`;
 }
+// Read line height and text width on the talent, from the desk.
+function poLayoutSectionHTML(scope='lsq', send='sendPrompterControl', attr='prompter', disabled=false) {
+  const dis = disabled ? ' disabled' : '';
+  const seg = (label, family, options, current) => `<div class="pt-ctrl-group flow-control-segment">
+        <span class="pt-ctrl-label">${label}</span>
+        ${options.map(([key, text]) => `<button class="pt-btn${current === key ? ' active' : ''}" data-${attr}-${family}="${key}" onclick="${send}('${family}_${key}')" aria-pressed="${current === key ? 'true' : 'false'}"${dis}>${text}</button>`).join('')}
+      </div>`;
+  return `<div class="flow-control-section flow-control-layout">
+      <div class="flow-control-title">Read line &amp; width</div>
+      ${seg('Read line', 'readline', [['center', 'Center'], ['high', 'High']], ptReadLinePos)}
+      ${seg('Width', 'width', [['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']], ptTextWidth)}
+    </div>`;
+}
 function poThemeSectionHTML() {
   return `<div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
@@ -16944,7 +17730,7 @@ function scriptOpDisplayPaneHTML() {
         <button class="pt-btn" onclick="stepLiveTextZoom(0.05)" aria-label="Bigger text">+</button>
       </div>
     </div>`;
-  return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poThemeSectionHTML())}</div>`;
+  return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poLayoutSectionHTML('lsq') + poThemeSectionHTML())}</div>`;
 }
 function setLiveTextZoomPct(pct) {
   const zoom = applyLiveTextZoom((Number(pct) || 100) / 100);
@@ -16964,588 +17750,6 @@ function syncLiveTextZoomReadout() {
 // Runs on play start and after every discontinuous reposition (scrub, glide
 // landing). REBUILT, never accumulated: a scrub-ahead never insta-holds, and
 // a scrub-back automatically re-arms the boundaries it moved behind.
-function ptRecalcRowHolds() {
-  ptRecalcSeenRowHolds();
-  ptRecalcPauseMarkers();
-}
-// The seen-holds set alone (no pause-marker re-baseline): every header beyond
-// the live row that already sits at/above the read line is a boundary the
-// talent has crossed, never a hold to engage. ptNoteLiveRow rebuilds it on
-// every live-row CHANGE so a doc activeIdx adopted while rolling (or a BACK)
-// cannot ghost-hold at a header that is already behind the read line.
-function ptRecalcSeenRowHolds() {
-  const seen = new Set();
-  const text = ptEl('pt-text');
-  if (text && Number.isFinite(ptLiveRowNum)) {
-    const readY = ptReadY();
-    text.querySelectorAll('.scr-header').forEach(h => {
-      const m = /^\[(\d+)\]/.exec(String(h.textContent || '').trim());
-      if (!m) return;
-      const row = parseInt(m[1], 10);
-      if (Number.isFinite(row) && row > ptLiveRowNum && h.getBoundingClientRect().top <= readY) seen.add(row);
-    });
-  }
-  ptSeenRowHolds = seen;
-  ptRenderNextChip();
-}
-
-// The persistent HOLD state on the talent output itself: a toast is transient,
-// unmirrored, and invisible in element-fullscreen; the chip lives inside
-// #pt-stage so beam-splitter mirroring flips it with the copy.
-function ptRenderHoldChip() {
-  const chip = ptEl('pt-hold-chip');
-  if (!chip) return;
-  const on = ptAutoHeldRow != null;
-  chip.hidden = !on;
-  if (on) {
-    // The chip names the held row (the rundown row's name from its [N]
-    // header); the number alone meant nothing to the talent.
-    const cache = ptLoopCache();
-    const hit = cache ? cache.headers.find(h => h.row === ptAutoHeldRow) : null;
-    const rowEl = chip.querySelector('.pt-chip-row');
-    const name = hit ? ptRowNameFromHeader(hit.el) : '';
-    if (rowEl) rowEl.textContent = name || `Row ${ptAutoHeldRow}`;
-    else chip.textContent = `Holding ${name || 'row ' + ptAutoHeldRow}`;
-  }
-  ptRenderNextChip();   // never name the same row twice: NEXT hides while holding
-}
-
-// The NEXT chip (owner 9/3): the talent screen names the row coming up, from
-// the headers already on screen. Hidden while holding (the hold chip names
-// that row), when no live row is known yet, and past the last row.
-function ptRenderNextChip() {
-  const chip = ptEl('pt-next-chip');
-  if (!chip) return;
-  const next = (Number.isFinite(ptLiveRowNum) && ptAutoHeldRow == null) ? ptNextHeader() : null;
-  chip.hidden = !next;
-  if (!next) return;
-  const rowEl = chip.querySelector('.pt-chip-row');
-  const name = ptRowNameFromHeader(next.el) || `Row ${next.row}`;
-  if (rowEl) rowEl.textContent = name;
-  else chip.textContent = `Next ${name}`;
-}
-
-function ptStartPlay() {
-  if (ptPlaying && ptAnimFrame) return;
-  ptAutoHeldRow = null;
-  ptRenderHoldChip();
-  ptRecalcRowHolds();
-  ptPlaying = true;
-  ptLastTime = null;
-  prompterSessionController.setTransport({ running:true, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'running' });
-  ptSyncPlayIcons(true);
-  _ptLastFrameAt = _ptLastFallbackAt = performance.now();
-  ptAnimFrame = requestAnimationFrame(ptScrollLoop);
-  _ptStartFreeRunFallback();   // keeps an occluded window scrolling
-  notifyControlSurfaceState();
-}
-
-function ptStopPlay() {
-  ptPlaying = false;
-  ptCancelGlide();   // pause freezes everything, travel included
-  ptCancelJog();     // ...a mid-ease scrub freezes where the screen IS
-  // An explicit stop (pause command, slate, live-exit) clears hold provenance
-  // so the next advance can never auto-resume over the operator's intent.
-  // The hold path itself re-sets ptAutoHeldRow AFTER calling this.
-  ptAutoHeldRow = null;
-  ptPendingHoldResume = false;
-  ptRenderHoldChip();
-  if (ptAnimFrame) cancelAnimationFrame(ptAnimFrame);
-  ptAnimFrame = null;
-  _ptStopFreeRunFallback();
-  prompterSessionController.setTransport({ running:false, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:'paused' });
-  ptSyncPlayIcons(false);
-  notifyControlSurfaceState();
-}
-
-function ptTogglePlay() {
-  ptPlaying ? ptStopPlay() : ptStartPlay();
-}
-
-// Pop-out parity: the operator speed/size slider rows show the live number,
-// same as the Script Operator pop-out's output readouts.
-function syncPrompterSliderReadouts() {
-  document.querySelectorAll('[data-prompter-speed-value]').forEach(el => { el.textContent = String(Math.round(ptTargetSpeed)); });
-  document.querySelectorAll('[data-prompter-size-value]').forEach(el => { el.textContent = String(Math.round(ptFontSize)); });
-}
-
-function ptSetSpeed(val) {
-  ptTargetSpeed = parseFloat(val);
-  // Rolling: the loop eases toward the new target (~270ms), so a dial spin
-  // reads as one ramp, not a staircase. Paused: start at the set speed.
-  if (!ptPlaying) ptLiveSpeed = ptTargetSpeed;
-  const sl = ptEl('pt-speed-slider');
-  if (sl) sl.value = val;
-  syncPrompterSliderReadouts();
-}
-
-function ptAdjustSpeed(delta) {
-  ptSetSpeed(Math.max(5, Math.min(200, ptTargetSpeed + delta)));
-}
-
-function ptSetSize(val) {
-  const next = parseInt(val);
-  if (!Number.isFinite(next)) return;
-  // Anchor-preserving: hold the element under the read line by direct
-  // reference across the re-layout, so a size change never moves the line the
-  // talent is reading, never trips a hold, and never fakes an end-of-script
-  // stop. The font-size transition is off for the measurement so the layout
-  // lands synchronously.
-  const text = ptEl('pt-text');
-  const anchor = next !== ptFontSize ? ptSizeAnchorCapture() : null;
-  if (anchor && text) text.style.transition = 'none';
-  ptFontSize = next;
-  const screen = ptEl('promptypus');
-  if (screen) screen.style.setProperty('--pt-size', next + 'px');
-  document.documentElement.style.setProperty('--pt-size', next + 'px');
-  const sl = ptEl('pt-size-slider');
-  if (sl) sl.value = next;
-  try { localStorage.setItem('cueola_prompter_size', String(ptFontSize)); } catch {}
-  syncPrompterSliderReadouts();
-  if (_ptLoopCache) _ptLoopCache.pitch = 0;   // seek_line pitch is per size
-  if (anchor) {
-    const delta = ptAnchorDelta(anchor);
-    if (delta != null) ptShiftScrollBy(delta);
-    else ptRecalcRowHolds();
-    if (text) requestAnimationFrame(() => { text.style.transition = ''; });
-  }
-}
-
-function ptAdjustSize(delta) {
-  ptSetSize(Math.max(24, Math.min(120, ptFontSize + delta)));
-}
-
-function ptSetAlign(a) {
-  ptAlign = a;
-  const screen = ptEl('promptypus');
-  if (screen) screen.style.setProperty('--pt-align', a);
-  document.documentElement.style.setProperty('--pt-align', a);
-  try { localStorage.setItem('cueola_prompter_align', a); } catch {}
-  ['l','c','r'].forEach(x => {
-    const btn = ptEl('pt-align-' + x);
-    if (btn) btn.classList.toggle('active', x === a[0]);
-  });
-}
-
-function ptResetScroll() {
-  ptStopPlay();
-  ptCancelGlide();
-  ptCancelJog();
-  ptOffset = 0;
-  ptResetAutoPauseMarkers();
-  ptSeenRowHolds = new Set();
-  ptAutoHeldRow = null;
-  const track = ptEl('pt-track');
-  if (track) track.style.transform = 'translateY(0)';
-  ptUpdateProgress();
-  // "Top" means the first script line ON the read line, ready to read — not a
-  // screenful of lead-in padding. Offset 0 showed only the 100vh top pad, so
-  // every reset landed the talent on a completely blank screen (8/20 show).
-  // Wait a frame for layout, then pull the first real line up to the marker.
-  requestAnimationFrame(() => {
-    if (ptOffset !== 0 || ptGlide || ptJog) return;   // something else moved us already
-    const text = ptEl('pt-text');
-    if (!text) return;
-    const first = Array.from(text.children).find(el => (el.textContent || '').trim());
-    if (!first) return;
-    const readY = ptReadY();
-    const delta = first.getBoundingClientRect().top - readY;
-    if (delta > 0) ptApplyScrollOffset(delta);
-  });
-}
-
-// Current scroll position as a 0–100 percentage (for the operator cue scrubber).
-function ptProgressPct() {
-  const max = ptGetMaxScroll();
-  return max > 0 ? Math.round(Math.min(100, Math.max(0, (ptOffset / max) * 100))) : 0;
-}
-
-function ptApplyScrollOffset(offset) {
-  ptCancelGlide();   // an explicit position set overrides any travel in flight
-  ptCancelJog();     // ...including a scrub still easing toward its target
-  // A manual reposition also cancels any pending advance auto-resume: the
-  // interrupted travel's intent must not ghost-start the talent later.
-  ptPendingHoldResume = false;
-  const max = ptGetMaxScroll();
-  ptOffset = Math.max(0, Math.min(max, Number(offset) || 0));
-  const track = ptEl('pt-track');
-  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-  ptUpdateProgress();
-  // Repositioning re-baselines the hold boundaries: the scrub dial must never
-  // insta-hold on a boundary it just dragged past, and dragging back re-arms.
-  ptRecalcRowHolds();
-}
-
-// ── Glide travel (pre-show fix plan, item 2) ────────────────────────────────
-// Row cues travel smoothly to the target instead of snapping: a hard jump
-// pulls the talent's eye off the line they are reading. While a glide runs,
-// the free-run scroll loop stays alive but defers to it; the scrub dial and
-// any explicit offset set cancel it.
-let ptGlide = null;   // { from, to, start, dur, raf, onDone }
-function ptCancelGlide() {
-  if (!ptGlide) return;
-  if (ptGlide.raf) cancelAnimationFrame(ptGlide.raf);
-  clearTimeout(ptGlide.watchdog);
-  ptGlide = null;
-}
-// Same visibility-gated fallback the jog has: a hidden/occluded talent window
-// gets NO animation frames, so a row cue or find issued there used to stall
-// mid-travel forever (and the seek's auto-resume never fired).
-function ptGlideWatchdog() {
-  if (!ptGlide) return;
-  if (document.visibilityState === 'hidden') {
-    const g = ptGlide;
-    ptGlide = null;
-    ptOffset = g.to;
-    const track = ptEl('pt-track');
-    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
-    g.onDone?.();
-    return;
-  }
-  ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
-}
-function ptGlideToOffset(target, onDone=null) {
-  ptCancelJog();   // an explicit destination (row cue, find) outranks a scrub
-  const max = ptGetMaxScroll();
-  target = Math.max(0, Math.min(max, Number(target) || 0));
-  const dist = Math.abs(target - ptOffset);
-  if (dist < 3) {
-    ptCancelGlide();
-    ptOffset = target;
-    const track = ptEl('pt-track');
-    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
-    onDone?.();
-    return;
-  }
-  ptCancelGlide();
-  // Distance-scaled travel: short hops stay quick, long jumps stay readable.
-  const dur = Math.max(550, Math.min(2200, 450 + dist * 0.8));
-  ptGlide = { from: ptOffset, to: target, start: null, dur, raf: null, onDone, watchdog: null };
-  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  const stepFrame = (ts) => {
-    if (!ptGlide) return;
-    clearTimeout(ptGlide.watchdog);
-    if (ptGlide.start === null) ptGlide.start = ts;
-    const t = Math.min(1, (ts - ptGlide.start) / ptGlide.dur);
-    ptOffset = ptGlide.from + (ptGlide.to - ptGlide.from) * ease(t);
-    const track = ptEl('pt-track');
-    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
-    if (t >= 1) {
-      const done = ptGlide.onDone;
-      ptGlide = null;
-      done?.();
-      return;
-    }
-    ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
-    ptGlide.raf = requestAnimationFrame(stepFrame);
-  };
-  ptGlide.raf = requestAnimationFrame(stepFrame);
-  ptGlide.watchdog = setTimeout(ptGlideWatchdog, 350);
-}
-
-// Live "cue" scroll — operators drag the talent prompter to any spot on the fly.
-// Pure repositioning: never pauses, never writes a marker, never glides (the
-// dial and slider need the screen to track the hand instantly).
-function ptSeekToProgress(pct) {
-  const p = Math.max(0, Math.min(100, parseFloat(pct) || 0));
-  const max = ptGetMaxScroll();
-  ptApplyScrollOffset(max > 0 ? (p / 100) * max : 0);
-}
-
-// Relative scrub: move by ± N lines from wherever the talent IS. This is what
-// makes a physical knob work — every absolute-percent verb needed the sender
-// to know the current position, which no remote surface reliably does.
-// Same semantics as the dial/slider: pure repositioning, never pauses.
-function ptSeekByLines(lines) {
-  const n = Math.max(-200, Math.min(200, parseFloat(lines) || 0));
-  if (!n) return;
-  ptJogBy(n * ptLinePitch());
-}
-// Rendered pitch of one single-line paragraph (box plus its gap), measured
-// once per render and per size; the old 1.55em guess was about 88% of a
-// real line, so dial detents never landed on line boundaries.
-function ptLinePitch() {
-  const cache = ptLoopCache();
-  if (cache && cache.pitch > 0) return cache.pitch;
-  let pitch = 0;
-  const text = ptEl('pt-text');
-  if (text) {
-    let best = 0;
-    const ps = text.querySelectorAll('p');
-    for (let i = 0; i < ps.length && i < 60; i++) {
-      const p = ps[i];
-      const h = p.getBoundingClientRect().height;
-      if (h > 0 && (!best || h < best.h)) best = { h, p };
-    }
-    if (best) {
-      const cs = getComputedStyle(best.p);
-      pitch = best.h + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
-    }
-  }
-  if (!(pitch > 0)) pitch = (ptFontSize || 22) * 1.76;   // 1.62em min-height + .14em gap
-  if (cache) cache.pitch = pitch;
-  return pitch;
-}
-
-// ── Jog smoother ────────────────────────────────────────────────────────────
-// Scrub commands land as a fast glide toward an ACCUMULATING target instead of
-// a hard teleport: each seek_line moves the target, one rAF loop eases the
-// screen toward it (exponential approach, ~80ms time constant), and the text
-// never jumps under the talent's eye. Commands arriving mid-travel just move
-// the target, so a held dial turn reads as one continuous scroll, not a
-// slideshow of 2-line snaps. Bookkeeping that must not run per frame (hold
-// re-baselining) runs once, when the travel settles.
-let ptJog = null;   // { target, raf, lastTs, watchdog }
-function ptCancelJog() {
-  if (!ptJog) return;
-  if (ptJog.raf) cancelAnimationFrame(ptJog.raf);
-  if (ptJog.watchdog) clearTimeout(ptJog.watchdog);
-  ptJog = null;
-}
-function ptJogLand() {
-  if (!ptJog) return;
-  const target = ptJog.target;
-  ptCancelJog();
-  ptOffset = target;
-  const track = ptEl('pt-track');
-  if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-  ptUpdateProgress();
-  // Same landing contract as an explicit offset set: the scrub must never
-  // insta-hold on a boundary it just dragged past, and dragging back re-arms.
-  ptRecalcRowHolds();
-  // Publish the SETTLED position: during the ease every ack reported where the
-  // screen was, not where the scrub ends, and the operator rail adopted it.
-  prompterSessionController.setTransport({ running:ptPlaying, position:ptOffset, targetSpeed:ptTargetSpeed, effectiveSpeed:ptLiveSpeed, status:ptPlaying ? 'running' : 'paused' });
-}
-// While a jog eases, the honest position to REPORT is its target (where the
-// talent is provably headed), not the mid-ease pixel the screen happens to be
-// on: acks and heartbeats stamped with the latter lag the scrub by a batch and
-// park the operator's readout short of the truth.
-function ptReportedOffset() { return ptJog ? ptJog.target : ptOffset; }
-function ptJogWatchdog() {
-  if (!ptJog) return;
-  // Land instantly ONLY when the window truly receives no frames (hidden or
-  // fully occluded: Chrome throttles rAF to zero there, and nobody is watching
-  // that screen). A VISIBLE window can also miss frames past the deadline (a
-  // script-push re-layout, heavy work on the shared main thread) — its queued
-  // rAF fires the moment the stall clears, so keep waiting instead of
-  // teleporting the remaining travel under the talent's eye.
-  if (document.visibilityState === 'hidden') { ptJogLand(); return; }
-  ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
-}
-function ptJogBy(deltaPx) {
-  const max = ptGetMaxScroll();
-  const base = ptJog ? ptJog.target : ptOffset;
-  const target = Math.max(0, Math.min(max, base + (Number(deltaPx) || 0)));
-  ptCancelGlide();               // the hand on the wheel overrides any travel in flight
-  ptPendingHoldResume = false;   // and cancels a superseded advance's auto-resume
-  if (ptJog) { ptJog.target = target; return; }
-  ptJog = { target, raf: null, lastTs: null, watchdog: null };
-  const frame = (ts) => {
-    if (!ptJog) return;
-    clearTimeout(ptJog.watchdog);
-    const dt = ptJog.lastTs === null ? 16.7 : Math.min(100, ts - ptJog.lastTs);
-    ptJog.lastTs = ts;
-    const remaining = ptJog.target - ptOffset;
-    if (Math.abs(remaining) <= 0.75) { ptJogLand(); return; }
-    ptOffset += remaining * (1 - Math.exp(-dt / 80));
-    const track = ptEl('pt-track');
-    if (track) track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
-    ptJog.raf = requestAnimationFrame(frame);
-    // A hidden or occluded window gets NO animation frames (Chrome throttles
-    // rAF to zero): without a fallback the scrub would silently stall until
-    // the window surfaced. The watchdog lands it there, and ONLY there.
-    ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
-  };
-  ptJog.raf = requestAnimationFrame(frame);
-  ptJog.watchdog = setTimeout(ptJogWatchdog, 350);
-}
-
-// The live-row context feeding the hold-at-next-cue behavior. Learned from row
-// seeks and from prompter.activeIdx on the session doc; null until either lands.
-function ptNoteLiveRow(rowNum) {
-  const n = parseInt(rowNum, 10);
-  if (Number.isFinite(n) && n >= 1 && n !== ptLiveRowNum) {
-    ptLiveRowPrev = ptLiveRowNum;
-    ptLiveRowNum = n;
-    // Rebuild the seen-holds set from geometry on every CHANGE (doc activeIdx
-    // adopted mid-roll, a seek): a header already behind the read line is
-    // crossed, never a ghost hold on the next frame.
-    ptRecalcSeenRowHolds();
-  }
-  ptRenderNextChip();
-}
-
-// Hold-release fallback (owner 9/3): a lost or evicted seek must not strand
-// the talent at HOLDING while the rundown already moved onto (or past) the
-// held boundary. The doc's activeIdx CHANGE arms a short grace window so the
-// real seek (150ms behind the activeIdx write) lands first and does the work;
-// if the hold is still set and unchanged when the window closes, the talent
-// releases on the doc alone, through the same advance path. Lives in the two
-// doc-adoption callers only, never inside ptNoteLiveRow (ptSeekToRow calls
-// that while the hold is still set). A manual pause clears ptAutoHeldRow, so
-// this never fires over an operator's pause; a backward activeIdx (held row
-// beyond it) never resumes.
-let _ptHoldReleaseTimer = null;
-function ptArmHoldReleaseFallback(newRow) {
-  if (_ptHoldReleaseTimer) { try { _ptHoldReleaseTimer.cancel(); } catch {} _ptHoldReleaseTimer = null; }
-  const n = parseInt(newRow, 10);
-  if (!Number.isFinite(n) || ptAutoHeldRow == null || ptPlaying || !(ptAutoHeldRow <= n)) return;
-  const held = ptAutoHeldRow;
-  _ptHoldReleaseTimer = steadyTimeout(() => {
-    _ptHoldReleaseTimer = null;
-    if (ptAutoHeldRow !== held || ptPlaying) return;
-    ptSeekToRow(n, { advance:true });
-  }, 600);
-}
-
-// "A caller is calling this show right now": the show caller heartbeats
-// busExecutor {clientId, ts} every 5s while on the Live screen. A stamp within
-// 60s of our clock (skew tolerance across machines) means a talent linking
-// now adopts the live row at once, instead of free-running until the next GO
-// yanks it backward. An idle doc (no fresh stamp) keeps the change-gated
-// behavior so a rehearsal read-through never locks to row 1.
-function ptCallerIsLiveOnDoc(data) {
-  const ts = Number(data?.busExecutor?.ts);
-  return Number.isFinite(ts) && Math.abs(Date.now() - ts) < 60000;
-}
-
-// Jump to line (pre-show fix plan, item 3): glide the first script line
-// containing the text to the read line. Searches FORWARD from the current
-// read position first, wrapping to the top, so repeated finds walk through
-// repeats of a phrase. Pure repositioning: never pauses, never changes the
-// live-row context, re-baselines the hold boundaries at landing like a scrub.
-function ptSeekToText(query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return Promise.resolve(false);
-  return new Promise(resolve => requestAnimationFrame(() => {
-    const text = ptEl('pt-text');
-    const track = ptEl('pt-track');
-    if (!text || !track) { resolve(false); return; }
-    const readY = ptReadY();
-    // Every block-level line the sanitizer can emit: DOCX imports render Word
-    // headings as h1-h6 and lists as li, and those are the most natural jump
-    // targets. Containers (elements with block children) are filtered so a
-    // wrapping div cannot swallow the match meant for the line inside it.
-    const lines = Array.from(text.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, div, blockquote'))
-      .filter(el => !el.querySelector('p, h1, h2, h3, h4, h5, h6, li, blockquote'));
-    if (!lines.length) { resolve(false); return; }
-    const firstAhead = lines.findIndex(l => l.getBoundingClientRect().top > readY + 4);
-    const order = firstAhead > 0 ? [...lines.slice(firstAhead), ...lines.slice(0, firstAhead)] : lines;
-    const target = order.find(l => (l.innerText || l.textContent || '').toLowerCase().includes(q));
-    if (!target) { resolve(false); return; }
-    // A find is pure repositioning: it cancels any in-flight advance's
-    // auto-resume rather than stranding the flag (which would either leave
-    // the talent parked with no hold state now, or ghost-start it on a much
-    // later advance).
-    ptPendingHoldResume = false;
-    const delta = target.getBoundingClientRect().top - readY;
-    ptGlideToOffset(ptOffset + delta, () => ptRecalcRowHolds());
-    resolve(true);
-  }));
-}
-
-function ptSeekToRow(rowNum, payload=null) {
-  const n = parseInt(rowNum, 10);
-  if (!Number.isFinite(n) || n < 1) return Promise.resolve(false);
-  // Belt and braces on the talent: an advance to a row BELOW the noted live
-  // row (or below the row the doc just moved us back from) is a backward cue
-  // by definition, so it is treated as explicit and glides. A stale or
-  // misrouted advance flag can then never pin the talent past a backward cue.
-  const backward = Number.isFinite(ptLiveRowNum)
-    && (n < ptLiveRowNum || (n === ptLiveRowNum && Number.isFinite(ptLiveRowPrev) && n < ptLiveRowPrev));
-  const advance = !!(payload && payload.advance === true) && !backward;
-  return new Promise(resolve => requestAnimationFrame(() => {
-    const text = ptEl('pt-text');
-    const track = ptEl('pt-track');
-    if (!text || !track) { resolve(false); return; }
-    const tag = `[${n}]`;
-    const headers = Array.from(text.querySelectorAll('.scr-header'));
-    const target = headers.find(h => String(h.textContent || '').trim().startsWith(tag));
-    if (!target) {
-      // The row exists in the rundown but its header is not rendered yet (the
-      // seek beat the text write): park it for one retry after the next render.
-      const total = Math.max(rowDisplayTotal(), ptDocRowTotal);
-      if (n <= total && !(payload && payload.retry)) ptPendingSeekRow = { row:n, payload:{ ...(payload || {}), retry:true } };
-      resolve(false);
-      return;
-    }
-    const readY = ptReadY();
-    const fontSize = parseFloat(getComputedStyle(target).fontSize) || 22;
-    const targetY = readY - Math.max(34, fontSize * 1.8);
-    const top = target.getBoundingClientRect().top;
-    const delta = top - targetY;
-    if (advance) {
-      // A rundown ADVANCE never travels backward (owner 9/3). Already at or
-      // inside row n (header n at/above its landing spot, header n+1 still
-      // below the read line): stay put, release the hold where the talent is.
-      // Past row n (header n+1 at/above the read line): stay put and note the
-      // live row; a hold sitting exactly at n+1 is the designed state (the
-      // next GO releases it with the normal forward settle), anything further
-      // is AHEAD for the operator rail and deck. Explicit cues keep the glide.
-      const after = headers.find(h => (ptHeaderRow(h) ?? -1) > n);
-      const afterTop = after ? after.getBoundingClientRect().top : Infinity;
-      if (top <= targetY + 8 && afterTop > readY) {
-        // A superseded advance's glide may already carry the resume intent
-        // (ptPendingHoldResume, set when it released the hold): cancelling it
-        // here must honor that, or a GO lands paused with no hold chip.
-        const resume = !ptPlaying && (ptAutoHeldRow != null || ptPendingHoldResume);
-        ptCancelGlide();
-        ptPendingHoldResume = false;
-        ptNoteLiveRow(n);
-        ptAutoHeldRow = null;
-        ptAheadOfLive = false;
-        ptRenderHoldChip();
-        ptRecalcRowHolds();
-        if (resume) ptStartPlay();
-        resolve(true);
-        return;
-      }
-      if (afterTop <= readY) {
-        if (!ptGlide) ptPendingHoldResume = false;
-        ptNoteLiveRow(n);
-        ptAheadOfLive = ptAutoHeldRow !== n + 1;
-        ptRecalcRowHolds();
-        ptRenderHoldChip();
-        resolve(true);
-        return;
-      }
-    }
-    ptAheadOfLive = false;   // a seek that moves puts the talent back in step
-    // Row cues carry rundown context: the target row is the live row, and a
-    // talent that was auto-holding at a cue boundary resumes reading once the
-    // travel lands (a manual pause is respected and stays paused; explicit
-    // pause also clears the pending resume, see ptStopPlay). The resume
-    // intent is a module flag so a rapid second advance that cancels this
-    // glide cannot swallow it: whichever glide lands last honors it.
-    if (ptAutoHeldRow != null && !ptPlaying) ptPendingHoldResume = true;
-    // No hold and no superseded travel in flight: any leftover flag is stale
-    // (e.g. a find or scrub interrupted an earlier resume) and must not fire
-    // on THIS unrelated advance. A live glide keeps the flag: that is the
-    // rapid double-advance carry working as designed.
-    else if (!ptGlide) ptPendingHoldResume = false;
-    ptNoteLiveRow(n);
-    ptAutoHeldRow = null;
-    ptRenderHoldChip();
-    ptGlideToOffset(ptOffset + delta, () => {
-      // Landing re-baselines the hold boundaries from geometry: the landed
-      // header is behind the read line, everything further is re-armed.
-      ptRecalcRowHolds();
-      if (ptPendingHoldResume && !ptPlaying) {
-        ptPendingHoldResume = false;
-        ptStartPlay();
-      } else {
-        ptPendingHoldResume = false;
-      }
-    });
-    resolve(true);
-  }));
-}
-
 // Full-screen generated slates. Instant hold + scroll pause.
 function ptShowTechSlate() {
   ptTechSlateOn = true;
@@ -17809,12 +18013,20 @@ function ptToggleFullscreen() {
   }
 }
 
+function ptToggleKeys(force) {
+  const hint = ptEl('pt-hint');
+  if (!hint) return;
+  const show = typeof force === 'boolean' ? force : hint.classList.contains('hidden');
+  hint.classList.toggle('hidden', !show);
+  const btn = ptEl('pt-keys-btn');
+  if (btn) { btn.setAttribute('aria-pressed', show ? 'true' : 'false'); btn.classList.toggle('active', show); }
+}
 function ptTogglePanel() {
   ptPanelVisible = !ptPanelVisible;
   const panel = ptEl('pt-panel');
   const hint = ptEl('pt-hint');
   if (panel) panel.classList.toggle('hidden', !ptPanelVisible);
-  if (hint) hint.classList.toggle('hidden', !ptPanelVisible);
+  if (hint && !ptPanelVisible) ptToggleKeys(false);
   ptMeasurePanelLift();
   // The bar fades with the controls (opacity only: the stage top stays put).
   const bar = ptEl('pt-bar');
@@ -18029,53 +18241,6 @@ function ptSanitizeHTML(html) {
   return doc.body.innerHTML;
 }
 
-// Reconstruct plain text (with line breaks) from the prompter DOM. Unlike
-// el.innerText, this does NOT depend on the element being visible — innerText
-// collapses to a single line when #pt-text is hidden, which would flatten the
-// shared prompterText and bunch up every script view.
-function ptExtractText(el) {
-  const parts = [];
-  el.childNodes.forEach(node => {
-    if (node.nodeType === Node.TEXT_NODE) parts.push(node.nodeValue);
-    else if (node.nodeName === 'BR') parts.push('\n');
-    else { parts.push(node.textContent); parts.push('\n'); }
-  });
-  return parts.join('')
-    .replace(/ /g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n$/, '');
-}
-
-function ptSetScriptHTML(html, sourceText) {
-  const el = ptEl('pt-text');
-  if (!el) return;
-  el.innerHTML = ptSanitizeHTML(html);
-  // When we have the original plain text (the script feed), keep it verbatim so
-  // [bracket] and **bold** markers survive. Only fall back to reading the DOM for
-  // rich imports (DOCX/Pages) that have no plain source.
-  prompterText = (sourceText != null) ? sourceText : ptExtractText(el);
-  ptScriptIsPlaceholder = false; // a real script was loaded (welcome default overrides this after)
-  ptScriptRestored = false;      // (ptLoadSavedOrDefault re-marks a localStorage restore after)
-  try { localStorage.setItem('cueola_prompter_script_html', el.innerHTML); } catch {}
-  ptResetAutoPauseMarkers();
-  ptResetScroll();
-  ptUpdateSyncLabel();
-}
-
-function ptSetScriptText(text) {
-  ptSetScriptHTML(scriptToFormattedHTML(text), text || '');
-}
-
-// Apply a pushed Cueola update WITHOUT resetting scroll or playback. Used for
-// every update after the first load so live pushes are seamless on the talent
-// screen (ptSetScriptText/ptSetScriptHTML reset scroll to the top — fine for the
-// initial render, jarring for a mid-show edit).
-function ptApplyCueolaLiveUpdate(text) {
-  prompterText = text || '';
-  try { localStorage.setItem('cueola_prompter_script_html', scriptToFormattedHTML(text || '')); } catch {}
-  ptUpdateFromCueola(text || '');   // preserves ptOffset + keeps scrolling if playing
-}
-
 // Phase 9 (D12.7 tightening): dedupe on the load PROMISE, not the script tag —
 // tag-presence resolved a second concurrent caller immediately while the first
 // load was still in flight, handing it an undefined global (rapid double
@@ -18179,8 +18344,7 @@ async function ptHandleScriptFile(file) {
       throw new Error('Unsupported file type. Use PDF, DOCX, Pages, TXT, or MD.');
     }
     const ta = ptEl('pt-script-input');
-    const textEl = ptEl('pt-text');
-    if (ta && textEl) ta.value = textEl.innerText.trim();
+    if (ta) ta.value = ptExtractText().trim();
     ptSetUploadStatus('Loaded');
     setTimeout(() => ptEl('pt-upload-status')?.classList.remove('on'), 2500);
   } catch (err) {
@@ -18193,8 +18357,7 @@ async function ptHandleScriptFile(file) {
 
 function ptDownloadText() {
   const ta = ptEl('pt-script-input');
-  const textEl = ptEl('pt-text');
-  return (ta?.value.trim()) || (textEl?.innerText.trim()) || '';
+  return (ta?.value.trim()) || ptExtractText().trim() || '';
 }
 
 function ptDownloadAsTxt() {
@@ -18227,97 +18390,6 @@ async function ptDownloadAsPDF() {
     y += 7;
   }
   downloadBlobFile(doc.output('blob'), 'flowmingo-script.pdf');
-}
-
-// Called by Cueola when script changes — scroll reset (new cue/session)
-function ptInitScriptFromCueola(text) {
-  ptSetScriptText(text || '');
-  ptUpdateSyncLabel();
-}
-
-// Anchor capture/restore for live script pushes. The old proportional-ratio
-// rescale shifted everything below an insert by a UNIFORM factor, so a
-// punch-in above the read position slid the talent off the line they were
-// reading (8/20 show). Instead: remember which line sits on the read line
-// (identified by its row block + line index within the block), and after the
-// re-render put THAT line back at the same screen position.
-function ptCaptureLineAnchor(textEl) {
-  const lines = Array.from(textEl.children);
-  if (!lines.length) return null;
-  const readY = ptReadY();
-  let best = null;
-  for (const el of lines) {
-    if (el.getBoundingClientRect().top <= readY + 2) best = el;
-    else break;   // children are in document order
-  }
-  if (!best) best = lines[0];
-  let rowNum = null, lineIdx = 0;
-  for (let cur = best; cur; cur = cur.previousElementSibling) {
-    const h = cur.querySelector?.('.scr-header');
-    if (h) { rowNum = parseInt(String(h.textContent || '').trim().replace(/^\[/, ''), 10); break; }
-    lineIdx++;
-  }
-  return { rowNum, lineIdx, screenY: best.getBoundingClientRect().top };
-}
-function ptAnchorScreenDelta(textEl, anchor) {
-  if (!anchor || !Number.isFinite(anchor.rowNum)) return null;
-  const headers = Array.from(textEl.querySelectorAll('.scr-header'));
-  const span = headers.find(h => String(h.textContent || '').trim().startsWith(`[${anchor.rowNum}]`));
-  if (!span) return null;
-  let el = span.closest('p') || span.parentElement;
-  for (let i = 0; i < anchor.lineIdx && el; i++) {
-    const next = el.nextElementSibling;
-    if (!next || next.querySelector('.scr-header')) break;   // clamp inside the block
-    el = next;
-  }
-  if (!el) return null;
-  return el.getBoundingClientRect().top - anchor.screenY;
-}
-
-// Called by Cueola on live advance — update text without interrupting scroll
-function ptUpdateFromCueola(text) {
-  const el = ptEl('pt-text');
-  if (!el) return;
-  const track = ptEl('pt-track');
-  const prevHeight = track ? track.scrollHeight : 0;
-  const anchor = track && prevHeight > 0 ? ptCaptureLineAnchor(el) : null;
-  el.innerHTML = ptPlainTextToHTML(text || '');
-  if (text && text.trim()) ptScriptIsPlaceholder = false;
-  ptResetAutoPauseMarkers();
-  ptUpdateSyncLabel();
-  if (!track) return;
-  // Synchronous restore (the rect read forces the one layout the new DOM needs
-  // anyway) and an unconditional transform write: deferring to the next frame
-  // let the crawl's queued frame paint the OLD offset against the NEW content
-  // for one frame on every push while rolling.
-  const newHeight = track.scrollHeight;
-  // Anchor-preserving first; proportional rescale only as the fallback for
-  // scripts with no recognizable row blocks (free-typed pushes).
-  const delta = anchor ? ptAnchorScreenDelta(el, anchor) : null;
-  if (delta != null) {
-    // ptShiftScrollBy carries a glide or jog in flight with the content so it
-    // still lands on the same copy after a mid-travel script push.
-    ptShiftScrollBy(delta);
-  } else {
-    if (prevHeight > 0 && newHeight > 0 && newHeight !== prevHeight) {
-      const ratio = newHeight / prevHeight;
-      ptOffset = ptOffset * ratio;
-      if (ptGlide) { ptGlide.from *= ratio; ptGlide.to *= ratio; }
-      if (ptJog) ptJog.target *= ratio;
-    }
-    track.style.transform = `translateY(-${ptOffset}px)`;
-    ptUpdateProgress();
-    // Boundaries are keyed by header number and the script re-renders on every
-    // advance: rebuild them from the new geometry so a mid-show row insert
-    // cannot leave a passed boundary armed (or a real one skipped).
-    ptRecalcRowHolds();
-  }
-  // A seek that arrived before its row was rendered retries once now.
-  if (ptPendingSeekRow) {
-    const pending = ptPendingSeekRow;
-    ptPendingSeekRow = null;
-    ptSeekToRow(pending.row, pending.payload);
-  }
 }
 
 // Connection state for the talent setup/ready indicator.
@@ -18514,6 +18586,9 @@ function ptStateSnapshot() {
     heldAtRow: ptAutoHeldRow,
     rowNum: ptCurrentRowNum(),
     ahead: !!ptAheadOfLive,
+    readLine: ptReadLinePos,
+    width: ptTextWidth,
+    ...ptTimeFields(),
     // Overlay truth rides the ack so operator windows reconcile their mirrors.
     techSlateOn: ptTechSlateOn,
     colorBarsOn: ptColorBarsOn,
@@ -19055,6 +19130,11 @@ function ptHandleRemoteControl(action, payload=null) {
     case 'mirror':     ptToggleMirror(); break;
     case 'rowinfo_on':  ptSetRowInfo(true); break;
     case 'rowinfo_off': ptSetRowInfo(false); break;
+    case 'readline_center': ptSetReadLine('center'); break;
+    case 'readline_high':   ptSetReadLine('high'); break;
+    case 'width_narrow': ptSetWidth('narrow'); break;
+    case 'width_normal': ptSetWidth('normal'); break;
+    case 'width_wide':   ptSetWidth('wide'); break;
     case 'hide_interface': ptTogglePanel(); break;
     case 'fullscreen':
       if (ptEl('promptypus')?.classList.contains('on')) ptToggleFullscreen();
@@ -19086,6 +19166,8 @@ function prompterControlLabel(action) {
     clock_size_up:'Clock bigger', clock_size_down:'Clock smaller',
     question_on:'Question indicator', question_off:'Question cleared',
     rowinfo_on:'Row info on', rowinfo_off:'Row info off',
+    readline_center:'Read line center', readline_high:'Read line high',
+    width_narrow:'Narrow text', width_normal:'Normal text width', width_wide:'Wide text',
     overlays_clear:'Clear all overlays'
   };
   if (action?.startsWith('theme_')) return `${CUEOLA_THEME_LABELS[action.replace('theme_', '')] || 'Theme'} theme`;
@@ -19325,6 +19407,11 @@ function flowOpApplyControlPreview(action, quiet=false, payload=null) {
       case 'slate_bars_off': setFlowOpSlateState('off'); break;
       case 'rowinfo_on': ptRowInfoOn = true; break;
       case 'rowinfo_off': ptRowInfoOn = false; break;
+      case 'readline_center': ptReadLinePos = 'center'; break;
+      case 'readline_high': ptReadLinePos = 'high'; break;
+      case 'width_narrow': ptTextWidth = 'narrow'; break;
+      case 'width_normal': ptTextWidth = 'normal'; break;
+      case 'width_wide': ptTextWidth = 'wide'; break;
       case 'pause': flowOpPlaying = false; break;
       case 'resume': flowOpPlaying = true; break;
       case 'speed_up': flowOpSetSpeed(ptTargetSpeed + 10); break;
@@ -19445,6 +19532,7 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}>Right</button>
       </div>
     </div>
+    ${poLayoutSectionHTML('flow', 'flowOpSendControl', 'flowop', disabled)}
     <div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
@@ -19528,6 +19616,16 @@ function flowOpSyncControls() {
   });
   const rowInfo = flowOpEl('flowOpRowInfo');
   if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
+  document.querySelectorAll('[data-flowop-readline]').forEach(btn => {
+    const active = btn.dataset.flowopReadline === ptReadLinePos;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-flowop-width]').forEach(btn => {
+    const active = btn.dataset.flowopWidth === ptTextWidth;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   // The Position slider follows the talent's reported spot, so Play from
   // here starts where the talent is instead of at the top of the script.
   const seek = flowOpEl('flow-seek');
@@ -19901,8 +19999,7 @@ function openPrompterFromFlowOp() {
 function ptOpenEdit() {
   ptStopPlay();
   const ta = ptEl('pt-script-input');
-  const textEl = ptEl('pt-text');
-  if (ta && textEl) ta.value = textEl.innerText.trim();
+  if (ta) ta.value = ptExtractText().trim();
   const codeIn = ptEl('pt-cueola-code-input');
   if (codeIn && (ptLinkedCueolaCode || session?.code)) codeIn.value = ptLinkedCueolaCode || session.code;
   const ov = ptEl('pt-edit-overlay');
@@ -20256,7 +20353,10 @@ function enterPrompter() {
   ptSetTheme(ptThemeName);
   ptSetAlign(ptAlign);
   ptSetSize(ptFontSize);
+  ptSetReadLine(ptReadLinePos, { persist:false });
+  ptSetWidth(ptTextWidth, { persist:false });
   ptSetRowInfo(ptRowInfoOn, { persist:false });
+  requestAnimationFrame(() => { ptInvalidateLayout(); ptMeasureTrack(); ptPaint(); ptUpdateProgress(); ptRenderReadout(); });
   ptWatchPanelLift();
   const storedOverlay = ptStoredOverlaySize();
   if (storedOverlay != null) ptSetOverlaySize(storedOverlay, { persist:false });
@@ -20295,7 +20395,11 @@ function enterPrompter() {
       case 'r': case 'R': ptResetScroll(); break;
       case 'h': case 'H': ptTogglePanel(); break;
       case 'm': case 'M': ptToggleMirror(); break;
+      case 'l': case 'L': ptToggleReadLine(); break;
+      case 'w': case 'W': ptCycleWidth(); break;
+      case 'k': case 'K': case '?': ptToggleKeys(); break;
       case 'Escape':
+        if (ptEl('pt-hint') && !ptEl('pt-hint').classList.contains('hidden')) { ptToggleKeys(false); break; }
         if (document.fullscreenElement || document.webkitFullscreenElement) {
           (document.exitFullscreen || document.webkitExitFullscreen).call(document);
         } else if (ptPlaying) {
@@ -20323,6 +20427,7 @@ function enterPrompter() {
   if (stage && !stage._ptPointer) {
     stage._ptPointer = true;
     let pointerId = null, startY = 0, startedAt = 0, dragged = false;
+    let lastTapAt = 0, lastTapY = 0, tapTimer = null, tapTarget = null;
     const release = (e, allowTap=false) => {
       if (pointerId == null || (e?.pointerId != null && e.pointerId !== pointerId)) return;
       const dy = Number(e?.clientY || startY) - startY;
@@ -20332,7 +20437,20 @@ function enterPrompter() {
       dragged = false;
       ptBraking = false;
       ptBoosting = false;
-      if (tap) ptTogglePlay();
+      if (!tap) return;
+      // Two taps on the same spot cue that line to the read line; one tap
+      // plays or pauses, after a short wait to see if a second one follows.
+      const now = Date.now();
+      if (now - lastTapAt < 320 && Math.abs(Number(e?.clientY || 0) - lastTapY) < 40) {
+        clearTimeout(tapTimer); tapTimer = null;
+        lastTapAt = 0;
+        ptCueElement(tapTarget);
+        return;
+      }
+      lastTapAt = now;
+      lastTapY = Number(e?.clientY || 0);
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { tapTimer = null; ptTogglePlay(); }, 300);
     };
     stage.addEventListener('pointerdown', e => {
       if (!e.isPrimary || isInteractiveTarget(e.target)) return;
@@ -20340,6 +20458,7 @@ function enterPrompter() {
       startY = e.clientY;
       startedAt = Date.now();
       dragged = false;
+      tapTarget = e.target;
       try { stage.setPointerCapture(pointerId); } catch {}
       e.preventDefault();
     });
