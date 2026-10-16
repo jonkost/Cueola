@@ -1482,7 +1482,16 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   // Stale mirrors drop on degraded/lost; the deck reads mirror freshness and
   // talent truth; the doc seed is honest when no talent mirror exists.
   const transition = app.slice(app.indexOf('function projectTalentLinkTransition('), app.indexOf('let _talentNudgeTimer'));
-  assert.match(transition, /_dropTalentTransportMirror\(\)/);
+  assert.match(transition, /if \(link\.status === 'lost'\) _dropTalentTransportMirror\(\);/);
+  // 10/16: degraded is a quiet note (no handshake reset, no RECOVERING, no
+  // Recover button); only lost resets and asks. Any talent's beat keeps the
+  // link alive, so a second talent window cannot sawtooth it.
+  const degraded = transition.slice(transition.indexOf("link.status === 'degraded'"), transition.indexOf("link.status === 'lost') {"));
+  assert.doesNotMatch(degraded, /markDisconnected|projectPrompterSessionStatus\('recovering'/);
+  assert.match(degraded, /'Talent heartbeat is late'/);
+  assert.match(app, /liveLinkState\.configure\('talent',   \{ label:'Talent',   ackIntervalMs:2000, degradeMisses:4, lostMisses:8 \}\);/);
+  assert.match(app, /if \(_activePrompterOutputInstanceId && outputId !== _activePrompterOutputInstanceId\) \{\n      _noteAnyTalentAlive\(msg\);/);
+  assert.match(app, /function _noteAnyTalentAlive\(msg=\{\}\) \{[\s\S]{0,400}liveLinkState\.noteAck\('talent'/);
   assert.match(app, /connected: _sdSafe\(\(\) => _talentMirrorFresh\(\), false\)/);
   assert.doesNotMatch(app, /prompterTalentConnected/);
   // KEYMAP playpause + toggle, and the control bus 'toggle' verb (cross-machine deck).
@@ -1899,7 +1908,7 @@ test('leaving Live is one sheet: consequences, optional toggles, Stay/Leave, out
   // Stale talent mirrors are dropped when the same-device window is observed
   // closed (3.0: the per-second link body runs from the one Live loop).
   const ticker = app.slice(app.indexOf('function liveLinkTickBody()'), app.indexOf('function ensureLiveLinkTicker()'));
-  assert.match(ticker, /if \(ptPlaying && !_prompterHasRecentTalent\(\)\) _dropTalentTransportMirror\(\);/);
+  assert.match(ticker, /if \(ptPlaying && liveLinkState\.getLink\('talent'\)\?\.status === 'lost'\) _dropTalentTransportMirror\(\);/);
 });
 
 test('show clock survives leaving Live; Back on Live is the same sheet; refusals name the Live screen (9/4 slice A4)', () => {

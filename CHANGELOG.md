@@ -2,6 +2,19 @@
 
 ## Next release (not pushed yet)
 
+### The prompter link stops flashing Recover (Oct 16)
+
+**"Recover Flowmingo" kept flashing on show day.** The Live screen judged
+the talent link on a single talent window: after three missed heartbeats
+(six seconds, which cloud delivery alone can take) it reset the handshake,
+showed RECOVERING with a Recover button, resent the whole state, then undid
+all of it on the next beat. A second talent window on the show (a helper
+checking the script on their laptop, an old tab) made it worse, because the
+two windows share one heartbeat slot and the pinned one then answered half as
+often. Now any talent on the show answering keeps the link up, a late
+heartbeat is a quiet note ("Talent heartbeat is late") that changes nothing,
+and only sixteen seconds of real silence asks for a recovery.
+
 ### The prompter, rebuilt (Oct 16)
 
 **The talent screen moves as one piece now.** It used to have three separate

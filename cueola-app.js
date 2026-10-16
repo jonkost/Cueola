@@ -730,9 +730,10 @@ const LIVE_LINK_LABELS = Object.freeze({ cloud:'CLOUD', talent:'TALENT', playout
 // Firestore echoes only arrive when something writes — no fixed cadence, so no
 // tick watchdog; the cloud link moves on explicit ack/degraded/lost signals.
 liveLinkState.configure('cloud',    { label:'Cloud',    watchdog:false });
-// Talent heartbeats every 2s (PROMPTER_HEARTBEAT_MS). Degrade at 3 misses to
-// match the old watchdog's recovery point; lost at 8 (~16s of silence).
-liveLinkState.configure('talent',   { label:'Talent',   ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
+// Talent heartbeats every 2s (PROMPTER_HEARTBEAT_MS). Degrade at 4 misses
+// (8s: cloud delivery alone can gap 6s and that read as "not answering" on
+// show day, Jon 10/16); lost at 8 (~16s of silence).
+liveLinkState.configure('talent',   { label:'Talent',   ackIntervalMs:2000, degradeMisses:4, lostMisses:8 });
 liveLinkState.configure('playout',  { label:'Playout',  ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
 liveLinkState.configure('scriptop', { label:'Script Op', ackIntervalMs:2000, degradeMisses:3, lostMisses:8 });
 
@@ -768,15 +769,18 @@ function projectTalentLinkTransition(link, previousStatus) {
   // A silent talent has no transport truth: drop the rolling mirror in every
   // operator window before the runtime gate, so the deck and the pop-out
   // never keep showing PAUSE for a talent nobody can hear.
-  if (link.status === 'degraded' || link.status === 'lost') _dropTalentTransportMirror();
+  if (link.status === 'lost') _dropTalentTransportMirror();
   if (!_prompterOperatorRuntimeActive) return;
   if (link.status === 'connected') {
     _setPrompterStatus(true);
   } else if (link.status === 'degraded') {
-    // Same recovery point as the old watchdog: reset the handshake so the
-    // returning talent re-applies state, and say so without flapping.
-    prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, 'Missed talent heartbeats');
-    projectPrompterSessionStatus('recovering', 'The talent screen is not answering');
+    // A late heartbeat is a note, not an alarm: the status keeps its color,
+    // the handshake stays, nothing is resent, and no Recover button appears.
+    // Degraded used to reset the handshake and flash RECOVERING after 6s of
+    // cloud lag, then undo it on the next beat (Jon 10/16: "kept flashing
+    // recover"). Only LOST (16s) asks for a recovery.
+    const current = liveSessionController.getState().subsystems?.prompter?.status;
+    if (current && !['closed','opening','disconnected','error'].includes(current)) setLiveSubsystemStatus('prompter', current, 'Talent heartbeat is late');
   } else if (link.status === 'lost') {
     prompterSessionController.markDisconnected(_activePrompterOutputInstanceId, link.detail || 'Talent lost');
     // The model keeps the last ack detail ("Talent connected") when it demotes.
@@ -829,7 +833,7 @@ function liveLinkTickBody() {
     if (!['lost','off'].includes(liveLinkState.getLink('talent')?.status)) {
       liveLinkState.noteLost('talent', 'Talent window closed');
     }
-    if (ptPlaying && !_prompterHasRecentTalent()) _dropTalentTransportMirror();
+    if (ptPlaying && liveLinkState.getLink('talent')?.status === 'lost') _dropTalentTransportMirror();
   }
   liveLinkState.tick();
   if (document.getElementById('liveshow')?.classList.contains('on')) syncOutrangutanControllerStatus();
@@ -14100,6 +14104,19 @@ function _latestTalentSightingTs() {
   return vals.length ? Math.max(...vals) : 0;
 }
 
+// A heartbeat from a talent other than the pinned one: the show HAS a talent
+// answering, so the link stays connected and the status line keeps its
+// color. Nothing else is adopted from it (position, transport and readiness
+// stay with the pinned output); the rebind rules decide whether it becomes
+// the pinned one.
+function _noteAnyTalentAlive(msg={}) {
+  if (isPrompterSelfSender(msg.sender)) return;
+  _recordTalentSighting(msg.sender);
+  if (!_prompterOperatorRuntimeActive) return;
+  lastTalentPingTs = Date.now();
+  const link = liveLinkState.getLink('talent');
+  liveLinkState.noteAck('talent', link?.detail || 'Talent connected');
+}
 function _notePrompterTalentSeen(msg={}) {
   if (isPrompterSelfSender(msg.sender)) return false;
   _recordTalentSighting(msg.sender);
@@ -14385,6 +14402,7 @@ function _handlePrompterOperatorMessage(msg) {
     if (!outputId) return;
     _noteTalentRegistry(outputId, msg);   // every ACCEPTED heartbeat, pinned or not
     if (_activePrompterOutputInstanceId && outputId !== _activePrompterOutputInstanceId) {
+      _noteAnyTalentAlive(msg);
       // Rebind on EVIDENCE only, never on "newer ts": two live talents
       // interleave 2s beats in the single heartbeat slot and a ts rule would
       // rebind (and re-seed) on every beat. Evidence is (a) the pinned talent
