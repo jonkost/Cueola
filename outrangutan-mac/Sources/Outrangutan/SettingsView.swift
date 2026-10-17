@@ -7,6 +7,7 @@ struct SettingsView: View {
     @ObservedObject var engine: Engine
     let midi: MidiInput
     let watch: WatchFolder
+    let deck: StreamDeckController
 
     var body: some View {
         TabView {
@@ -20,6 +21,8 @@ struct SettingsView: View {
                 .tabItem { Label("Keys", systemImage: "keyboard") }
             MidiSettings(midi: midi, engine: engine)
                 .tabItem { Label("MIDI", systemImage: "pianokeys") }
+            StreamDeckSettings(deck: deck)
+                .tabItem { Label("Stream Deck", systemImage: "square.grid.3x3.square") }
             ObsSettings(obs: ObsClient.shared)
                 .tabItem { Label("OBS", systemImage: "video.circle") }
         }

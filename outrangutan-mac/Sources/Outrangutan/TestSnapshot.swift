@@ -363,6 +363,7 @@ enum TestSnapshot {
         case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
         case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
         case "preload": steps = preloadSteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
+        case "deck": steps = deckSteps(engine: engine, dir: dir, note: note, state: state)
         case "idle": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

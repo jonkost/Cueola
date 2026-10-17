@@ -94,6 +94,18 @@ enum ShowCheck {
         }
 
         // Links
+        // A Stream Deck on this Mac
+        if let deck = StreamDeckController.shared, deck.enabled {
+            switch deck.state {
+            case .connected:
+                items.append(CheckItem(level: .good, title: "\(deck.modelName) is connected", detail: "Its keys drive this Mac directly."))
+            case .trouble:
+                items.append(CheckItem(level: .problem, title: "The Stream Deck could not be opened", detail: deck.message))
+            default:
+                items.append(CheckItem(level: .warning, title: "No Stream Deck is plugged into this Mac",
+                                       detail: "Fine if the deck is on another Mac: its keys come through the cloud. Otherwise plug it in, or turn the deck off in Settings, Stream Deck."))
+            }
+        }
         if !link.code.isEmpty {
             items.append(link.phase == .linked
                 ? CheckItem(level: .good, title: "Connected to show \(link.code)", detail: "The rundown and KeyWi Bird reach this Mac.")

@@ -66,7 +66,7 @@ struct OutrangutanApp: App {
         .defaultSize(width: 1280, height: 720)
 
         Settings {
-            SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch)
+            SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch, deck: appDelegate.deck)
         }
     }
 }
@@ -239,6 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var scopes = Scopes(engine: engine)
     let obs = ObsClient.shared
     lazy var watch = WatchFolder(engine: engine)
+    lazy var deck = StreamDeckController(engine: engine)
     private var keyWatcher: Any?
     private var showActivity: NSObjectProtocol?
 
@@ -291,6 +292,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = midi
         _ = direct
         _ = watch
+        // A Stream Deck plugged into this Mac. Test mode hands over a
+        // pretend one instead of looking on USB.
+        if !TestSnapshot.isOn { deck.start() }
         obs.onScene = { [weak self] scene in self?.engine.obsSceneChanged(scene) }
         obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
         engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }

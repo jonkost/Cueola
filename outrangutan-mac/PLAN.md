@@ -27,17 +27,17 @@ shape. That means:
 - The web Outrangutan and the Mac app can take turns on the same show while
   we test. Only run one of them at a time on a show.
 
-## One Stream Deck for both apps
+## Stream Decks
 
-Only one program at a time can hold a Stream Deck. That stays KeyWi Bird,
-in the browser, the way it works now. KeyWi keeps running the rundown,
-prompter, talkback and OBS keys, and its playback keys reach the Mac app.
+A deck plugged into the playback Mac is driven by the Mac app itself (Oct
+16): GO, Pause, Stop, Fade, All Stop, the cues and the pads on keys, and on
+a Stream Deck + the volume and the standby on dials with the clock on the
+strip. No browser and no Elgato software on that Mac.
 
-- **Deck on a different Mac from the playback Mac** (the Pro + Air rig):
-  keys go through the shared record, like today.
-- **Deck on the same Mac as the playback Mac:** the direct link (built in
-  step 6): turn on Outrangutan for Mac in KeyWi's Deck settings, and
-  playback keys land at once and keep working with the internet down.
+A deck on a different Mac (the director's, running the rundown) stays with
+KeyWi Bird in the browser there, and its playback keys reach the Mac app
+through the cloud, as before. Only one program at a time can hold a deck,
+so a deck is either the Mac app's or KeyWi Bird's, never both.
 
 ## Every tool, and what gets better
 
@@ -86,6 +86,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Layouts: Cues, SFX, or both | Built | Not in the web app. View, Both (Command-3) shows the SFX pads beside the cues or under them, divider draggable; the transport row can be hidden for key and deck drivers. |
 | Cue hotkeys and Go to Cue | Built | Not in the web app. A cue can have a key that fires it from anywhere (Inspector); the key shows on its row and rides in the show file. Go to Cue (Command-J) jumps the standby by number or name. |
 | Ducking | Built | Not in the web app. Settings, Sound: cue sound dips 6, 12 or 20 dB while any pad sounds (a music bed under a stinger) and comes back over about a second. |
+| A Stream Deck driven by the app | Built (Oct 16) | The deck on the playback Mac needs no browser. Keys show the cues by number, red on air and green standing by, and the pads with their emoji; a + gets a volume dial, a standby dial and the clock on the strip. Tried on a pretend deck; the real XL and + are Jon's to try. |
 | Not possible on the web | Step 8 | SDI out through a Blackmagic card, NDI to the switcher, key and fill. Until the cards are in: OBS on the same Mac can capture the output window and send NDI. |
 
 ## How we test each step

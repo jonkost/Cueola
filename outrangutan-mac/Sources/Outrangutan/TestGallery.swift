@@ -31,6 +31,7 @@ extension TestSnapshot {
                     ("settings-keys", AnyView(KeySettings(board: engine.pads)), CGSize(width: 560, height: 470)),
                     ("settings-midi", AnyView(MidiSettings(midi: midi, engine: engine)), CGSize(width: 560, height: 470)),
                     ("settings-obs", AnyView(ObsSettings(obs: ObsClient.shared)), CGSize(width: 560, height: 470)),
+                    ("settings-streamdeck", AnyView(StreamDeckSettings(deck: deckForGallery(engine))), CGSize(width: 560, height: 470)),
                     ("connect", AnyView(ConnectView(link: link)), CGSize(width: 460, height: 420)),
                     ("show-check", AnyView(ShowCheckView(engine: engine, link: link)), CGSize(width: 560, height: 560)),
                     ("show-log", AnyView(ShowLogView(log: engine.log) { "Gallery" }), CGSize(width: 720, height: 480)),
@@ -45,4 +46,12 @@ extension TestSnapshot {
             (2.0, { note("done") }),
         ]
     }
+}
+
+/// Settings, Stream Deck as it looks with an XL plugged in.
+@MainActor
+private func deckForGallery(_ engine: Engine) -> StreamDeckController {
+    let deck = StreamDeckController(engine: engine)
+    deck.attach(FakeDeckTransport(productID: 0x006c))
+    return deck
 }

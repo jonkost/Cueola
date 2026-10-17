@@ -53,7 +53,8 @@ struct HelpView: View {
                 "File, Connect to a Show (Command-K): sign in the way you sign in to Cueola, and type the show code.",
                 "Then the director's TAKE on the rundown and KeyWi Bird's playback keys fire cues here.",
                 "The light in the toolbar is green when the show is heard. A lightning bolt means KeyWi Bird on this Mac is linked directly.",
-                "On the Mac with the Stream Deck, turn on Outrangutan for Mac in KeyWi Bird's Deck settings. Keys then arrive at once, even with the internet down.",
+                "A Stream Deck plugged into this Mac works on its own: the app drives it, no browser. GO, Pause, Stop, Fade and All Stop on the first keys, then the cues (red on air, green standing by), then the pads. A Stream Deck + puts the volume on dial 1 (press to mute), the standby on dial 2 (press for GO), and the clock on the strip. Quit the Elgato Stream Deck app first. Settings, Stream Deck has the switch and the brightness.",
+                "A Stream Deck on another Mac keeps working through KeyWi Bird in the browser there; its keys reach this Mac through the cloud.",
             ]),
             Topic(id: "before", title: "Before the Show", symbol: "checkmark.seal", lines: [
                 "Click Show Check in the toolbar. Fix everything red; look at everything orange.",

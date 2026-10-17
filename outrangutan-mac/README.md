@@ -104,6 +104,20 @@ for students running the show.
 - **Lock Editing** (the lock in the toolbar, or Shift-Command-L) keeps a
   stray click from changing the show: nothing can be added, removed, moved
   or edited. GO, the show keys, pads, the rundown and the deck still work.
+- **Stream Deck:** plug an Elgato Stream Deck into this Mac and the app
+  drives it itself, no browser and no Elgato software (quit the Elgato
+  Stream Deck app first). The first keys are GO, Pause, Stop, Fade and All
+  Stop, with their keyboard keys printed on them; then the cues, with their
+  numbers, red while on air and green while standing by (the XL shows
+  sixteen at a time, the page the standby is on; the 15-key decks five);
+  then the pads of the current bank, with their emoji. The XL also gets
+  VOL −, VOL + and MUTE keys. A Stream Deck + puts the volume on dial 1
+  (press it to mute), the standby on dial 2 (press it for GO), and shows
+  the volume, what stands by, what is on air and the clock on its strip.
+  **Settings, Stream Deck** has the on-off switch and the brightness. A
+  deck on another Mac keeps working through KeyWi Bird in the browser
+  there. Tried on the XL and the + so far; the Mini and the 2017 deck use
+  the older bitmap pictures and have not been tried.
 - **MIDI:** plug in any MIDI box (pad controller, fader box, keyboard). In
   **Settings, MIDI**, click **Learn a Control**, touch a button or fader,
   then pick what it does: GO, Pause, Stop, Fade, All Stop, a cue, a pad, or
@@ -364,6 +378,11 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   files dropped between rows.
 - `stream`: the live line against the pretend cloud: a fire runs the moment
   it is written, one GO makes one write, and a busy cloud is waited out.
+- `deck`: a pretend Stream Deck XL, then a pretend Stream Deck +: every
+  key's picture put back together from the reports and laid out as a
+  sheet (deck-xl.png, deck-plus.png, deck-plus-strip.png), GO, a cue key,
+  a pad key, the volume keys, the cue page turning with the standby, the
+  dials and the strip.
 - `idle`: four cues and nothing else for about twenty seconds, with each
   row's place on the screen written to rows.txt, so a script can drag a
   real row with the mouse and the log shows the order after.
@@ -410,6 +429,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Scopes.swift` | The program preview strip, waveform and vectorscope |
 | `DirectLink.swift` | The direct link from Cueola on this Mac |
 | `Midi.swift` | MIDI boxes and Settings, MIDI |
+| `StreamDeck.swift` | A Stream Deck on this Mac: key pictures, what each key does, USB, and Settings, Stream Deck |
+| `TestDeck.swift` | The pretend Stream Deck for test mode |
 | `HelpView.swift` | Outrangutan Help, in plain words |
 | `Keys.swift` | The show keys and Settings, Keys |
 | `ShowLog.swift` | The show log and its window |
@@ -433,4 +454,5 @@ so `swift test` can check each one:
 | `MidiRouter.swift` | What a MIDI message does, the same rules as the web app |
 | `ScopeMath.swift` | The waveform and vectorscope math (Rec. 709) |
 | `ShowArchive.swift` | The show file's zip: writing and reading it in slices, and its checksum |
+| `StreamDeckProtocol.swift` | Every byte to and from a Stream Deck: the models, key states, dials, pictures cut into reports |
 | `ListenStream.swift` | The live line's request, and its messages read as they arrive |
