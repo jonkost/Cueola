@@ -3956,6 +3956,10 @@ input.pt-range::-moz-range-thumb,
    palettes (flamingo purple measured 4.32:1). Pushing it toward the panel ink
    keeps the accent identity and clears 4.5:1 on all nine themes. */
 .pb-modal-kicker{font-size:12px;font-weight:700;color:color-mix(in srgb,var(--accent) 76%,var(--text));margin-bottom:3px}
+/* The hub's standing reminder (Jon, 2026-10-16): no personal information in
+   the paperwork or the notes. One quiet line under the subtitle, yellow mark. */
+.pb-privacy-note{display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:8px 12px;border-radius:10px;background:color-mix(in srgb,var(--yellow) 10%,transparent);color:var(--text2);font-family:var(--sans);font-size:12.5px;line-height:1.45;letter-spacing:0;text-transform:none}
+.pb-privacy-note .sf-symbol{color:var(--yellow);flex:none;font-size:14px;margin-top:2px}
 .pb-modal-header .modal-title,.paperwork-modal-head .modal-title{font-size:clamp(20px,2.4vw,28px);font-weight:800;letter-spacing:0}
 .pb-modal-sub,.paperwork-modal-head .modal-sub{font-size:13px;color:var(--ui-label-secondary);max-width:720px}
 /* The mark box and the artwork are the SAME size on purpose: a 74px icon in a
@@ -6076,11 +6080,12 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <div class="modal pb-modal pb-hub-modal">
     <div class="pb-modal-header">
       <div class="pb-brand-lockup">
-        <div class="pb-brand-mark"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg></div>
+        <button type="button" class="pb-brand-mark u-btn-bare" onclick="goHome({closePlandaBear:true})" data-tip="Go to the front page" aria-label="Go to the front page"><svg class="brand-ico" aria-hidden="true"><use href="#ic-plandabear"/></svg></button>
         <div class="pb-brand-copy">
           <div class="pb-modal-kicker" id="pbHubShowLine">Show paperwork</div>
           <div class="modal-title">Plan<span class="brand-hi">da Bear</span></div>
           <div class="pb-modal-sub">Your paperwork in show order. Everything saves as you type, and the PDF comes out exactly like the preview.</div>
+          <div class="pb-privacy-note" role="note"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Keep personal information out of the paperwork and the notes: no personal phone numbers, home addresses or personal emails. Contact lines are production numbers.</span></div>
         </div>
       </div>
       <div class="plandabear-tools">
@@ -6223,7 +6228,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <div class="field"><label class="field-lbl">Estimated Wrap</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-wrap" type="time" oninput="setWrapNotApplicable(false)"><button class="field-action-btn" type="button" onclick="estimateWrapFromRundown()" data-tip="Fill in the wrap time: show start (or call time) plus the rundown's total time">Rundown</button><button class="field-action-btn" id="pp-wrap-na" type="button" onclick="toggleWrapNotApplicable()" aria-pressed="false">N/A</button></div><div class="field-hint">Tap Rundown to fill this in: show start plus the rundown's total time.</div></div>
         <div class="field"><label class="field-lbl">Doors Open</label><div class="field-with-action"><input class="field-in field-narrow" id="pp-doors" type="time" oninput="setDoorsNotApplicable(false)"><button class="field-action-btn" id="pp-doors-na" type="button" onclick="toggleDoorsNotApplicable()" aria-pressed="false">N/A</button></div></div>
         <div class="field"><label class="field-lbl">Late / Lost Contact Name</label><input class="field-in" id="pp-late-name" maxlength="80" placeholder="e.g. Sam"><div class="field-hint">Who to text if you are running late.</div></div>
-        <div class="field"><label class="field-lbl">Late / Lost Contact Number</label><input class="field-in" id="pp-late-phone" maxlength="40" inputmode="tel" placeholder="e.g. (555) 210-8100"><div class="field-hint">Their phone number.</div></div>
+        <div class="field"><label class="field-lbl">Late / Lost Contact Number</label><input class="field-in" id="pp-late-phone" maxlength="40" inputmode="tel" placeholder="e.g. (555) 210-8100"><div class="field-hint">A production number (the studio line or the class phone), never anyone's personal number.</div></div>
       </div>
     </div>
     <div class="prepro-section">
@@ -6275,7 +6280,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     </div>
     <div class="prepro-section">
       <div class="prepro-section-title"><span>Crew / Talent Contacts<button type="button" class="info-btn" aria-label="What the crew and talent contacts section is for" onclick="toggleInfoPop(event,'cs-crew')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button></span></div>
-      <div class="field-hint">Type directly in the row below. Use Add person when you need another row.</div>
+      <div class="field-hint">Type directly in the row below. Use Add person when you need another row. No personal phone numbers or personal emails: list the position and the production's contact line.</div>
       <div class="call-grid" id="pp-crew-grid"></div>
       <div class="field-hint" id="pp-crew-roster-hint" hidden></div>
       <button class="call-add-btn" onclick="addCallSheetPerson()"><span class="sf-symbol" data-symbol="action.add" aria-hidden="true"></span><span>Add person</span></button>
@@ -6493,7 +6498,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(false)" data-tip="Insert a bulleted list">•&nbsp;List</button>
             <button type="button" class="pb-fmt-btn" onmousedown="event.preventDefault()" onclick="pbFmtList(true)" data-tip="Insert a numbered list">1.&nbsp;List</button>
           </div>
-          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
+          <textarea id="pbNoteInput" rows="1" placeholder="Share a note with the crew. Type @ to mention someone. No personal phone numbers or addresses." oninput="saveProductionNoteDraft();pbAutosizeNoteInput(this);pbMentionOnInput(this,'main')" onkeydown="pbNoteInputKeydown(event)" onblur="setTimeout(pbMentionClose,120)" onpaste="pbNotePaste(event,'main')"></textarea>
           <div class="pb-attach-tray" id="pbAttachTray" hidden></div>
           <div class="field-hint pb-attach-cap-hint">Files up to 4 MB each. Use mp3 or m4a for sound. Photos are made smaller to fit.</div>
           <div class="pb-checklist-builder" id="pbChecklistBuilder"></div>
