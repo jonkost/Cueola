@@ -42,7 +42,14 @@ for students running the show.
   **Add Matte** (a solid color picture), **Outputs**, the connection light,
   and the **Inspector** button.
 - Drag videos, sounds or stills into the window, or click **Add Media**.
+  Dropped between two rows of the list, they land there. Media dropped on
+  the Dock icon joins the list too. (While editing is locked, a drop says so
+  under the clock instead of doing nothing.)
 - Click a cue to stand it by. Drag cues to reorder them.
+- The cue standing by is loaded ahead of its GO: the file is open, the
+  first frames are decoded and the picture path is warm, so GO shows its
+  first frame in about a tenth of a second and the first seconds play
+  clean. A still standing by is read from disk ahead too.
 - **Edit, Undo** (Command-Z) and **Redo** (Shift-Command-Z) take back any
   change to the cues or pads: adding, removing, moving, Inspector changes (a
   slider drag is one step) and pad edits. Opening or starting a show clears
@@ -67,6 +74,10 @@ for students running the show.
     a green screen), Luma (take out the dark parts, for graphics on black)
     or Alpha (the file's own see-through parts), filled with a background
     color. It runs on the graphics card at full size and changes on air.
+    A still gets the Alpha key too: a see-through PNG (a lower third) shows
+    over the background color, which fills the screen behind it. Pick
+    Chroma green or Chroma blue from the Background menu for a key
+    downstream; the color well takes any other color.
 - **Outputs** in the toolbar opens or closes every output. Its menu opens
   one at a time and has **Identify**, which puts each output's number on its
   screen for three seconds.
@@ -200,10 +211,19 @@ The light turns green: "Connected to" and the code. From then on:
 - The rundown cell, the deck's playback strip and the Go Live checks show
   what is on air here.
 
-The Mac checks the show about four times a second. Everything plays on this
-Mac first, so if the internet drops, the show keeps going and only the link
-waits. The sign-in lasts until the app quits; the PIN or password is never
-saved.
+The cloud sends the show to the Mac the moment it changes (a live line,
+opened when the Mac joins), and the Mac also reads the show every two
+seconds as the safety net, or five times a second while the live line is
+down. A fire from the rundown or a deck on another Mac lands here as fast
+as the cloud can carry it. Everything plays on this Mac; the internet only
+carries the commands and the answers. One Wi-Fi hiccup is not reported:
+reads must fail for five seconds, or three in a row, before the log says
+so. What is on air is written at most every two seconds while playing (the
+rundown and the deck count down on their own from the clip's start time),
+and everything one GO produces goes out as one write: the show record is
+one document everyone writes to, and the cloud refuses writes past about
+one a second. When it does, the Mac waits a little longer each time and
+sends the newest values when it can.
 
 Run only one Outrangutan on a show at a time: this app or the web one.
 
@@ -334,6 +354,19 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   scene change.
 - `key`: color bars with the green bar keyed out, then a luma key switched
   on while on air; reads the real frames.
+- `stillkey`: a see-through PNG (a lower third drawn by the test) standing
+  over a chroma green background, then the key switched off on air; reads
+  the real output pixels.
+- `preload`: the cue standing by, loaded ahead: three GOs on a cue loaded
+  ahead and three on one that was not, each timed from GO to the first
+  frame on screen and to the picture moving, with the frames handed over
+  each quarter second; then a sound loaded ahead, a still read ahead, and
+  files dropped between rows.
+- `stream`: the live line against the pretend cloud: a fire runs the moment
+  it is written, one GO makes one write, and a busy cloud is waited out.
+- `idle`: four cues and nothing else for about twenty seconds, with each
+  row's place on the screen written to rows.txt, so a script can drag a
+  real row with the mouse and the log shows the order after.
 - `scopes`: color bars, a still and a red matte through the preview and the
   scopes; saves each scope and the frame it read.
 - `listen`: joins show WEBTEST and waits a minute, for trying the direct
@@ -367,7 +400,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Cue.swift` | What a cue is, saving the show, and the crash note |
 | `WatchFolder.swift` | Watching a folder (Dropbox, Google Drive) for new media |
 | `Obs.swift` | OBS Studio control and Settings, OBS |
-| `SoundTap.swift` | Listens to cue sound for the meter, without changing it |
+| `SoundTap.swift` | Listens to cue sound on the cue sound engine's channel pairs |
+| `SoundEnvelope.swift` | Each clip's level over time, read ahead, for the cue meter |
 | `Thumbnails.swift` | The small pictures in the cue list |
 | `ShowCheck.swift` | Show Check: the before-the-show checklist |
 | `Recorder.swift` | Recording a sound effect onto a pad |
@@ -382,7 +416,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 | `Printer.swift` | Printing the cue sheet and the log |
 | `ShowFiles.swift` | New, Open and Save: show files the web app shares |
 | `ShowLink.swift` | The link to a show: reading commands, answering, telling the rundown what is on air |
-| `CloudClient.swift` | Signing in and reading and writing the show record |
+| `CloudClient.swift` | Signing in, reading and writing the show record, and the live line |
 | `ConnectView.swift` | The Connect window and the light in the bottom bar |
 | `TestSnapshot.swift` | Test mode |
 
@@ -399,3 +433,4 @@ so `swift test` can check each one:
 | `MidiRouter.swift` | What a MIDI message does, the same rules as the web app |
 | `ScopeMath.swift` | The waveform and vectorscope math (Rec. 709) |
 | `ShowArchive.swift` | The show file's zip: writing and reading it in slices, and its checksum |
+| `ListenStream.swift` | The live line's request, and its messages read as they arrive |

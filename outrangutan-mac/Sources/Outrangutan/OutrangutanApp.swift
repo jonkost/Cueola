@@ -142,7 +142,7 @@ struct UndoButtons: View {
     }
 }
 
-/// Edit menu: a copy of the cue standing by.
+/// Edit menu: a copy of the cue standing by, and moving it up or down.
 struct DuplicateButton: View {
     @ObservedObject var engine: Engine
 
@@ -150,6 +150,12 @@ struct DuplicateButton: View {
         Button("Duplicate Cue") { if let id = engine.standbyID { engine.duplicate(id) } }
             .keyboardShortcut("d")
             .disabled(engine.locked || engine.standbyID == nil)
+        Button("Move Cue Up") { if let id = engine.standbyID { engine.move(ids: [id], by: -1) } }
+            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            .disabled(engine.locked || !engine.canMove(ids: Set([engine.standbyID].compactMap { $0 }), by: -1))
+        Button("Move Cue Down") { if let id = engine.standbyID { engine.move(ids: [id], by: 1) } }
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .disabled(engine.locked || !engine.canMove(ids: Set([engine.standbyID].compactMap { $0 }), by: 1))
     }
 }
 
@@ -327,10 +333,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     }
 
-    /// A show file double-clicked in Finder, or dropped on the Dock icon.
+    /// A show file double-clicked in Finder, or dropped on the Dock icon,
+    /// opens the show. Media dropped on the Dock icon (or opened with
+    /// Outrangutan from Finder) joins the cue list.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard !TestSnapshot.isOn, let url = urls.first else { return }
-        files.open(url)
+        guard !TestSnapshot.isOn else { return }
+        if let show = urls.first(where: { $0.pathExtension.lowercased() == "ogshow" }) { return files.open(show) }
+        let media = urls.filter { Cue.make(from: $0) != nil }
+        guard !media.isEmpty else { return }
+        guard !engine.locked else { engine.notice = Engine.lockedNotice; return }
+        engine.add(urls: media)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -218,15 +218,22 @@ struct InspectorView: View {
                 }
             }
         }
-        if cue.kind == .video { keySection(cue) }
+        if cue.kind == .video || cue.kind == .still { keySection(cue) }
     }
+
+    /// Black, white, and the two chroma colors, for the key's background.
+    static let backdrops: [(name: String, hex: String)] = [
+        ("Black", "#000000"), ("White", "#FFFFFF"), ("Gray", "#808080"), ("Chroma green", "#00B140"), ("Chroma blue", "#0047BB"),
+    ]
 
     @ViewBuilder
     private func keySection(_ cue: Cue) -> some View {
         let k = live(cue).key
-        InspectorSection(title: "Key", note: keyNote(k.mode)) {
+        // A still has no color to take out: only its own see-through parts.
+        let modes: [KeyMode] = cue.kind == .still ? [.off, .alpha] : KeyMode.allCases
+        InspectorSection(title: "Key", note: keyNote(k.mode, cue.kind)) {
             Picker("Key", selection: bind(cue, \.key.mode)) {
-                ForEach(KeyMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                ForEach(modes, id: \.self) { Text($0.label).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
@@ -238,17 +245,36 @@ struct InspectorView: View {
                 PercentSlider(label: "Smoothness", value: bind(cue, \.key.smooth), range: 0...0.5)
             }
             if k.mode != .off {
-                InspectorRow("Background") { colorWell(cue, \.key.bg) }
+                InspectorRow("Background") {
+                    HStack(spacing: 6) {
+                        // The usual choices by name, and a well for any other color.
+                        Menu {
+                            ForEach(Self.backdrops, id: \.hex) { b in
+                                Button(b.name) { engine.update(cue.id) { $0.key.bg = b.hex } }
+                            }
+                        } label: {
+                            Text(Self.backdrops.first { $0.hex.caseInsensitiveCompare(k.bg) == .orderedSame }?.name ?? "Custom")
+                        }
+                        .fixedSize()
+                        colorWell(cue, \.key.bg)
+                    }
+                }
             }
         }
     }
 
-    private func keyNote(_ mode: KeyMode) -> String {
+    private func keyNote(_ mode: KeyMode, _ kind: CueKind) -> String {
+        if kind == .still {
+            switch mode {
+            case .alpha: return "The picture's see-through parts show the background color, and it fills the screen behind the picture. Chroma green or blue, for a key downstream."
+            default: return "A see-through picture (a PNG lower third) can show over a color instead of black."
+            }
+        }
         switch mode {
         case .off: return "Takes a color, the dark parts, or the file's own see-through parts out of the picture."
         case .chroma: return "Pixels close to the key color go away. Raise Similarity until the screen is gone; Smoothness softens the edge."
         case .luma: return "Dark pixels go away: graphics made on black. Raise Similarity to take out more."
-        case .alpha: return "Uses the file's own see-through parts, like a ProRes 4444 graphic."
+        case .alpha: return "Uses the file's own see-through parts, like a ProRes 4444 graphic, over the background color."
         }
     }
 

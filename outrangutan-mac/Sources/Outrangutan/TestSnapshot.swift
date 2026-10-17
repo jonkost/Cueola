@@ -46,7 +46,7 @@ enum TestSnapshot {
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
 
     /// The pretend show record, only in the link test.
-    @MainActor static let fake: FakeRecordStore? = isOn && ["link", "pads", "log", "direct", "listen"].contains(scenario) ? FakeRecordStore() : nil
+    @MainActor static let fake: FakeRecordStore? = isOn && ["link", "pads", "log", "direct", "listen", "stream"].contains(scenario) ? FakeRecordStore() : nil
     @MainActor static var store: ShowRecordStore? { fake }
 
     @MainActor
@@ -362,6 +362,61 @@ enum TestSnapshot {
         case "keys": steps = keySteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
         case "log": steps = logSteps(engine: engine, link: link, files: files, dir: dir, note: note, state: state)
         case "files": steps = fileSteps(engine: engine, files: files, dir: dir, note: note, state: state, snap: snap)
+        case "preload": steps = preloadSteps(engine: engine, dir: dir, note: note, state: state, snap: snap)
+        case "idle": steps = [
+            (0.5, {
+                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+                engine.replaceShow(cues: ["Alpha", "Bravo", "Charlie", "Delta"].enumerated().map { i, n in
+                    Cue(name: n, path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: i))
+                }, pads: [], banks: [], multiTrigger: nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }),
+            (1.5, {
+                // Where each row sits on the screen (top-left origin, like a
+                // mouse event), so a script can drag a real row with the mouse.
+                func table(in view: NSView) -> NSTableView? {
+                    if let t = view as? NSTableView { return t }
+                    for sub in view.subviews { if let t = table(in: sub) { return t } }
+                    return nil
+                }
+                guard let window = NSApp.windows.first(where: { $0.toolbar != nil }), let content = window.contentView,
+                      let t = table(in: content), let screen = NSScreen.screens.first else { return note("no table found") }
+                // Above every other app's windows, so the mouse reaches it:
+                // a test launched from a shell may not be let in front.
+                window.level = .floating
+                window.makeKeyAndOrderFront(nil)
+                var lines: [String] = []
+                for row in 0..<t.numberOfRows {
+                    let r = window.convertToScreen(t.convert(t.rect(ofRow: row), to: nil))
+                    lines.append("\(Int(r.midX)),\(Int(screen.frame.height - r.midY)),\(Int(r.width)),\(Int(r.height))")
+                }
+                try? lines.joined(separator: "\n").write(to: dir.appendingPathComponent("rows.txt"), atomically: true, encoding: .utf8)
+                note("rows on screen: " + lines.joined(separator: " / "))
+                note("window \(window.windowNumber) frame \(window.frame) screen \(screen.frame) key=\(window.isKeyWindow) active=\(NSApp.isActive)")
+            }),
+        ] + (1...7).map { i in (3.0, {
+            // Whose window is under the mouse, so a missed click can be explained.
+            let at = NSEvent.mouseLocation
+            let mine = NSApp.windows.first(where: { $0.toolbar != nil })?.windowNumber ?? -1
+            let top = NSWindow.windowNumber(at: at, belowWindowWithWindowNumber: 0)
+            note("\(i) cues: " + engine.cues.map(\.name).joined(separator: " | ") + "  standby=\(engine.standbyCue?.name ?? "-") locked=\(engine.locked) mouse \(Int(at.x)),\(Int(at.y)) over=\(top == mine ? "this window" : "window \(top)") key=\(NSApp.windows.first(where: { $0.toolbar != nil })?.isKeyWindow ?? false)")
+        }) } + [
+            (0.5, {
+                // Move Up and Move Down, the sure way to rearrange.
+                func list() -> String { engine.cues.map(\.name).joined(separator: " | ") }
+                let charlie = engine.cues[2].id, delta = engine.cues[3].id
+                engine.move(ids: [charlie], by: -1); note("move Charlie up once: " + list())
+                engine.move(ids: [charlie], by: -1); note("and again: " + list())
+                engine.move(ids: [charlie], by: -1); note("and once more (already first, stays): " + list())
+                engine.move(ids: [charlie, delta], by: 1); note("Charlie and Delta down together: " + list())
+                engine.locked = true
+                engine.move(ids: [charlie], by: 1); note("locked: nothing moves: " + list())
+                engine.locked = false
+                note("can move the last one down: \(engine.canMove(ids: [engine.cues[3].id], by: 1)), up: \(engine.canMove(ids: [engine.cues[3].id], by: -1))")
+            }),
+        ]
+        case "stillkey": steps = stillKeySteps(engine: engine, dir: dir, note: note, snap: snap)
+        case "stream": steps = streamSteps(engine: engine, link: link, note: note, state: state)
         case "connect": steps = [
             (1.5, { NotificationCenter.default.post(name: .showConnect, object: nil) }),
             (1.0, {
@@ -396,6 +451,255 @@ enum TestSnapshot {
     }
 
     typealias Steps = [(Double, () -> Void)]
+
+    /// Loading ahead: the standby cue is ready before GO, so GO shows its first
+    /// frame at once and the first seconds play clean. Measures the time from
+    /// GO to the first frame on screen and the frames dropped in the first
+    /// three seconds, for a cue loaded ahead and for one that was not.
+@MainActor private static func preloadSteps(engine: Engine, dir: URL, note: @escaping (String) -> Void,
+                                                state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        func file(_ name: String, _ kind: CueKind, _ label: String, _ i: Int) -> Cue {
+            Cue(name: label, path: media.appendingPathComponent(name).path, kind: kind, wireID: Cue.newWireID(offsetMs: i))
+        }
+        var a = file("bars-16x9.mp4", .video, "A bars 16x9", 0)
+        a.trimIn = 30
+        let still = file("still-16x9.png", .still, "B still", 1)
+        var b = file("bars-4x3.mp4", .video, "C bars 4x3 (never loaded ahead)", 2)
+        var sound = file("demo-applause.wav", .audio, "D applause", 3)
+        // Silent, but through the real sound path (see Deck.load).
+        a.volume = 0; b.volume = 0; sound.volume = 0
+        var goAt: CFTimeInterval = 0
+        var firstFrame: CFTimeInterval?
+        var moving: CFTimeInterval?
+        var frames: [Int] = []          // new frames decoded, per quarter second
+        var watch: Timer?
+        // Watches the output until the first video frame is on screen, and
+        // counts the frames the player hands over, quarter second by
+        // quarter second: a clean start is about 7 or 8 every quarter.
+        func startWatch() {
+            firstFrame = nil
+            moving = nil
+            frames = []
+            goAt = CACurrentMediaTime()
+            watch?.invalidate()
+            var lastTime = CMTime.invalid
+            watch = Timer.scheduledTimer(withTimeInterval: 0.002, repeats: true) { _ in
+                let since = CACurrentMediaTime() - goAt
+                if !engine.monitor.slotsReadyForDisplay.isEmpty && firstFrame == nil { firstFrame = since }
+                if let off = engine.liveState().offset, off > (engine.pictureCue?.trimIn ?? 0) + 0.001, moving == nil { moving = since }
+                if let (out, t) = engine.frameProbe() {
+                    let quarter = Int(since / 0.25)
+                    while frames.count <= quarter { frames.append(0) }
+                    // Taking the frame is what marks it seen; the next look
+                    // then says whether a newer one has come.
+                    if t != lastTime && out.hasNewPixelBuffer(forItemTime: t), out.copyPixelBuffer(forItemTime: t, itemTimeForDisplay: nil) != nil {
+                        frames[quarter] += 1; lastTime = t
+                    }
+                }
+            }
+        }
+        func report(_ label: String) {
+            let ms = firstFrame.map { String(format: "%.0f ms", $0 * 1000) } ?? "never (3 s)"
+            let mv = moving.map { String(format: "%.0f ms", $0 * 1000) } ?? "never"
+            note("\(label): first frame on screen \(ms) after GO, picture moving \(mv) after GO")
+            note("   frames per quarter second: " + frames.prefix(8).map(String.init).joined(separator: " "))
+            note("   on air at \(String(format: "%.2f", engine.liveState().offset ?? -1)) s into the file, 3.0 s after GO")
+        }
+        var steps: Steps = [
+            (1.0, {
+                engine.replaceShow(cues: [a, still, b, sound], pads: [], banks: [], multiTrigger: nil)
+                engine.openOutput()
+            }),
+        ]
+        // Three starts each way: one slow start must not decide.
+        for i in 1...3 {
+            steps += [
+                (1.5, {
+                    if i == 1 { note("a standing by, loaded ahead: \(engine.preloadState); first frame already on the output, hidden: \(engine.monitor.preparedAndReady(.a))") }
+                    startWatch()
+                    engine.go()
+                }),
+                (3.0, {
+                    report("b\(i) GO on a cue loaded ahead (trim in 30 s)")
+                    engine.allStop()
+                    engine.standbyID = engine.cues[0].id
+                }),
+            ]
+        }
+        for i in 1...3 {
+            steps += [
+                (1.5, {
+                    startWatch()
+                    engine.fire(engine.cues[2])   // not the standby: the old way, loaded on GO
+                }),
+                (3.0, {
+                    report("c\(i) GO on a cue NOT loaded ahead")
+                    engine.allStop()
+                    engine.standbyID = engine.cues[0].id
+                }),
+            ]
+        }
+        steps += [
+            (0.5, { engine.standbyID = engine.cues[1].id }),
+            (0.8, {
+                note("d a still standing by is read ahead: \(engine.preloadState)")
+                engine.standbyID = engine.cues[3].id
+            }),
+            (1.0, {
+                note("e a sound standing by: \(engine.preloadState)")
+                engine.go()
+            }),
+            (1.0, {
+                state("f the sound plays from its loaded deck")
+                note("   routes: \(engine.soundRoutes)")
+                engine.allStop()
+                // A drop between rows: the file lands at that place.
+                engine.add(urls: [media.appendingPathComponent("sfx-ding.wav")], at: 1)
+                note("g a file dropped at row 2: " + engine.cues.map(\.name).joined(separator: " | "))
+                engine.add(urls: [media.appendingPathComponent("still-4x3.jpg")], at: 99)
+                note("h a file dropped past the end: " + engine.cues.map(\.name).joined(separator: " | "))
+            }),
+        ]
+        return steps
+    }
+
+    /// A see-through PNG (a lower third) standing over a chroma green
+    /// background: the key for stills. Reads the real output pixels.
+    @MainActor private static func stillKeySteps(engine: Engine, dir: URL, note: @escaping (String) -> Void,
+                                                 snap: @escaping (String) -> Void) -> Steps {
+        // A 16:9 picture that is see-through except for a white bar near the
+        // bottom, drawn here so the repo needs no new media.
+        let png = dir.appendingPathComponent("lower-third-alpha.png")
+        let size = NSSize(width: 1920, height: 1080)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.clear.setFill(); NSRect(origin: .zero, size: size).fill()
+        NSColor.white.setFill(); NSRect(x: 120, y: 120, width: 1200, height: 160).fill()
+        image.unlockFocus()
+        if let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: png)
+        }
+        func pixel(_ name: String, x: CGFloat, y: CGFloat) -> String {
+            guard let window = NSApp.windows.first(where: { $0.contentView is OutputView }), let view = window.contentView,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return "\(name): no output" }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            guard let c = rep.colorAt(x: Int(x * CGFloat(rep.pixelsWide - 1)), y: Int(y * CGFloat(rep.pixelsHigh - 1)))?.usingColorSpace(.sRGB) else { return "\(name): ?" }
+            return String(format: "%@ = %d,%d,%d", name, Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+        }
+        return [
+            (1.0, {
+                var third = Cue(name: "Lower third (see-through PNG)", path: png.path, kind: .still, wireID: Cue.newWireID())
+                third.key.mode = .alpha
+                third.key.bg = "#00B140"
+                engine.replaceShow(cues: [third], pads: [], banks: [], multiTrigger: nil)
+                engine.openOutput()
+                engine.go()
+            }),
+            (1.5, {
+                note("a a see-through still with an Alpha key, background chroma green:")
+                // The capture goes through the screen's color profile, so the
+                // numbers are not the exact #00B140; green must simply win.
+                note("   " + pixel("top left corner (green: G well above R and B)", x: 0.02, y: 0.05))
+                note("   " + pixel("inside the white bar (white)", x: 0.3, y: 0.85))
+                note("   " + pixel("below the bar (green)", x: 0.3, y: 0.97))
+                snap("sk-a-green")
+                // The Inspector's Picture tab for this still, for the design
+                // check: in a separate settings store, so the real app's
+                // remembered tab is untouched.
+                let store = UserDefaults(suiteName: "live.cueola.outrangutan.test")!
+                store.set("picture", forKey: "inspector.cueTab")
+                engine.standbyID = engine.cues[0].id
+                let root = InspectorView(engine: engine)
+                    .defaultAppStorage(store)
+                    .frame(width: 340, height: 720)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 340, height: 720), styleMask: [.titled], backing: .buffered, defer: false)
+                win.appearance = NSAppearance(named: .darkAqua)
+                win.contentView = NSHostingView(rootView: root)
+                win.orderBack(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    if let view = win.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("sk-inspector.png"))
+                    }
+                    win.orderOut(nil)
+                    engine.update(engine.cues[0].id) { $0.key.mode = .off }
+                }
+            }),
+            (1.0, {}),
+            (0.6, {
+                note("b key off on air:")
+                note("   " + pixel("top left corner (black)", x: 0.02, y: 0.05))
+                note("   " + pixel("inside the white bar (white)", x: 0.3, y: 0.85))
+                snap("sk-b-black")
+                engine.allStop()
+            }),
+        ]
+    }
+
+    /// The live line: the pretend cloud pushes every change at once, the
+    /// way the real one does. A fire lands the moment it is written, GO
+    /// makes one write and not three, and a busy cloud is waited out.
+    @MainActor private static func streamSteps(engine: Engine, link: ShowLink, note: @escaping (String) -> Void,
+                                               state: @escaping (String) -> Void) -> Steps {
+        guard let fake else { return [] }
+        fake.pushes = true
+        let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../demo-media").standardized
+        var n = 0
+        func command(_ action: String, cueId: String = "") -> [String: Any] {
+            n += 1
+            let t = ShowLink.now
+            return ["commandId": "out_TEST_\(n)", "origId": "out_TEST_\(n)", "ts": t, "expiresAt": t + 8000,
+                    "by": "Test Director", "sender": "flowmingo_test", "action": action, "cueId": cueId, "padId": ""]
+        }
+        var writesBefore = 0
+        return [
+            (0.5, {
+                let still = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: "og_s1")
+                var video = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: "og_v1")
+                video.trimIn = 5
+                engine.replaceShow(cues: [still, video], pads: [], banks: [], multiTrigger: nil)
+                fake.set(["outrangutan", "live"], ["status": "idle"])
+                link.join(code: "STREAMTEST")
+            }),
+            (1.5, {
+                state("a joined over the live line")
+                note("   reads so far: \(fake.readCount) (the safety-net read runs every 2 s while the line is up)")
+                writesBefore = fake.writeCount
+                // A fire written to the record: it should run inside this very call.
+                let before = engine.pictureCue?.name ?? "-"
+                fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
+                note("b a cue fire pushed by the cloud: picture before = \(before), right after the push = \(engine.pictureCue?.name ?? "-")")
+            }),
+            (0.5, {
+                let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
+                note("c writes for that one fire: \(fake.writeCount - writesBefore) (the got-it, what is on air and the clip start travel as one)")
+                note("   ack: \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-") live: \((og["live"] as? [String: Any])?["name"] ?? "-") start: \((og["playingStart"] as? [String: Any])?["name"] ?? "-")")
+                let reads = fake.readCount
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { note("d reads in 2.2 s with the line up: \(fake.readCount - reads)") }
+            }),
+            (2.5, {
+                // The cloud gets busy: a write is refused, kept, and sent later.
+                fake.busy = true
+                writesBefore = fake.writeCount
+                fake.set(["outrangutan", "command"], command("cue", cueId: "og_v1"))
+            }),
+            (0.5, {
+                note("e the cloud is busy: the fire still ran (picture = \(engine.pictureCue?.name ?? "-")), writes landed = \(fake.writeCount - writesBefore)")
+                fake.busy = false
+            }),
+            (2.5, {
+                let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
+                note("f the cloud is free again: writes landed = \(fake.writeCount - writesBefore), ack now = \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-")")
+                note("   log: " + engine.log.entries.suffix(6).map(\.text).joined(separator: " / "))
+                engine.allStop()
+            }),
+        ]
+    }
+
 
     private static func transportSteps(engine: Engine, state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
         [
@@ -1667,20 +1971,54 @@ final class FakeRecordStore: ShowRecordStore {
     private(set) var doc: [String: Any] = [:]
     private(set) var readCount = 0
     private(set) var writeCount = 0
+    /// With a live line, every change is pushed to the app at once, the way
+    /// the real cloud does it. Off, the app only sees changes when it reads.
+    var pushes = false
+    /// Pretend the cloud is busy: writes are refused with the busy signal.
+    var busy = false
+    private var listeners: [@MainActor ([String: Any]) -> Void] = []
+    private var writeSeq = 0
 
     func read(code: String) async throws -> [String: Any] {
         readCount += 1
-        return doc
+        return stamped(doc)
     }
 
     func write(code: String, _ updates: [[String]: Any]) async throws {
+        if busy { throw CloudError(message: "The cloud is busy.", busy: true) }
         writeCount += 1
         // Go through the written form and back, like the real cloud.
         for (path, value) in updates { set(path, FirestoreValue.decode(FirestoreValue.encode(value))) }
     }
 
+    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
+        guard pushes else { throw CloudError(message: "no live line in this test", refused: true) }
+        onMessage(["targetChange": ["targetChangeType": "ADD"]])
+        onMessage(["documentChange": ["document": ["fields": FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:], "updateTime": stamp()]]])
+        onMessage(["targetChange": ["targetChangeType": "CURRENT"]])
+        listeners.append(onMessage)
+        // The line stays open until the test ends.
+        while !Task.isCancelled { try await Task.sleep(nanoseconds: 100_000_000) }
+    }
+
     func set(_ path: [String], _ value: Any) {
         Self.insert(&doc, path[...], value)
+        writeSeq += 1
+        guard pushes else { return }
+        let fields = FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:]
+        let message: [String: Any] = ["documentChange": ["document": ["fields": fields, "updateTime": stamp()]]]
+        listeners.forEach { $0(message) }
+    }
+
+    /// A write time like the cloud's, counting up with every change.
+    private func stamp() -> String {
+        String(format: "2026-01-01T00:00:%02d.%06dZ", writeSeq / 1_000_000, writeSeq % 1_000_000)
+    }
+
+    private func stamped(_ d: [String: Any]) -> [String: Any] {
+        var copy = d
+        copy[ShowRecordKeys.updateTime] = stamp()
+        return copy
     }
 
     private static func insert(_ tree: inout [String: Any], _ path: ArraySlice<String>, _ value: Any) {

@@ -62,7 +62,7 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Sound chain: gain, 3-band EQ, compressor, master volume | Built for pads (step 3) | The same EQ points and compressor as the web app. |
 | Pad meter, pads on any channel pair of an audio interface | Built (step 4) | |
 | Cue sound device, a sound device per output | Built (step 4) | Cue sound plays on a device's first two channels. |
-| Cue sound meter | Built | A listener on each player; the sound itself is untouched. |
+| Cue sound meter | Built | Reads each clip's level map (made ahead, in the background) at the playhead. A listener on the player made every clip start late and rough, so it is gone from the usual path; the cue sound engine's channel pairs still use it. |
 | Cue sound on any channel pair | Built | Settings, Sound, Channels. Pairs other than 1 and 2 go by way of a cue sound engine that plays exactly the frames the player's clock says are due, so the sound stays in step with the picture (within about a frame in the test), holds through a pause, and stops dead on All Stop. |
 | Record a sound effect | Built | From the Mac's sound input onto a pad. |
 | Multiple outputs, identify, pick a screen and audio device per output | Built (step 4) | Up to four outputs. A cue picks its output, or every output. Replaces the kiosk Chrome windows. |
@@ -76,7 +76,8 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 | Keyboard shortcuts you can change, lock, wall clock | Built (step 6) | |
 | MIDI | Built (step 6) | Uses the Mac's own MIDI system. |
 | Waveform and vectorscope | Built (step 7) | Rec. 709, 15 times a second, only while showing. |
-| Keying: chroma, luma, alpha | Built (step 7) | Keys on the graphics card, full resolution, live on air. Show files carry it both ways. |
+| Keying: chroma, luma, alpha | Built (step 7) | Keys on the graphics card, full resolution, live on air. Show files carry it both ways. Stills get the Alpha key too (Oct 16): a see-through lower third over chroma green. |
+| The next cue loaded ahead | Built (Oct 16) | The cue standing by is open, decoded ahead and on the output layers (hidden) before GO, like a pro deck. GO shows its first frame in about a tenth of a second, down from a third, and the first seconds play clean. |
 | OBS control | Built (step 7) | The same protocol as the web (obs-websocket 5): scene, record and stream actions per cue, and scene triggers. |
 | Dropbox folder sync | Built (step 7) as Watch a Folder | The Dropbox app syncs the folder; Outrangutan watches it. No token to paste. |
 | Convert on upload | Not needed | The Mac plays the pro formats as they are. |
@@ -98,8 +99,10 @@ prompter, talkback and OBS keys, and its playback keys reach the Mac app.
 
 - **Signing in (built in step 5):** the Mac app signs in the same two ways
   as the web front door. It talks to the cloud with plain web requests, so
-  it needs no Firebase setup and no Apple developer signing. It checks the
-  show about four times a second instead of getting a push, which adds
+  it needs no Firebase setup and no Apple developer signing. Since Oct 16
+  the cloud sends the show the moment it changes (a live line over the
+  same plain web requests), with a read every two seconds as the safety
+  net; before, it only read the show four times a second, which added
   about a tenth of a second to a fire from another Mac. Step 6's direct
   lane covers a deck on the same Mac.
 - **Handing the app to other Macs:** the free Apple sign-in covers Jon's

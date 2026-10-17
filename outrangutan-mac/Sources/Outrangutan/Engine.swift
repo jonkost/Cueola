@@ -38,6 +38,18 @@ final class Deck {
     private var heldWhileWaiting = false
     private var tokens: [Any] = []
     private var watchers: [NSObjectProtocol] = []
+    /// Set while this deck holds a cue loaded ahead of its GO: the file is
+    /// open, the sound listener is on, the first frames are decoded and the
+    /// player sits on the in point, so GO only has to press play. The key
+    /// says what the load depended on (file, trim, sound device, key).
+    private(set) var preloadKey: String?
+    var isPreloaded: Bool { preloadKey != nil }
+    /// True once the player has decoded ahead and can roll on the next
+    /// frame; for test mode and Show Check.
+    private(set) var prerolled = false
+    private var readyWatch: NSKeyValueObservation?
+    /// The outputs this deck's player was handed to ahead of its GO.
+    var prepared: [OutputView] = []
 
     init(name: String, slot: PictureSlot?, lane: SoundLane) {
         self.name = name
@@ -68,6 +80,9 @@ final class Deck {
     /// of the player.
     func load(_ cue: Cue, device: String?, viaLane: Bool = false, ended: @escaping () -> Void) {
         clearWatchers()
+        preloadKey = nil
+        readyWatch = nil
+        prerolled = false
         self.cue = cue
         held = false
         fadingOut = false
@@ -79,7 +94,9 @@ final class Deck {
         // (not muted: a muted player stops keeping time with its sound),
         // and it still runs on the same device, so the two clocks agree.
         player.audioOutputDeviceUniqueID = device
-        player.isMuted = TestSnapshot.isOn && !viaLane
+        // (The load-ahead timing test keeps the sound path real and turns
+        // the level down instead: a muted player starts its clock differently.)
+        player.isMuted = TestSnapshot.isOn && !viaLane && TestSnapshot.scenario != "preload"
         let item = AVPlayerItem(url: cue.url)
         frames = nil
         lastFrame = nil
@@ -90,14 +107,20 @@ final class Deck {
         listening = !viaLane
         startWhenListening = nil
         heldWhileWaiting = false
-        Task { [weak self] in
-            await SoundTap.attach(to: item, box: box, lane: viaLane ? lane : nil)
-            await MainActor.run {
-                guard let self, self.player.currentItem === item else { return }
-                self.listening = true
-                let start = self.startWhenListening
-                self.startWhenListening = nil
-                start?()
+        // A listener on the player's sound path makes a clip start late and
+        // rough (see SoundEnvelope), so the meter reads a level map instead.
+        // The cue sound engine's lane needs the sound itself, every frame
+        // from the top, so that path gets the listener and waits for it.
+        if viaLane {
+            Task { [weak self] in
+                await SoundTap.attach(to: item, box: box, lane: lane)
+                await MainActor.run {
+                    guard let self, self.player.currentItem === item else { return }
+                    self.listening = true
+                    let start = self.startWhenListening
+                    self.startWhenListening = nil
+                    start?()
+                }
             }
         }
         player.replaceCurrentItem(with: item)
@@ -107,6 +130,54 @@ final class Deck {
         }
         watchers.append(NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in ended() })
+    }
+
+    /// Loads a cue ahead of its GO and readies it: once the file is open the
+    /// player seeks to the in point and decodes ahead (preroll), so GO
+    /// starts it on the next frame with no stutter. The sound stays off.
+    func preload(_ cue: Cue, key: String, device: String?, viaLane: Bool, ended: @escaping () -> Void) {
+        load(cue, device: device, viaLane: viaLane, ended: ended)
+        player.volume = 0
+        preloadKey = key
+        guard let item = player.currentItem else { return }
+        // With an output on the item, the decoder runs now, before any
+        // layer shows the picture.
+        if cue.kind == .video { attachFrames() }
+        let from = cue.trimIn
+        readyWatch = item.observe(\.status, options: [.initial, .new]) { [weak self] it, _ in
+            guard it.status == .readyToPlay else { return }
+            Task { @MainActor [weak self] in self?.prime(item, from: from) }
+        }
+    }
+
+    private func prime(_ item: AVPlayerItem, from: Double) {
+        guard player.currentItem === item, readyWatch != nil else { return }
+        readyWatch = nil
+        let roll: () -> Void = { [weak self] in
+            guard let self, self.player.currentItem === item, self.isPreloaded else { return }
+            self.player.preroll(atRate: 1) { [weak self] ok in
+                Task { @MainActor [weak self] in
+                    guard let self, self.player.currentItem === item else { return }
+                    self.prerolled = ok
+                }
+            }
+        }
+        if from > 0 {
+            player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                Task { @MainActor in roll() }
+            }
+        } else {
+            roll()
+        }
+    }
+
+    /// Frames handed over by the item: for the scopes, and to make the
+    /// decoder run on a preloaded cue.
+    func attachFrames() {
+        guard frames == nil, let item = player.currentItem else { return }
+        let out = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        item.add(out)
+        frames = out
     }
 
     /// Runs the key on this deck's video. Later changes go through
@@ -124,7 +195,12 @@ final class Deck {
         guard listening else { startWhenListening = { [weak self] in self?.start(at: offset) }; return }
         let from = max(cue.trimIn, offset ?? 0)
         lane.ring.flush()
-        if from > 0 {
+        // A preloaded deck already sits on its in point: seeking again would
+        // throw away the frames it decoded ahead.
+        let here = player.currentTime().seconds
+        let positioned = isPreloaded && here.isFinite && abs(here - from) < 0.002
+        preloadKey = nil
+        if from > 0 && !positioned {
             player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
         if heldWhileWaiting { noteLane(position: from, moving: false); return }
@@ -183,6 +259,9 @@ final class Deck {
 
     func clear() {
         clearWatchers()
+        preloadKey = nil
+        readyWatch = nil
+        prerolled = false
         player.pause()
         player.replaceCurrentItem(with: nil)
         cue = nil
@@ -223,8 +302,8 @@ final class Engine: ObservableObject {
         case holding = "HOLD"
     }
 
-    @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?() } }
-    @Published var standbyID: UUID? { didSet { if standbyID != oldValue { onTransport?() } } }
+    @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?(); scheduleStandbyPreload(after: 0.3) } }
+    @Published var standbyID: UUID? { didSet { if standbyID != oldValue { onTransport?(); scheduleStandbyPreload() } } }
     /// The outputs, in order. There is always at least one.
     @Published var outputs: [OutputConfig] { didSet { outputsChanged() } }
     /// Where sound goes.
@@ -252,8 +331,11 @@ final class Engine: ObservableObject {
             pads.locked = locked
             if !TestSnapshot.isOn { UserDefaults.standard.set(locked, forKey: "showLock") }
             log.add(.file, locked ? "Editing locked" : "Editing unlocked")
+            if !locked && notice == Self.lockedNotice { notice = nil }
         }
     }
+    /// Shown when a drop or a drag runs into the lock, so it is never silent.
+    static let lockedNotice = "Editing is locked. Click the lock in the toolbar to add or move cues."
     /// What was on air when Outrangutan last closed without quitting, if
     /// anything (a crash, a force quit, a pulled plug).
     @Published var recovered: RecoveryPoint?
@@ -337,6 +419,9 @@ final class Engine: ObservableObject {
 
     private var paused = false
     private var clock: Timer?
+    /// The still standing by, read from disk ahead of its GO.
+    private var stillReady: (id: UUID, path: String, image: NSImage)?
+    private var preloadTimer: Timer?
     /// The next fire of this cue starts at this point instead of the top.
     private var pendingResume: (id: UUID, offset: Double)?
     private var lastRecoveryWrite = Date.distantPast
@@ -389,6 +474,7 @@ final class Engine: ObservableObject {
         RecoveryPoint.clear()
         monitors.forEach { $0.standbyText = standbyText }
         startClock()
+        scheduleStandbyPreload()
         // A screen plugged in or out (a bumped HDMI cable): put every open
         // output where it belongs again, never over the controls.
         lastScreens = NSScreen.screens.map(\.localizedName)
@@ -635,6 +721,7 @@ final class Engine: ObservableObject {
             stillLeft = nil
         }
         let result: WireResult
+        readEnvelope(cue)
         switch cue.kind {
         case .video: result = beginVideo(cue)
         case .audio: result = beginSound(cue)
@@ -652,11 +739,26 @@ final class Engine: ObservableObject {
     }
 
     private func beginVideo(_ cue: Cue) -> WireResult {
-        let deck = videoDecks.first { $0 !== pictureDeck } ?? videoDecks[0]
+        let device = soundDevice(for: cue), viaLane = usesLane(for: cue)
+        let key = preloadKey(cue, device: device, viaLane: viaLane)
+        // The deck that already holds this cue, loaded ahead of its GO; else
+        // a free one.
+        let deck = videoDecks.first { $0 !== pictureDeck && $0.preloadKey == key }
+            ?? videoDecks.first { $0 !== pictureDeck } ?? videoDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue, device: soundDevice(for: cue), viaLane: usesLane(for: cue)) { [weak self, weak deck] in
-            guard let self, let deck, deck.cue?.id == cue.id else { return }
-            self.reachedEnd(deck)
+        if deck.preloadKey == key {
+            // Loaded ahead: only its settings may have changed since.
+            deck.cue = cue
+            deck.keyer?.update(cue.key)
+            let showing = views(for: cue)
+            deck.prepared.filter { v in !showing.contains { $0 === v } }.forEach { $0.unprepareVideo(deck.player, in: deck.slot!) }
+            deck.prepared = []
+        } else {
+            unprepare(deck)
+            deck.load(cue, device: device, viaLane: viaLane) { [weak self, weak deck] in
+                guard let self, let deck, deck.cue?.id == cue.id else { return }
+                self.reachedEnd(deck)
+            }
         }
         let dissolve = cue.xfade > 0 && (pictureDeck != nil || stillCue != nil)
         deck.pictureLevel = (dissolve || cue.fadeIn > 0) ? 0 : 1
@@ -680,11 +782,18 @@ final class Engine: ObservableObject {
     }
 
     private func beginSound(_ cue: Cue) -> WireResult {
-        let deck = soundDecks.first { $0 !== soundDeck } ?? soundDecks[0]
+        let viaLane = usesLane(for: cue)
+        let key = preloadKey(cue, device: audio.cueDevice, viaLane: viaLane)
+        let deck = soundDecks.first { $0 !== soundDeck && $0.preloadKey == key }
+            ?? soundDecks.first { $0 !== soundDeck } ?? soundDecks[0]
         fader.cancel(deck.name)
-        deck.load(cue, device: audio.cueDevice, viaLane: usesLane(for: cue)) { [weak self, weak deck] in
-            guard let self, let deck, deck.cue?.id == cue.id else { return }
-            self.reachedEnd(deck)
+        if deck.preloadKey == key {
+            deck.cue = cue
+        } else {
+            deck.load(cue, device: audio.cueDevice, viaLane: viaLane) { [weak self, weak deck] in
+                guard let self, let deck, deck.cue?.id == cue.id else { return }
+                self.reachedEnd(deck)
+            }
         }
         let old = soundDeck
         let dissolve = cue.xfade > 0 && old != nil
@@ -715,8 +824,12 @@ final class Engine: ObservableObject {
     private func beginStill(_ cue: Cue) -> WireResult {
         var image: NSImage?
         if cue.kind == .still {
-            guard let loaded = NSImage(contentsOf: cue.url) else { return refuse("Can't open the still \"\(cue.name)\".") }
-            image = loaded
+            if let ready = stillReady, ready.id == cue.id, ready.path == cue.path {
+                image = ready.image       // read from disk while it stood by
+            } else {
+                guard let loaded = NSImage(contentsOf: cue.url) else { return refuse("Can't open the still \"\(cue.name)\".") }
+                image = loaded
+            }
         }
         let slot: PictureSlot = stillCue == nil ? stillSlot : (stillSlot == .s1 ? .s2 : .s1)
         // An earlier still may still be dissolving away on this layer: its
@@ -978,13 +1091,16 @@ final class Engine: ObservableObject {
 
     // MARK: Cue list
 
-    func add(urls: [URL]) {
+    /// Adds files as cues, at the end or at a place in the list (a drop
+    /// between two rows).
+    func add(urls: [URL], at index: Int? = nil) {
         var made = urls.compactMap(Cue.make(from:))
         if made.count < urls.count { notice = "Some files were skipped. Outrangutan plays video, sound and still pictures." }
         guard !made.isEmpty else { return }
         noteUndo(made.count == 1 ? "Add Cue" : "Add Cues")
         for i in made.indices { made[i].wireID = Cue.newWireID(offsetMs: i) }
-        cues.append(contentsOf: made)
+        if let index, index >= 0, index < cues.count { cues.insert(contentsOf: made, at: index) }
+        else { cues.append(contentsOf: made) }
         if standbyID == nil { standbyID = made.first?.id }
     }
 
@@ -999,6 +1115,29 @@ final class Engine: ObservableObject {
     func move(from offsets: IndexSet, to offset: Int) {
         noteUndo("Move Cue")
         cues.move(fromOffsets: offsets, toOffset: offset)
+    }
+
+    /// Whether the picked cues can move one place up (-1) or down (1).
+    func canMove(ids: Set<UUID>, by step: Int) -> Bool {
+        let rows = cues.indices.filter { ids.contains(cues[$0].id) }
+        guard !rows.isEmpty else { return false }
+        return step < 0 ? rows.first! > 0 : rows.last! < cues.count - 1
+    }
+
+    /// Moves the picked cues one place up or down, keeping them together
+    /// in order (Move Up and Move Down in the right-click menu, and
+    /// Option-Command-Up and Down).
+    func move(ids: Set<UUID>, by step: Int) {
+        guard !locked, canMove(ids: ids, by: step) else { return }
+        noteUndo("Move Cue")
+        var list = cues
+        let rows = list.indices.filter { ids.contains(list[$0].id) }
+        if step < 0 {
+            for r in rows { list.swapAt(r, r - 1) }
+        } else {
+            for r in rows.reversed() { list.swapAt(r, r + 1) }
+        }
+        cues = list
     }
 
     /// The same change to several cues, as one Undo step.
@@ -1234,11 +1373,13 @@ final class Engine: ObservableObject {
         d.views = []
         if pictureDeck === d { pictureDeck = nil }
         if soundDeck === d { soundDeck = nil }
+        scheduleStandbyPreload()
     }
 
     private func stopPicture() {
         if let d = pictureDeck { clearDeck(d) }
-        videoDecks.forEach { if $0.cue != nil { clearDeck($0) } }
+        // A cue loaded ahead of its GO is not on air: it stays ready.
+        videoDecks.forEach { if $0.cue != nil && !$0.isPreloaded { clearDeck($0) } }
         stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil; stillLeft = nil
         fader.cancel("still")
         if let leaving = stillCue { pads.cueLeftAir(leaving.id) }
@@ -1249,8 +1390,104 @@ final class Engine: ObservableObject {
     }
 
     private func stopSound() {
-        soundDecks.forEach { if $0.cue != nil { clearDeck($0) } }
+        soundDecks.forEach { if $0.cue != nil && !$0.isPreloaded { clearDeck($0) } }
         soundDeck = nil
+    }
+
+    // MARK: Loading ahead
+
+    /// What a load depends on. When any of it changes, the cue is loaded again.
+    private func preloadKey(_ cue: Cue, device: String?, viaLane: Bool) -> String {
+        "\(cue.id.uuidString)|\(cue.path)|\(cue.trimIn)|\(cue.trimOut ?? -1)|\(device ?? "")|\(viaLane)|\(cue.key.mode.rawValue)"
+    }
+
+    /// Readies the standby cue soon: right away for a new standby or a freed
+    /// deck, a little later for a setting change (a slider drag changes a
+    /// cue many times a second, and the player must not reload on each one).
+    private func scheduleStandbyPreload(after seconds: Double = 0) {
+        if let t = preloadTimer, t.fireDate.timeIntervalSinceNow <= seconds { return }
+        preloadTimer?.invalidate()
+        let t = Timer(timeInterval: max(0.001, seconds), repeats: false) { [weak self] _ in
+            self?.preloadTimer = nil
+            self?.preloadStandby()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        preloadTimer = t
+    }
+
+    /// Readies the cue standing by, so GO starts it on the next frame: a
+    /// video or sound is loaded and decoded ahead on a free deck, a still is
+    /// read from disk. Nothing happens when it is ready already. (Like a
+    /// pro playback deck: the next clip is cued up, not just picked.)
+    func preloadStandby() {
+        guard let cue = standbyCue, cue.fileIsThere else { dropPreloads(); return }
+        switch cue.kind {
+        case .video, .audio:
+            let picture = cue.kind == .video
+            let decks = picture ? videoDecks : soundDecks
+            let busy = picture ? pictureDeck : soundDeck
+            let device = picture ? soundDevice(for: cue) : audio.cueDevice
+            let viaLane = usesLane(for: cue)
+            let key = preloadKey(cue, device: device, viaLane: viaLane)
+            readEnvelope(cue)
+            // The other lane's loaded cue, if any, no longer stands by.
+            (picture ? soundDecks : videoDecks).forEach { if $0.isPreloaded { unprepare($0); $0.clear() } }
+            stillReady = nil
+            if decks.contains(where: { $0.preloadKey == key }) { return }
+            // A free deck: not on air, and empty or holding an older load.
+            guard let deck = decks.first(where: { $0 !== busy && ($0.cue == nil || $0.isPreloaded) }) else { return }
+            if deck.isPreloaded { unprepare(deck) }
+            deck.preload(cue, key: key, device: device, viaLane: viaLane) { [weak self, weak deck] in
+                guard let self, let deck, deck.cue?.id == cue.id else { return }
+                self.reachedEnd(deck)
+            }
+            // The output layers get the player now, hidden, so GO only has
+            // to unhide them.
+            if let slot = deck.slot {
+                deck.prepared = views(for: cue)
+                deck.prepared.forEach { $0.prepareVideo(deck.player, in: slot) }
+            }
+        case .still:
+            dropDeckPreloads()
+            if let ready = stillReady, ready.id == cue.id, ready.path == cue.path { return }
+            let id = cue.id, path = cue.path, url = cue.url
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let image = NSImage(contentsOf: url) else { return }
+                await MainActor.run { [weak self] in
+                    guard let self, self.standbyID == id else { return }
+                    self.stillReady = (id, path, image)
+                }
+            }
+        case .matte:
+            dropPreloads()
+        }
+    }
+
+    private func dropDeckPreloads() { (videoDecks + soundDecks).forEach { if $0.isPreloaded { unprepare($0); $0.clear() } } }
+
+    /// Takes a preloaded deck's player back off the layers it was handed to.
+    private func unprepare(_ d: Deck) {
+        if let slot = d.slot { d.prepared.forEach { $0.unprepareVideo(d.player, in: slot) } }
+        d.prepared = []
+    }
+    private func dropPreloads() { dropDeckPreloads(); stillReady = nil }
+
+    /// The picture deck's frame output and its clock, for test mode to
+    /// count the frames it hands over.
+    func frameProbe() -> (AVPlayerItemVideoOutput, CMTime)? {
+        guard let d = pictureDeck, let item = d.player.currentItem else { return nil }
+        d.attachFrames()
+        guard let out = d.frames else { return nil }
+        return (out, item.currentTime())
+    }
+
+    /// What is loaded ahead right now, for test mode and Show Check.
+    var preloadState: String {
+        var parts = (videoDecks + soundDecks).filter(\.isPreloaded).map { d in
+            "\(d.name): \(d.cue?.name ?? "-") \(d.prerolled ? "ready" : "loading") at \(String(format: "%.3f", d.current)) s"
+        }
+        if let s = stillReady { parts.append("still: \(s.image.size.width > 0 ? "ready" : "empty") \(cues.first { $0.id == s.id }?.name ?? "-")") }
+        return parts.isEmpty ? "nothing loaded ahead" : parts.joined(separator: ", ")
     }
 
     private func refresh() {
@@ -1307,15 +1544,38 @@ final class Engine: ObservableObject {
         noteRecoveryPoint()
     }
 
-    /// The loudest playing cue, scaled by its volume, like what goes out.
+    /// The loudest playing cue, scaled by its volume, like what goes out: the
+    /// lane's listener where the cue sound engine carries the sound, the
+    /// clip's level map everywhere else.
     private func readCueMeter() {
         var l: Float = 0, r: Float = 0
-        for d in videoDecks + soundDecks where d.cue != nil && d.player.rate > 0 {
-            guard let (pl, pr) = d.peaks?.take() else { continue }
+        for d in videoDecks + soundDecks where d.cue != nil && !d.isPreloaded && d.player.rate > 0 {
             let level = d.viaLane ? d.lane.gain.outputVolume : d.player.volume
+            let pl: Float, pr: Float
+            if d.viaLane, let heard = d.peaks?.take() { (pl, pr) = heard }
+            else if let cue = d.cue, let map = envelopes[cue.path] { (pl, pr) = map.level(at: d.current) }
+            else { continue }
             l = max(l, pl * level); r = max(r, pr * level)
         }
         if l > 0.0005 || r > 0.0005 || cueMeter.left > 0.0005 || cueMeter.right > 0.0005 { cueMeter.take(l, r) }
+    }
+
+    /// Each clip's level over time, read once in the background: for the
+    /// cue standing by, and for any cue the moment it fires.
+    private var envelopes: [String: SoundEnvelope] = [:]
+    private var envelopeReads: Set<String> = []
+    private func readEnvelope(_ cue: Cue) {
+        let path = cue.path, url = cue.url
+        guard cue.kind == .video || cue.kind == .audio, envelopes[path] == nil, !envelopeReads.contains(path) else { return }
+        envelopeReads.insert(path)
+        Task.detached(priority: .utility) { [weak self] in
+            let map = await SoundEnvelope.read(url)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.envelopeReads.remove(path)
+                if let map { self.envelopes[path] = map }
+            }
+        }
     }
 
     /// Once a second, notes what is on air, so a crash can pick up there.
@@ -1407,14 +1667,17 @@ final class Engine: ObservableObject {
         if stillFrame?.id != still.id {
             stillFrame = CIImage(contentsOf: still.url).map { (still.id, $0) }
         }
-        return stillFrame?.image
+        guard let frame = stillFrame?.image else { return nil }
+        if still.key.mode == .alpha {
+            let bg = CIImage(color: CIColor(color: NSColor(hex: still.key.bg) ?? .black) ?? .black).cropped(to: frame.extent)
+            return frame.composited(over: bg)
+        }
+        return frame
     }
 
     private func attachFrames(_ d: Deck) {
-        guard wantsFrames, d.frames == nil, let item = d.player.currentItem else { return }
-        let out = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
-        item.add(out)
-        d.frames = out
+        guard wantsFrames else { return }
+        d.attachFrames()
     }
 
     /// A video's sound goes to its output's sound device if it has one,
@@ -1430,7 +1693,7 @@ final class Engine: ObservableObject {
     /// The level the playing cues' sound is at (volume times fades times
     /// ducking), for test mode. 0 with nothing playing.
     var cueLevel: Double {
-        (videoDecks + soundDecks).filter { $0.cue != nil }
+        (videoDecks + soundDecks).filter { $0.cue != nil && !$0.isPreloaded }
             .map { Double($0.viaLane ? $0.lane.gain.outputVolume : $0.player.volume) }.max() ?? 0
     }
 
@@ -1438,7 +1701,7 @@ final class Engine: ObservableObject {
     /// Check: "player" straight out of its player, "engine" through the cue
     /// sound engine.
     var soundRoutes: String {
-        (videoDecks + soundDecks).filter { $0.cue != nil }
+        (videoDecks + soundDecks).filter { $0.cue != nil && !$0.isPreloaded }
             .map { d in
                 let status: String
                 switch d.player.timeControlStatus {
@@ -1483,7 +1746,7 @@ final class Engine: ObservableObject {
 
     /// Where the player on a lane is, in seconds into its file; for test mode.
     func soundPosition(lane: Int) -> Double? {
-        (videoDecks + soundDecks).first { $0.lane === cueSound.lanes[lane] && $0.cue != nil }?.current
+        (videoDecks + soundDecks).first { $0.lane === cueSound.lanes[lane] && $0.cue != nil && !$0.isPreloaded }?.current
     }
 
     /// A cue's sound goes through the cue sound engine when a pair other
@@ -1495,6 +1758,7 @@ final class Engine: ObservableObject {
 
     private func outputsChanged() {
         save()
+        scheduleStandbyPreload()
         // Move open windows to a newly picked screen, and keep titles current.
         for config in outputs where openOutputs.contains(config.id) {
             window(config.id).open(on: config.screen, title: config.label)
@@ -1505,6 +1769,7 @@ final class Engine: ObservableObject {
     private func audioChanged() {
         save()
         applySoundRoutes()
+        scheduleStandbyPreload()
         setDuck(!pads.sounding.isEmpty)
     }
 

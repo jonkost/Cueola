@@ -15,6 +15,7 @@ extension TestSnapshot {
                 engine.replaceShow(cues: [bars], pads: [horn], banks: [PadBank(id: "bk_1", name: "Bank 1")], multiTrigger: true)
                 engine.audio.duckUnderPads = true
                 engine.audio.duckDb = 12
+                engine.setGain(1)      // the saved show's fader may sit lower
                 engine.go()
             }),
             (1.0, {

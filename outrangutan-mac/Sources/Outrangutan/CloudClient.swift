@@ -18,7 +18,19 @@ struct CloudError: LocalizedError {
     var message: String
     var permission = false
     var notFound = false
+    /// The cloud asked everyone to write less often for a moment.
+    var busy = false
+    /// The cloud does not take this kind of request at all. Asking again
+    /// the same way will not help.
+    var refused = false
     var errorDescription: String? { message }
+}
+
+/// Keys this app adds to a copy of the show record, beside the cloud's own.
+enum ShowRecordKeys {
+    /// When the cloud wrote this copy ("2026-10-16T18:24:19.123456Z"), so
+    /// two copies that cross on the way here can be put in order.
+    static let updateTime = "_updateTime"
 }
 
 /// What the show link needs from the cloud. The real one talks to Firestore;
@@ -31,6 +43,10 @@ protocol ShowRecordStore: AnyObject {
     func read(code: String) async throws -> [String: Any]
     /// Writes only the named fields. Everything else in the record stays.
     func write(code: String, _ updates: [[String]: Any]) async throws
+    /// Keeps a line open and hands over every message the cloud sends
+    /// about the show, until the cloud closes the line. A store with no
+    /// live line throws a refusal at once.
+    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws
 }
 
 /// Signs in and reads and writes the show's shared record over plain web
@@ -40,14 +56,25 @@ final class CloudClient: ShowRecordStore {
     private var idToken: String?
     private var refreshToken: String?
     private var expiresAt = Date.distantPast
+    /// Sign-ins and writes: eight seconds is plenty for one small request.
     private let http: URLSession
+    /// Reads: a read that hangs must not hold the next one up for long.
+    private let quick: URLSession
+    /// The live line: it sits idle between changes, so only a long silence
+    /// means it died.
+    private let stream: URLSession
 
     init() {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 8
-        config.waitsForConnectivity = false
-        config.httpMaximumConnectionsPerHost = 4
-        http = URLSession(configuration: config)
+        func session(timeout: Double) -> URLSession {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = timeout
+            config.waitsForConnectivity = false
+            config.httpMaximumConnectionsPerHost = 4
+            return URLSession(configuration: config)
+        }
+        http = session(timeout: 8)
+        quick = session(timeout: 4)
+        stream = session(timeout: 150)
     }
 
     var isSignedIn: Bool { refreshToken != nil }
@@ -89,8 +116,10 @@ final class CloudClient: ShowRecordStore {
                             URLQueryItem(name: "mask.fieldPaths", value: "fixRequests")]
         var request = URLRequest(url: parts.url!)
         request.setValue("Bearer " + (try await freshToken()), forHTTPHeaderField: "Authorization")
-        let doc = try await send(request, code: code)
-        return FirestoreValue.decodeFields(doc["fields"])
+        let doc = try await send(request, code: code, on: quick)
+        var fields = FirestoreValue.decodeFields(doc["fields"])
+        if let when = doc["updateTime"] as? String { fields[ShowRecordKeys.updateTime] = when }
+        return fields
     }
 
     func write(code: String, _ updates: [[String]: Any]) async throws {
@@ -102,7 +131,48 @@ final class CloudClient: ShowRecordStore {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + (try await freshToken()), forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: FirestoreValue.patchBody(updates))
-        _ = try await send(request, code: code)
+        _ = try await send(request, code: code, on: http)
+    }
+
+    /// Asks the cloud to send the show's playback parts every time they
+    /// change, and hands each message over as it arrives. Returns when the
+    /// cloud closes the line (it does now and then, on purpose); throws when
+    /// the line fails or the cloud will not open one.
+    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
+        var request = URLRequest(url: URL(string: CloudConfig.documentsBase + ":listen")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + (try await freshToken()), forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject:
+            ListenRequest.body(project: CloudConfig.projectId, code: code, fields: ["outrangutan", "fixRequests"]))
+        let bytes: URLSession.AsyncBytes, response: URLResponse
+        do {
+            (bytes, response) = try await stream.bytes(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw CloudError(message: "Can't reach the internet. Check the Wi-Fi.")
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        var parser = ListenStreamParser()
+        guard (200..<300).contains(status) else {
+            // A refusal comes as one short message in the same array shape.
+            var problem = "error \(status)"
+            for try await b in bytes {
+                if let m = parser.feed(b) { problem = ListenRequest.problem(in: m) ?? problem; break }
+            }
+            switch status {
+            case 401, 403: throw CloudError(message: "This sign-in can't open show \(code).", permission: true)
+            case 404: throw CloudError(message: "There is no show with code \(code).", notFound: true)
+            case 429: throw CloudError(message: "The cloud is busy.", busy: true)
+            default: throw CloudError(message: "The cloud said: \(problem)", refused: status == 400 || status == 405 || status == 501)
+            }
+        }
+        for try await b in bytes {
+            guard let message = parser.feed(b) else { continue }
+            if let problem = ListenRequest.problem(in: message) { throw CloudError(message: "The cloud said: \(problem)") }
+            onMessage(message)
+        }
     }
 
     // MARK: Inside
@@ -161,10 +231,10 @@ final class CloudClient: ShowRecordStore {
         }
     }
 
-    private func send(_ request: URLRequest, code: String) async throws -> [String: Any] {
+    private func send(_ request: URLRequest, code: String, on session: URLSession) async throws -> [String: Any] {
         let data: Data, response: URLResponse
         do {
-            (data, response) = try await http.data(for: request)
+            (data, response) = try await session.data(for: request)
         } catch {
             throw CloudError(message: "Can't reach the internet. Check the Wi-Fi.")
         }
@@ -174,6 +244,11 @@ final class CloudClient: ShowRecordStore {
         case 200..<300: return json
         case 401, 403: throw CloudError(message: "This sign-in can't open show \(code).", permission: true)
         case 404: throw CloudError(message: "There is no show with code \(code).", notFound: true)
+        case 429:
+            // "This database has exceeded their maximum bandwidth for
+            // writes": the show record is one document everyone writes to,
+            // and the cloud slows it down past about one write a second.
+            throw CloudError(message: "The cloud is busy. Writing less often for a moment.", busy: true)
         default:
             let detail = ((json["error"] as? [String: Any])?["message"] as? String) ?? "error \(status)"
             throw CloudError(message: "The cloud said: \(detail)")

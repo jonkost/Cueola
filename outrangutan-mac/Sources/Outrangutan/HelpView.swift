@@ -18,7 +18,9 @@ struct HelpView: View {
             Topic(id: "build", title: "Build a Show", symbol: "film.stack", lines: [
                 "Drag videos, sounds and stills into the window, or click Add Media in the toolbar.",
                 "Add Matte makes a solid color picture: black, white, or a chroma green or blue.",
-                "Drag cues up and down to change the order. Command-D makes a copy of a cue.",
+                "A see-through PNG (a lower third) over a color: in the Inspector's Picture tab, set Key to Alpha and pick Chroma green or Chroma blue as the background. It fills the screen behind the picture, for a key downstream.",
+                "Drag cues up and down to change the order, or right-click and choose Move Up or Move Down (Option-Command-Up and Down). Command-D makes a copy of a cue.",
+                "The cue standing by is loaded ahead: GO shows its first frame at once. Open the outputs before the show so the picture path is warm too.",
                 "Click a cue to stand it by. Its settings appear in the Inspector on the right (Command-I).",
                 "Cue tab: name, notes, a color, whether GO fires it, a pad that plays with it, and OBS.",
                 "Timing tab: a wait before it starts, what happens next (Manual, Continue, Follow), and what happens at the end.",

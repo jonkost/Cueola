@@ -3,6 +3,27 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// The drop zone for media files over the top of the window.
+private struct WindowDrop: ViewModifier {
+    @ObservedObject var engine: Engine
+    let tab: String
+    @Binding var targeted: Bool
+    func body(content: Content) -> some View {
+        content.dropDestination(for: URL.self) { urls, _ in
+            guard !engine.locked else { engine.notice = Engine.lockedNotice; return false }
+            if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
+            return true
+        } isTargeted: { targeted = $0 }
+    }
+}
+
+/// Files from one drop, gathered as each one loads, in the order dropped.
+private final class DroppedFiles {
+    var urls: [URL?]
+    var left: Int
+    init(count: Int) { urls = Array(repeating: nil, count: count); left = count }
+}
+
 /// The control window: clock and transport on top, the cue list or the pad
 /// board below, the Inspector on the right, and the everyday tools in the
 /// window's toolbar.
@@ -38,9 +59,24 @@ struct ControlView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
-            if showMonitor { MonitorStrip(engine: engine, scopes: scopes); Divider() }
+            // Media can be dropped on the top of the window (the clock, the
+            // transport, the preview) or between two rows of the list. (A
+            // drop zone over the whole window would also sit over the list,
+            // and a list under a drop zone can no longer drag its own rows.)
+            VStack(spacing: 0) {
+                header
+                Divider()
+                if showMonitor { MonitorStrip(engine: engine, scopes: scopes); Divider() }
+            }
+            .modifier(WindowDrop(engine: engine, tab: tab, targeted: $dropTargeted))
+            .overlay {
+                if dropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.accentColor, lineWidth: 3)
+                        .padding(6)
+                        .allowsHitTesting(false)
+                }
+            }
             if let point = engine.recovered { recoveryBar(point); Divider() }
             switch tab {
             case "pads": PadBoardView(board: engine.pads)
@@ -80,19 +116,6 @@ struct ControlView: View {
         .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
         .onChange(of: engine.pads.touches) { _, _ in touchedPads = true }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard !engine.locked else { return false }
-            if tab == "pads" { engine.pads.add(urls: urls) } else { engine.add(urls: urls) }
-            return true
-        } isTargeted: { dropTargeted = $0 }
-        .overlay {
-            if dropTargeted {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.accentColor, lineWidth: 3)
-                    .padding(6)
-                    .allowsHitTesting(false)
-            }
-        }
     }
 
     // MARK: Toolbar
@@ -257,7 +280,7 @@ struct ControlView: View {
                         .frame(width: each)
                     transport("Stop", symbol: "stop.fill", key: keys.name(.stop), color: .orange, action: engine.stop)
                         .frame(width: each)
-                    transport("Fade", symbol: "chart.line.downtrend.xyaxis", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
+                    transport("Fade", symbol: "slider.vertical.3", key: keys.name(.fade), color: .purple, action: engine.fadeStopAll)
                         .frame(width: each)
                     transport("All Stop", symbol: "exclamationmark.octagon.fill", key: keys.name(.allStop), color: .red, prominent: true, action: engine.allStop)
                         .frame(width: each)
@@ -359,18 +382,28 @@ struct ControlView: View {
                 } actions: {
                     Button("Add Media") { chooseFiles() }
                 }
+                .dropDestination(for: URL.self) { urls, _ in
+                    guard !engine.locked else { engine.notice = Engine.lockedNotice; return false }
+                    engine.add(urls: urls)
+                    return true
+                }
             } else {
                 VStack(spacing: 0) {
                 cueHeader
                 Divider()
                 List(selection: Binding(get: { picked }, set: { new in
                     picked = new
+                    touchedPads = false
                     if new.count == 1, let id = new.first { engine.standbyID = id }
                 })) {
                     ForEach(Array(engine.cues.enumerated()), id: \.element.id) { index, cue in
                         row(cue, number: index + 1).tag(cue.id)
                     }
                     .onMove(perform: engine.locked ? nil : { engine.move(from: $0, to: $1) })
+                    // Files dropped onto the list land between two rows, where
+                    // the drop line shows. (The list takes the drop itself; the
+                    // window's own drop zone covers everything around it.)
+                    .onInsert(of: [.fileURL]) { index, providers in insertFiles(providers, at: index) }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
                 .padding(.horizontal, 10)
@@ -385,6 +418,23 @@ struct ControlView: View {
                     picked = [id]
                 }
                 .onAppear { if let id = engine.standbyID { picked = [id] } }
+                }
+            }
+        }
+    }
+
+    /// Files dropped between two rows: they become cues at that place.
+    private func insertFiles(_ providers: [NSItemProvider], at index: Int) {
+        guard !engine.locked else { engine.notice = Engine.lockedNotice; return }
+        let box = DroppedFiles(count: providers.count)
+        for (i, provider) in providers.enumerated() {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                DispatchQueue.main.async {
+                    box.urls[i] = url
+                    box.left -= 1
+                    guard box.left == 0 else { return }
+                    let found = box.urls.compactMap { $0 }
+                    if !found.isEmpty { engine.add(urls: found, at: index) }
                 }
             }
         }
@@ -442,7 +492,7 @@ struct ControlView: View {
                 if !cue.armed { chip("SKIP", .gray) }
                 if cue.continueMode != .manual { chip(cue.continueMode == .autoFollow ? "FOLLOW" : "CONT", .blue) }
                 if cue.output != 1 && cue.kind.hasPicture { chip(cue.output == 0 ? "ALL OUT" : "OUT \(cue.output)", .teal) }
-                if cue.key.mode != .off && cue.kind == .video { chip("KEY", .green) }
+                if cue.key.mode != .off && (cue.kind == .video || cue.kind == .still) { chip("KEY", .green) }
                 if cue.obs.action != .none || !cue.obsTriggerScene.isEmpty { chip("OBS", .indigo) }
             }
             .fixedSize()
@@ -474,7 +524,6 @@ struct ControlView: View {
         }
         .padding(.vertical, 4)
         .listRowSeparator(.hidden)
-        .simultaneousGesture(TapGesture().onEnded { touchedPads = false })
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
@@ -514,6 +563,11 @@ struct ControlView: View {
             if let one {
                 Button("Stand By") { engine.standbyID = one.id }
             }
+            // A sure way to rearrange, beside dragging.
+            Button("Move Up") { engine.move(ids: ids, by: -1) }
+                .disabled(engine.locked || !engine.canMove(ids: ids, by: -1))
+            Button("Move Down") { engine.move(ids: ids, by: 1) }
+                .disabled(engine.locked || !engine.canMove(ids: ids, by: 1))
             let allArmed = chosen.allSatisfy(\.armed)
             Button(allArmed ? "Skip on GO" : "Fire on GO") {
                 engine.updateAll(ids, allArmed ? "Skip on GO" : "Fire on GO") { $0.armed = !allArmed }

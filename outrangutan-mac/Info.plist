@@ -65,6 +65,23 @@
 				<string>live.cueola.outrangutan.show</string>
 			</array>
 		</dict>
+		<!-- Media can be dropped on the Dock icon or opened with Outrangutan
+		     from Finder; it joins the cue list. "Alternate" leaves every
+		     file's usual app as it is. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Video, sound or still picture</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.movie</string>
+				<string>public.audio</string>
+				<string>public.image</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

@@ -81,6 +81,9 @@ final class OutputView: NSView {
     private let still1 = CALayer()
     private let still2 = CALayer()
     private var frames: [PictureSlot: Cue] = [:]
+    /// Video layers holding a player ahead of its GO: on screen at zero
+    /// opacity so the picture path is warm, but showing nothing.
+    private var prepared: Set<PictureSlot> = []
     private var identifyLayer: CALayer?
     private let standbyLayer = CATextLayer()
 
@@ -88,7 +91,12 @@ final class OutputView: NSView {
     var standbyText = "" { didSet { updateStandby() } }
 
     /// The picture slots with something showing; for test mode.
-    var visibleSlots: [PictureSlot] { PictureSlot.allCases.filter { !layerFor($0).isHidden } }
+    var visibleSlots: [PictureSlot] { PictureSlot.allCases.filter { isShowing($0) } }
+    private func isShowing(_ slot: PictureSlot) -> Bool { !layerFor(slot).isHidden && !prepared.contains(slot) }
+    /// The video slots whose first frame is on screen; for test mode.
+    var slotsReadyForDisplay: [PictureSlot] {
+        PictureSlot.allCases.filter { isShowing($0) && ((layerFor($0) as? AVPlayerLayer)?.isReadyForDisplay ?? false) }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -117,7 +125,7 @@ final class OutputView: NSView {
     /// The standby words show only while every picture layer is empty.
     private func updateStandby() {
         quietly {
-            let empty = PictureSlot.allCases.allSatisfy { layerFor($0).isHidden }
+            let empty = PictureSlot.allCases.allSatisfy { !isShowing($0) }
             standbyLayer.string = standbyText
             standbyLayer.isHidden = standbyText.isEmpty || !empty
             standbyLayer.fontSize = max(12, bounds.height * 0.07)
@@ -151,11 +159,36 @@ final class OutputView: NSView {
         updateStandby()
     }
 
+    /// Hands a player to its layer ahead of its GO, while the layer stays
+    /// hidden. Setting up the picture path is the slow part of a start
+    /// (about a fifth of a second); done here, GO only unhides the layer.
+    func prepareVideo(_ player: AVPlayer, in slot: PictureSlot) {
+        quietly {
+            guard let l = layerFor(slot) as? AVPlayerLayer, l.isHidden || prepared.contains(slot) else { return }
+            l.player = player
+            l.opacity = 0
+            l.zPosition = -2        // under everything, even the standby words
+            l.isHidden = false
+            prepared.insert(slot)
+        }
+    }
+
+    /// Lets go of a player handed over ahead of a GO that never came.
+    func unprepareVideo(_ player: AVPlayer, in slot: PictureSlot) {
+        quietly {
+            guard prepared.contains(slot), let l = layerFor(slot) as? AVPlayerLayer, l.player === player else { return }
+            prepared.remove(slot)
+            l.isHidden = true
+            l.player = nil
+        }
+    }
+
     /// Puts a video player on a layer, on top of the others.
     func showVideo(_ player: AVPlayer, in slot: PictureSlot, cue: Cue, opacity: Float) {
         quietly {
             guard let l = layerFor(slot) as? AVPlayerLayer else { return }
-            l.player = player
+            prepared.remove(slot)
+            if l.player !== player { l.player = player }
             frames[slot] = cue
             style(slot, cue)
             l.opacity = opacity
@@ -194,7 +227,14 @@ final class OutputView: NSView {
         if let v = l as? AVPlayerLayer {
             v.videoGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
         } else {
-            l.backgroundColor = cue.kind == .matte ? (NSColor(hex: cue.color) ?? .black).cgColor : NSColor.clear.cgColor
+            // A matte is its color. A still with an Alpha key shows over its
+            // background color, which fills the screen behind it (chroma
+            // green behind a see-through lower third, for a key downstream).
+            let behind: NSColor?
+            if cue.kind == .matte { behind = NSColor(hex: cue.color) ?? .black }
+            else if cue.key.mode == .alpha { behind = NSColor(hex: cue.key.bg) ?? .black }
+            else { behind = nil }
+            l.backgroundColor = (behind ?? .clear).cgColor
             l.contentsGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
         }
         place(l, cue)
@@ -207,6 +247,7 @@ final class OutputView: NSView {
     func hide(_ slot: PictureSlot) {
         quietly {
             let l = layerFor(slot)
+            prepared.remove(slot)
             l.isHidden = true
             if slot.isStill { l.contents = nil; l.backgroundColor = NSColor.clear.cgColor }
             if let v = l as? AVPlayerLayer { v.player = nil }
@@ -223,9 +264,15 @@ final class OutputView: NSView {
     /// Names of what this output shows now, for tests.
     var showing: [String] {
         PictureSlot.allCases.compactMap { slot in
-            guard let cue = frames[slot], !layerFor(slot).isHidden else { return nil }
+            guard let cue = frames[slot], isShowing(slot) else { return nil }
             return cue.name
         }
+    }
+
+    /// True while a video layer holds a player ahead of its GO and already
+    /// has its first frame; for test mode.
+    func preparedAndReady(_ slot: PictureSlot) -> Bool {
+        prepared.contains(slot) && ((layerFor(slot) as? AVPlayerLayer)?.isReadyForDisplay ?? false)
     }
 
     /// A big number and name over the picture for three seconds, so you can

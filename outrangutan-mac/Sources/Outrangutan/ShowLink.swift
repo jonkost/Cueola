@@ -4,6 +4,11 @@ import OutrangutanCore
 /// The link to a Cueola show: how the director's TAKE and KeyWi Bird keys
 /// reach this Mac, and how the rundown and the deck learn what is on air.
 ///
+/// The cloud sends the show the moment it changes (a live line), and the
+/// Mac also reads it on a timer as the safety net. A command from the
+/// rundown or a deck on another Mac lands here as fast as the cloud can
+/// carry it. A deck on this Mac goes straight to the app (DirectLink).
+///
 /// It reads and writes the same fields the web Outrangutan uses
 /// (`outrangutan.command`, `.commandQueue`, `.panic`, `.gain`, `.cmdAck`,
 /// `.live`, `.cues`, `.pads`, `.playingStart`, `.preflight`, and
@@ -32,6 +37,20 @@ final class ShowLink: ObservableObject {
     private let inbox: CommandInbox
     private var joined = false
     private var pollTask: Task<Void, Never>?
+    /// The live line: the cloud sends the show the moment it changes.
+    private var streamTask: Task<Void, Never>?
+    /// When the live line last brought a message (this Mac's clock, in
+    /// milliseconds). 0 while it is down.
+    private var streamAliveAt: Double = 0
+    private var streamNoted = false
+    /// When reads started failing (milliseconds), while they are failing.
+    private var failingSince: Double = 0
+    /// When the cloud wrote the last copy applied here (seconds).
+    private var lastApplied: Double = 0
+    private var flushTimer: Timer?
+    /// Seconds to wait before writing again after the cloud said it is busy.
+    private var writeBackoff: Double = 0
+    private var busyNotedAt: Double = 0
     private var heartbeat: Timer?
     private var cuesTimer: Timer?
     private var liveSeq = 0
@@ -86,7 +105,12 @@ final class ShowLink: ObservableObject {
         phase = .connecting
         message = "Joining \(showCode)"
         inbox.reset()
+        lastApplied = 0
+        failingSince = 0
+        streamAliveAt = 0
+        streamNoted = false
         startPolling()
+        startStream()
         startHeartbeat()
     }
 
@@ -94,8 +118,14 @@ final class ShowLink: ObservableObject {
         if !code.isEmpty { engine.log.add(.link, "Left \(code)") }
         pollTask?.cancel()
         pollTask = nil
+        streamTask?.cancel()
+        streamTask = nil
+        streamAliveAt = 0
         heartbeat?.invalidate()
         heartbeat = nil
+        flushTimer?.invalidate()
+        flushTimer = nil
+        writeBackoff = 0
         joined = false
         pending = [:]
         code = ""
@@ -104,9 +134,8 @@ final class ShowLink: ObservableObject {
         if !keepSignIn { cloud.signOut() }
     }
 
-    /// Reads the show about four times a second. The web app gets a push
-    /// instead; reading this often keeps a fire from the rundown within about
-    /// a quarter second.
+    /// Reads the show on a timer: five times a second on its own, or every
+    /// two seconds as the safety net while the live line is up.
     private func startPolling() {
         let showCode = code
         pollTask = Task { [weak self] in
@@ -117,18 +146,89 @@ final class ShowLink: ObservableObject {
                     let doc = try await self.store.read(code: showCode)
                     guard !Task.isCancelled, self.code == showCode else { return }
                     failures = 0
+                    self.failingSince = 0
                     self.onRecord(doc)
                 } catch {
                     guard !Task.isCancelled else { return }
                     failures += 1
                     let e = error as? CloudError
-                    self.trouble(e?.message ?? "Lost the show. Trying again.")
-                    if e?.permission == true && !self.cloud.isSignedIn && self.store === self.cloud { return }
+                    if e?.permission == true && !self.cloud.isSignedIn && self.store === self.cloud {
+                        self.trouble(e?.message ?? "Sign in first.")
+                        return
+                    }
+                    // One read failing is a blip: the Wi-Fi hiccups for a
+                    // second in every show, and the show keeps playing. Reads
+                    // failing for five seconds, or three in a row, is trouble.
+                    let now = Self.now
+                    if self.failingSince == 0 { self.failingSince = now }
+                    if e?.permission == true || e?.notFound == true || failures >= 3 || now - self.failingSince >= 5000 {
+                        self.trouble(e?.message ?? "Lost the show. Trying again.")
+                    }
                 }
-                let wait: Double = failures == 0 ? 0.2 : min(5, Double(failures))
+                let wait: Double
+                if failures > 0 { wait = min(5, Double(failures)) }
+                else if self.streamIsAlive { wait = 2 }
+                else { wait = 0.2 }
                 try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
             }
         }
+    }
+
+    /// True while the live line has spoken in the last 45 seconds.
+    private var streamIsAlive: Bool { streamAliveAt > 0 && Self.now - streamAliveAt < 45_000 }
+
+    /// Asks the cloud to send the show the moment it changes, so a fire from
+    /// the rundown or a deck on another Mac lands here as fast as the cloud
+    /// can carry it, instead of waiting for the next read. Reading carries
+    /// on underneath as the safety net. When the cloud closes the line (it
+    /// does now and then) it is opened again; when the cloud will not open
+    /// one at all, the reads carry the show alone, as before.
+    private func startStream() {
+        let showCode = code
+        streamTask = Task { [weak self] in
+            var failures = 0
+            while !Task.isCancelled {
+                guard let self else { return }
+                do {
+                    try await self.store.listen(code: showCode) { [weak self] message in
+                        guard let self, self.code == showCode else { return }
+                        self.onStreamMessage(message)
+                    }
+                    failures = 0
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !Task.isCancelled, self.code == showCode else { return }
+                    failures += 1
+                    let e = error as? CloudError
+                    if e?.refused == true {
+                        if self.store === self.cloud {
+                            self.engine.log.add(.link, "The cloud has no live line for \(showCode) (\(e?.message ?? "")). Reading it five times a second instead.")
+                        }
+                        self.streamAliveAt = 0
+                        return
+                    }
+                    if self.streamNoted && failures == 1 {
+                        self.engine.log.add(.link, "The live line dropped (\(e?.message ?? "lost")). Opening it again; reading five times a second meanwhile.")
+                    }
+                }
+                self.streamAliveAt = 0
+                let wait = min(10, 0.5 * pow(2, Double(failures)))
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            }
+        }
+    }
+
+    private func onStreamMessage(_ message: [String: Any]) {
+        streamAliveAt = Self.now
+        if ListenRequest.isCurrent(message) {
+            if !streamNoted { engine.log.add(.link, "Live line open: the cloud sends \(code) the moment it changes") }
+            streamNoted = true
+        }
+        guard let doc = ListenRequest.document(in: message) else { return }
+        var fields = FirestoreValue.decodeFields(doc.fields)
+        if let when = doc.updateTime { fields[ShowRecordKeys.updateTime] = when }
+        onRecord(fields)
     }
 
     private func startHeartbeat() {
@@ -167,6 +267,14 @@ final class ShowLink: ObservableObject {
     // MARK: Reading
 
     private func onRecord(_ doc: [String: Any]) {
+        // Two copies can cross on the way here: a read that started before a
+        // change, arriving after the live line already brought the change.
+        // An older copy is dropped, or it would run the volume and the
+        // command slot backwards for a moment.
+        if let when = ListenRequest.seconds(doc[ShowRecordKeys.updateTime] as? String) {
+            if when < lastApplied { return }
+            lastApplied = when
+        }
         if !joined {
             joined = true
             writeTroubleShown = false
@@ -191,12 +299,17 @@ final class ShowLink: ObservableObject {
 
     // MARK: Publishing
 
-    /// What is on air. At most every 0.7 seconds while playing, at once on a
-    /// change, and every 3 seconds when idle.
+    /// What is on air. At once on a change, at most every 2 seconds while
+    /// playing, and every 3 seconds when idle. (The strip and the deck count
+    /// down on their own from the clip's start time, so they need no more.
+    /// Every 0.7 seconds, as before, was too many: the show record is one
+    /// document the rundown, the deck and this Mac all write to, and the
+    /// cloud starts refusing writes past about one a second. It did, in the
+    /// show on Oct 16.)
     func publishLive(force: Bool) {
         guard joined else { return }
         let now = Self.now
-        if !force && now - lastLiveAt < 700 { return }
+        if !force && now - lastLiveAt < 2000 { return }
         lastLiveAt = now
         liveSeq += 1
         let packet = LivePacket.make(engine.liveState(), ts: now, seq: liveSeq, sender: sender, build: build)
@@ -271,13 +384,36 @@ final class ShowLink: ObservableObject {
         ] as [String: Any]])
     }
 
-    /// Writes go out one at a time, in order. Anything that piles up while a
-    /// write is on its way goes out together in the next one, newest value
-    /// winning, so a slow network never builds a backlog.
+    /// Writes go out one at a time, in order, and a few hundredths of a
+    /// second late on purpose: everything one GO produces (the "got it",
+    /// what is on air, the clip's start time) piles up and goes out as ONE
+    /// write. Anything that piles up while a write is on its way goes out
+    /// together in the next one, newest value winning, so a slow network
+    /// never builds a backlog.
     private func queueWrite(_ updates: [[String]: Any]) {
         guard !code.isEmpty else { return }
-        for (k, v) in updates { pending[k] = v }
-        flushWrites()
+        for (k, v) in updates {
+            // Two answers to two commands must both go out: the second waits
+            // for the next write instead of replacing the first.
+            if k == ["outrangutan", "cmdAck"], let old = pending[k] as? [String: Any], let new = v as? [String: Any],
+               Wire.string(old["commandId"]) != Wire.string(new["commandId"]) {
+                flushWrites()
+            }
+            pending[k] = v
+        }
+        scheduleFlush(after: 0.04)
+    }
+
+    private func scheduleFlush(after seconds: Double) {
+        guard flushTimer == nil else { return }
+        let t = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.flushTimer = nil
+                self?.flushWrites()
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        flushTimer = t
     }
 
     private func flushWrites() {
@@ -288,10 +424,24 @@ final class ShowLink: ObservableObject {
         writing = true
         Task { [weak self] in
             guard let self else { return }
+            var failed = false
             do {
                 try await self.store.write(code: showCode, batch)
+                self.writeBackoff = 0
             } catch {
-                if !self.writeTroubleShown, let e = error as? CloudError {
+                failed = true
+                let e = error as? CloudError
+                if e?.busy == true {
+                    // The cloud asked everyone to slow down. Wait a little
+                    // longer each time it says so, and keep the newest values
+                    // to send when it is ready.
+                    self.writeBackoff = min(8, max(1, self.writeBackoff * 2))
+                    if Self.now - self.busyNotedAt > 120_000 {
+                        self.busyNotedAt = Self.now
+                        self.engine.log.add(.problem, "The cloud is busy and refused a write. Sending less often for a moment.")
+                    }
+                    for (k, v) in batch where self.pending[k] == nil { self.pending[k] = v }
+                } else if !self.writeTroubleShown, let e {
                     self.writeTroubleShown = true
                     self.trouble(e.permission
                         ? "The cloud refused this Mac's answers. Sign in again, then reconnect."
@@ -299,7 +449,7 @@ final class ShowLink: ObservableObject {
                 }
             }
             self.writing = false
-            self.flushWrites()
+            if !self.pending.isEmpty { self.scheduleFlush(after: failed ? max(0.04, self.writeBackoff) : 0.04) }
         }
     }
 
