@@ -15,6 +15,7 @@ final class FakeDeckTransport: DeckTransport {
     private var _stripImage: [UInt8] = []
     private var _features: [[UInt8]] = []
     private var _reports = 0
+    private var _closed = false
 
     init(productID: Int) { self.productID = productID }
 
@@ -23,9 +24,13 @@ final class FakeDeckTransport: DeckTransport {
     var stripImage: [UInt8] { lock.lock(); defer { lock.unlock() }; return _stripImage }
     var features: [[UInt8]] { lock.lock(); defer { lock.unlock() }; return _features }
     var reports: Int { lock.lock(); defer { lock.unlock() }; return _reports }
+    /// True once the app closed this deck: like the real one, it takes
+    /// nothing after that.
+    var closed: Bool { lock.lock(); defer { lock.unlock() }; return _closed }
 
     func write(_ r: [UInt8]) {
         lock.lock(); defer { lock.unlock() }
+        guard !_closed else { return }
         _reports += 1
         guard r.count > 16, r[0] == 0x02 else { return }
         if r[1] == 0x07 {
@@ -44,8 +49,11 @@ final class FakeDeckTransport: DeckTransport {
         }
     }
 
-    func writeFeature(_ r: [UInt8]) { lock.lock(); _features.append(r); lock.unlock() }
-    func close() {}
+    func writeFeature(_ r: [UInt8]) { lock.lock(); if !_closed { _features.append(r) }; lock.unlock() }
+    func close() { lock.lock(); _closed = true; lock.unlock() }
+
+    /// What the deck took last: "03 02" is the reset that darkens it.
+    var lastFeature: String { features.last.map { String(format: "%02x %02x", $0[0], $0[1]) } ?? "-" }
 
     /// Presses the keys (and lets go a moment later).
     func press(_ keys: [Int]) {
@@ -121,6 +129,8 @@ extension TestSnapshot {
         let deck = StreamDeckController(engine: engine)
         let xl = FakeDeckTransport(productID: 0x006c)
         let plus = FakeDeckTransport(productID: 0x0084)
+        weak var ghost: FakeDeckTransport?
+        var wasOn = true
         func save(_ image: NSImage, _ name: String) {
             guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return }
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(name))
@@ -202,6 +212,7 @@ extension TestSnapshot {
             }),
             (1.5, {
                 note("i \(deck.modelName): \(deck.message)")
+                note("   the XL went dark when the + took over: its last feature report is \(xl.lastFeature) (03 02 = reset)")
                 faces("   keys")
                 save(plus.sheet(), "deck-plus.png")
                 if let strip = NSImage(data: Data(plus.stripImage)) { save(strip, "deck-plus-strip.png") }
@@ -231,6 +242,29 @@ extension TestSnapshot {
             (0.8, {
                 state("n a tap on the standby zone (GO)")
                 engine.allStop()
+                // A third deck plugged in takes over; unplugged, the XL (dark
+                // and waiting all this time) takes over again, and nothing
+                // holds on to the deck that left.
+                do {
+                    let third = FakeDeckTransport(productID: 0x0080)
+                    deck.attach(third)
+                    ghost = third
+                    note("o a MK.2 plugged in: \(deck.modelName) drives; the + went dark: \(plus.lastFeature)")
+                    third.onGone?()
+                }
+                plus.onGone?()
+            }),
+            (0.5, {
+                note("p the MK.2 and the + unplugged: \(deck.modelName) drives again (\(deck.state)), \(deck.message)")
+                note("   the deck that left is " + (ghost == nil ? "freed" : "STILL HELD"))
+                note("   \(xl.keyImages.count) key pictures on the XL again")
+                wasOn = deck.enabled
+                deck.enabled = false
+            }),
+            (0.5, {
+                note("q deck off in Settings: \(deck.message)")
+                note("   the XL's last report is \(xl.lastFeature) (03 02 = reset, dark), closed: \(xl.closed)")
+                deck.enabled = wasOn
             }),
         ]
     }

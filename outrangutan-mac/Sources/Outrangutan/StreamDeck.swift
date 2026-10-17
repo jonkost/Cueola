@@ -19,6 +19,7 @@ protocol DeckTransport: AnyObject {
     var serial: String { get }
     /// Called with every report the deck sends, report id first.
     var onInput: (([UInt8]) -> Void)? { get set }
+    /// Called once when the deck is unplugged.
     var onGone: (() -> Void)? { get set }
     func write(_ report: [UInt8])
     func writeFeature(_ report: [UInt8])
@@ -227,6 +228,8 @@ final class StreamDeckController: ObservableObject {
 
     private let engine: Engine
     private var transport: DeckTransport?
+    /// Other decks plugged in at the same time: dark, waiting their turn.
+    private var spares: [DeckTransport] = []
     private var finder: HIDDeckFinder?
     private var keyStates: [Bool] = []
     private var dialPressed: [Bool] = []
@@ -255,7 +258,8 @@ final class StreamDeckController: ObservableObject {
     /// Starts looking for decks on USB. Test mode hands over a pretend deck instead.
     func start() {
         guard finder == nil else { return }
-        finder = HIDDeckFinder(onFound: { [weak self] t in self?.attach(t) },
+        finder = HIDDeckFinder(io: writes,
+                               onFound: { [weak self] t in self?.attach(t) },
                                onProblem: { [weak self] text in self?.trouble(text) })
         enabledChanged()
     }
@@ -274,13 +278,18 @@ final class StreamDeckController: ObservableObject {
 
     /// A deck appeared (USB, or a pretend one).
     func attach(_ t: DeckTransport) {
-        guard enabled || TestSnapshot.isOn else { return }
+        guard enabled || TestSnapshot.isOn else { t.close(); return }
         guard let m = StreamDeckProtocol.model(productID: t.productID) else {
             trouble("An Elgato device this app does not know (product \(String(format: "0x%04x", t.productID))).")
             t.close()
             return
         }
-        transport?.close()
+        if let old = transport, old !== t, let oldModel = model {
+            // A second deck: the one plugged in last drives the show. The
+            // other goes dark and waits; it takes over if this one goes away.
+            setAside(old, oldModel)
+        }
+        spares.removeAll { $0 === t }
         transport = t
         model = m
         modelName = m.name
@@ -289,14 +298,15 @@ final class StreamDeckController: ObservableObject {
         lastSignatures = Array(repeating: "", count: m.keys)
         lastStrip = ""
         t.onInput = { [weak self] bytes in self?.handle(bytes) }
-        t.onGone = { [weak self] in
-            guard let self, self.transport === t else { return }
+        t.onGone = { [weak self, weak t] in
+            guard let self, let t, self.transport === t else { return }
             self.transport = nil
             self.model = nil
+            self.clockTimer?.invalidate(); self.clockTimer = nil
             self.state = self.enabled ? .looking : .off
             self.message = "The Stream Deck was unplugged"
             self.engine.log.add(.link, "\(m.name) unplugged")
-            self.clockTimer?.invalidate(); self.clockTimer = nil
+            if !self.spares.isEmpty { self.attach(self.spares.removeFirst()) }
         }
         state = .connected
         message = "\(m.name) connected" + (t.serial.isEmpty ? "" : " (\(t.serial))") + (m.untried ? ". This model has not been tried yet; tell Jon how it goes." : "")
@@ -312,16 +322,42 @@ final class StreamDeckController: ObservableObject {
         clockTimer = timer
     }
 
+    /// Lets go of every deck: each goes dark, then closes.
     private func detach(log: Bool) {
+        spares.forEach(letGo)
+        spares = []
         guard let t = transport, let m = model else { return }
-        // Leave the keys dark, not showing a stale show.
-        writeFeature(StreamDeckProtocol.resetReport(model: m))
-        t.onGone = nil
-        t.close()
         transport = nil
         model = nil
         clockTimer?.invalidate(); clockTimer = nil
+        letGo(t)
         if log { engine.log.add(.link, "\(m.name) let go") }
+    }
+
+    /// Darkens a deck and closes it, in that order, behind whatever is
+    /// still being drawn on it. Nothing new is sent to it after this.
+    private func letGo(_ t: DeckTransport) {
+        t.onGone = nil
+        t.onInput = nil
+        let reset = StreamDeckProtocol.model(productID: t.productID).map(StreamDeckProtocol.resetReport)
+        writes.async {
+            if let reset { t.writeFeature(reset) }
+            DispatchQueue.main.async { t.close() }
+        }
+    }
+
+    /// A deck that is plugged in but not driving the show: dark, its
+    /// presses ignored, kept so it can take over when the other goes away.
+    private func setAside(_ t: DeckTransport, _ m: StreamDeckProtocol.Model) {
+        t.onInput = nil
+        t.onGone = { [weak self, weak t] in
+            guard let self, let t else { return }
+            self.spares.removeAll { $0 === t }
+        }
+        let reset = StreamDeckProtocol.resetReport(model: m)
+        writes.async { t.writeFeature(reset) }
+        spares.append(t)
+        engine.log.add(.link, "\(m.name) set aside, dark: the deck plugged in last drives the show")
     }
 
     private func trouble(_ text: String) {
@@ -330,7 +366,7 @@ final class StreamDeckController: ObservableObject {
         engine.log.add(.problem, text)
     }
 
-    private func sendBrightness() {
+        private func sendBrightness() {
         guard let m = model else { return }
         writeFeature(StreamDeckProtocol.brightnessReport(model: m, percent: brightness))
     }
@@ -584,12 +620,14 @@ final class StreamDeckController: ObservableObject {
 /// Finds Elgato decks on USB and opens them.
 final class HIDDeckFinder {
     private var manager: IOHIDManager?
+    private let io: DispatchQueue
     private let onFound: (DeckTransport) -> Void
     private let onProblem: (String) -> Void
     private var open: [IOHIDDevice: HIDDeckTransport] = [:]
     private var running = false
 
-    init(onFound: @escaping (DeckTransport) -> Void, onProblem: @escaping (String) -> Void) {
+    init(io: DispatchQueue, onFound: @escaping (DeckTransport) -> Void, onProblem: @escaping (String) -> Void) {
+        self.io = io
         self.onFound = onFound
         self.onProblem = onProblem
     }
@@ -616,7 +654,8 @@ final class HIDDeckFinder {
     func stop() {
         guard running, let m = manager else { return }
         running = false
-        open.values.forEach { $0.close() }
+        // The decks are the controller's to darken and close, in order
+        // behind what it is still drawing; here they are only forgotten.
         open = [:]
         IOHIDManagerUnscheduleFromRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         IOHIDManagerClose(m, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -641,7 +680,7 @@ final class HIDDeckFinder {
         }
         let serial = (IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String) ?? ""
         let t = HIDDeckTransport(device: device, productID: product, serial: serial,
-                                 inputSize: max(64, number(device, kIOHIDMaxInputReportSizeKey) + 1))
+                                 inputSize: max(64, number(device, kIOHIDMaxInputReportSizeKey) + 1), io: io)
         open[device] = t
         onFound(t)
     }
@@ -652,21 +691,26 @@ final class HIDDeckFinder {
     }
 }
 
-/// One deck on USB.
+/// One deck on USB. Reports go out on the `io` queue, in order; the handle
+/// is closed on that same queue, behind the last report.
 final class HIDDeckTransport: DeckTransport {
+    private let device: IOHIDDevice
     let productID: Int
     let serial: String
     var onInput: (([UInt8]) -> Void)?
     var onGone: (() -> Void)?
-    private let device: IOHIDDevice
+    private let io: DispatchQueue
     private var buffer: UnsafeMutablePointer<UInt8>
     private let bufferSize: Int
-    private var isOpen = true
+    private let lock = NSLock()
+    private var isOpen = true     // under `lock`: read on the io queue, flipped from either side
+    private var hooked = true     // main thread only: the input callback is registered
 
-    init(device: IOHIDDevice, productID: Int, serial: String, inputSize: Int) {
+    init(device: IOHIDDevice, productID: Int, serial: String, inputSize: Int, io: DispatchQueue) {
         self.device = device
         self.productID = productID
         self.serial = serial
+        self.io = io
         bufferSize = inputSize
         buffer = .allocate(capacity: inputSize)
         let context = Unmanaged.passUnretained(self).toOpaque()
@@ -679,32 +723,58 @@ final class HIDDeckTransport: DeckTransport {
         IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
     }
 
+    deinit { buffer.deallocate() }
+
     func write(_ report: [UInt8]) {
-        guard isOpen, let id = report.first else { return }
+        guard open, let id = report.first else { return }
         report.withUnsafeBufferPointer { p in
             _ = IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(id), p.baseAddress!, report.count)
         }
     }
 
     func writeFeature(_ report: [UInt8]) {
-        guard isOpen, let id = report.first else { return }
+        guard open, let id = report.first else { return }
         report.withUnsafeBufferPointer { p in
             _ = IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, CFIndex(id), p.baseAddress!, report.count)
         }
     }
 
-    func gone() {
-        guard isOpen else { return }
-        isOpen = false
-        DispatchQueue.main.async { [self] in onGone?() }
-    }
+    private var open: Bool { lock.lock(); defer { lock.unlock() }; return isOpen }
 
-    func close() {
-        guard isOpen else { return }
-        isOpen = false
+    /// Marks the deck closed; true the first time only.
+    private func shut() -> Bool { lock.lock(); defer { lock.unlock() }; let was = isOpen; isOpen = false; return was }
+
+    /// No more input from the deck. Main thread.
+    private func unhook() {
+        guard hooked else { return }
+        hooked = false
         IOHIDDeviceRegisterInputReportCallback(device, buffer, bufferSize, nil, nil)
         IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+    }
+
+    /// Tells the app once, then forgets the app so nothing holds on. Main thread.
+    private func fireGone() {
+        onGone?()
+        onGone = nil
+        onInput = nil
+    }
+
+    /// The deck was unplugged (the finder's removal callback, main thread).
+    /// The handle is not closed: closing an unplugged device can crash.
+    func gone() {
+        guard shut() else { return }
+        unhook()
+        DispatchQueue.main.async { [self] in fireGone() }
+    }
+
+    /// Done with the deck (main thread). Reports already on the io queue
+    /// still go out; the handle closes behind them.
+    func close() {
+        guard shut() else { return }
+        unhook()
+        onGone = nil
+        onInput = nil
+        io.async { [self] in IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone)) }
     }
 }
 
