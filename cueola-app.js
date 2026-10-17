@@ -12647,16 +12647,19 @@ function assemblePrompterScriptFromBeats(list=beats) {
     const d = b.cues?.script;
     const copy = scriptCueText(d);
     const rowNum = rowDisplayNumber(rowIdx, source);
-    const header = b.info ? `\n[${rowNum}] ${b.info}\n` : `\n[${rowNum}]\n`;
+    // One heading line per row, one blank line between rows. A row with no
+    // script is just its heading, so the Script Op editor no longer shows a
+    // tall empty gap between "[1] Opening Package" and "[2] Cold Open".
+    const header = b.info ? `[${rowNum}] ${b.info}` : `[${rowNum}]`;
     if (!copy) {
       // Guidance body: the Script Cue label first (that's where students
       // type), then row notes. Brackets render dimmed, never read on air.
       const guide = String(getCueOn(d) || b.notes || '').trim().replace(/\s+/g, ' ');
-      return header + (guide ? `[${guide.replace(/[\[\]]/g, '')}]` : '');
+      return guide ? `${header}\n[${guide.replace(/[\[\]]/g, '')}]` : header;
     }
     const speaker = scriptSpeakerLabel(d);
     const dialogue = d.scriptType === 'Dialogue' ? '[DIALOGUE]\n' : '';
-    return header + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
+    return `${header}\n` + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
   }).join('\n\n'));
 }
 
