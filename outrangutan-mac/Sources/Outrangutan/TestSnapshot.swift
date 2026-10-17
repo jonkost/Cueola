@@ -667,15 +667,25 @@ enum TestSnapshot {
                         try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("sk-inspector.png"))
                     }
                     win.orderOut(nil)
-                    engine.update(engine.cues[0].id) { $0.key.mode = .off }
                 }
             }),
-            (1.0, {}),
+            (1.0, {
+                // The usual way to place a lower third: smaller and pushed
+                // down. The background must still fill the whole screen.
+                engine.update(engine.cues[0].id) { $0.scale = 0.5; $0.posY = 30 }
+            }),
             (0.6, {
-                note("b key off on air:")
+                note("b the same still at scale 0.5, pushed down 30%, key still on:")
+                note("   " + pixel("top left corner, outside the picture (green, not black)", x: 0.02, y: 0.05))
+                note("   " + pixel("top right corner, outside the picture (green, not black)", x: 0.98, y: 0.05))
+                snap("sk-b-framed-green")
+                engine.update(engine.cues[0].id) { $0.scale = 1; $0.posY = 0; $0.key.mode = .off }
+            }),
+            (0.6, {
+                note("c key off on air:")
                 note("   " + pixel("top left corner (black)", x: 0.02, y: 0.05))
                 note("   " + pixel("inside the white bar (white)", x: 0.3, y: 0.85))
-                snap("sk-b-black")
+                snap("sk-c-black")
                 engine.allStop()
             }),
         ]

@@ -80,6 +80,12 @@ final class OutputView: NSView {
     private let videoB = AVPlayerLayer()
     private let still1 = CALayer()
     private let still2 = CALayer()
+    /// The picture inside each still layer. The still layer itself stays
+    /// full-screen and carries the key background; only this child takes
+    /// the cue's scale and position, so chroma green fills the whole screen
+    /// behind a lower third however it is framed.
+    private let picture1 = CALayer()
+    private let picture2 = CALayer()
     private var frames: [PictureSlot: Cue] = [:]
     /// Video layers holding a player ahead of its GO: on screen at zero
     /// opacity so the picture path is warm, but showing nothing.
@@ -111,6 +117,10 @@ final class OutputView: NSView {
                            "opacity": NSNull(), "transform": NSNull(), "zPosition": NSNull(),
                            "backgroundColor": NSNull()]
             layer?.addSublayer(sub)
+        }
+        for (still, picture) in [(still1, picture1), (still2, picture2)] {
+            picture.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "transform": NSNull()]
+            still.addSublayer(picture)
         }
         standbyLayer.isHidden = true
         standbyLayer.alignmentMode = .center
@@ -146,6 +156,16 @@ final class OutputView: NSView {
         }
     }
 
+    /// The layer that takes a cue's framing: a still's picture child, or
+    /// the video layer itself.
+    private func framedLayer(_ slot: PictureSlot) -> CALayer {
+        switch slot {
+        case .s1: return picture1
+        case .s2: return picture2
+        default: return layerFor(slot)
+        }
+    }
+
     override func layout() {
         super.layout()
         quietly {
@@ -153,7 +173,12 @@ final class OutputView: NSView {
                 let l = layerFor(slot)
                 l.transform = CATransform3DIdentity
                 l.frame = bounds
-                if let cue = frames[slot] { place(l, cue) }
+                if slot.isStill {
+                    let p = framedLayer(slot)
+                    p.transform = CATransform3DIdentity
+                    p.frame = l.bounds
+                }
+                if let cue = frames[slot] { place(slot, cue) }
             }
         }
         updateStandby()
@@ -202,7 +227,7 @@ final class OutputView: NSView {
     func showStill(_ image: NSImage?, in slot: PictureSlot, cue: Cue, opacity: Float) {
         quietly {
             let l = layerFor(slot)
-            l.contents = image
+            framedLayer(slot).contents = image
             frames[slot] = cue
             style(slot, cue)
             l.opacity = opacity
@@ -235,9 +260,9 @@ final class OutputView: NSView {
             else if cue.key.mode == .alpha { behind = NSColor(hex: cue.key.bg) ?? .black }
             else { behind = nil }
             l.backgroundColor = (behind ?? .clear).cgColor
-            l.contentsGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
+            framedLayer(slot).contentsGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
         }
-        place(l, cue)
+        place(slot, cue)
     }
 
     func setOpacity(_ slot: PictureSlot, _ value: Float) {
@@ -249,7 +274,7 @@ final class OutputView: NSView {
             let l = layerFor(slot)
             prepared.remove(slot)
             l.isHidden = true
-            if slot.isStill { l.contents = nil; l.backgroundColor = NSColor.clear.cgColor }
+            if slot.isStill { framedLayer(slot).contents = nil; l.backgroundColor = NSColor.clear.cgColor }
             if let v = l as? AVPlayerLayer { v.player = nil }
             frames[slot] = nil
         }
@@ -311,11 +336,12 @@ final class OutputView: NSView {
     }
 
     /// Scale and position, like the web app: position is a percent of the
-    /// screen, then the picture is scaled around its center.
-    private func place(_ l: CALayer, _ cue: Cue) {
+    /// screen, then the picture is scaled around its center. A still's
+    /// framing moves only its picture; the layer behind it stays full-screen.
+    private func place(_ slot: PictureSlot, _ cue: Cue) {
         let dx = bounds.width * cue.posX / 100
         let dy = -bounds.height * cue.posY / 100   // + is down on the web, up on a Mac layer
-        l.transform = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), cue.scale, cue.scale, 1)
+        framedLayer(slot).transform = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), cue.scale, cue.scale, 1)
     }
 
     private func raise(_ slot: PictureSlot) {
