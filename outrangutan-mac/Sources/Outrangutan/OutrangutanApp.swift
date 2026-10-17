@@ -342,10 +342,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Outrangutan from Finder) joins the cue list.
     func application(_ application: NSApplication, open urls: [URL]) {
         guard !TestSnapshot.isOn else { return }
+        // Locked editing covers Finder and the Dock too: a show file opened
+        // mid-show would replace the whole show, and media would join it.
+        guard !engine.locked else { engine.notice = Engine.lockedNotice; return }
         if let show = urls.first(where: { $0.pathExtension.lowercased() == "ogshow" }) { return files.open(show) }
         let media = urls.filter { Cue.make(from: $0) != nil }
         guard !media.isEmpty else { return }
-        guard !engine.locked else { engine.notice = Engine.lockedNotice; return }
         engine.add(urls: media)
     }
 
