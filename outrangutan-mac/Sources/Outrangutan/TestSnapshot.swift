@@ -698,6 +698,71 @@ enum TestSnapshot {
                 note("   log: " + engine.log.entries.suffix(6).map(\.text).joined(separator: " / "))
                 engine.allStop()
             }),
+            (0.5, {
+                // The Wi-Fi drops right on GO: the write fails for a plain
+                // reason. The clip's start time must still land when it is back.
+                fake.fails = true
+                writesBefore = fake.writeCount
+                fake.set(["outrangutan", "command"], command("cue", cueId: "og_v1"))
+            }),
+            (0.6, {
+                note("g the Wi-Fi dropped on GO: the fire ran (picture = \(engine.pictureCue?.name ?? "-")), writes landed = \(fake.writeCount - writesBefore)")
+                fake.fails = false
+            }),
+            (1.5, {
+                let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
+                let start = og["playingStart"] as? [String: Any] ?? [:]
+                let live = og["live"] as? [String: Any] ?? [:]
+                note("h the Wi-Fi is back: writes landed = \(fake.writeCount - writesBefore), start = \(start["name"] ?? "-") seq \(start["seq"] ?? "-"), ack = \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-"), live = \(live["name"] ?? "-")")
+                // Bars starts 5 s in: its start time is the moment it started, not 5 s earlier.
+                let ts = (start["ts"] as? Double) ?? 0, startedAt = (start["startedAt"] as? Double) ?? 0
+                note("   the trimmed clip's start time is \(Int(ts - startedAt)) ms before its write (0 is right; 5000 would be the trim)")
+                engine.allStop()
+            }),
+            (0.5, {
+                // A slow network: a write is on its way when two commands land.
+                // Both answers must go out, one write each, oldest first.
+                fake.slow = true
+                writesBefore = fake.writeCount
+                let acks = fake.ackIds.count
+                link.publishLive(force: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
+                    fake.set(["outrangutan", "command"], command("stop"))
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                    note("i two commands landed while a write was on its way: writes = \(fake.writeCount - writesBefore), answers written = \(fake.ackIds.dropFirst(acks).joined(separator: ", "))")
+                }
+            }),
+            (1.6, {
+                fake.slow = false
+                // The dial spins: 40 volume ticks and 20 standby steps in a
+                // second must not make 60 writes.
+                writesBefore = fake.writeCount
+                for i in 0..<40 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.025) { engine.setGain(0.3 + Double(i) * 0.01) }
+                }
+                for i in 0..<20 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.05) { engine.moveStandby(i % 2 == 0 ? 1 : -1) }
+                }
+            }),
+            (1.5, {
+                let live = (fake.doc["outrangutan"] as? [String: Any])?["live"] as? [String: Any] ?? [:]
+                note("j a dial spin (40 volume ticks, 20 standby steps in 1 s): live writes = \(fake.writeCount - writesBefore), last gain on the wire = \(live["gain"] ?? "-") (engine says \(String(format: "%.2f", engine.masterGain)))")
+            }),
+            (0.5, {
+                // The line dies without a word: the cloud keeps the change
+                // to itself. A read must notice, read fast again and reopen the line.
+                fake.mute = true
+                let reads = fake.readCount, lines = fake.listenCount
+                let before = engine.pictureCue?.name ?? "-"
+                fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) {
+                    note("k the line went quiet: picture before = \(before), 2.3 s later = \(engine.pictureCue?.name ?? "-"); reads in 2.3 s = \(fake.readCount - reads), lines opened = \(fake.listenCount - lines) (the new line answers at once in this pretend cloud, so reads slow down again)")
+                    note("   log: " + engine.log.entries.suffix(3).map(\.text).joined(separator: " / "))
+                }
+            }),
+            (2.5, { fake.mute = false; engine.allStop() }),
         ]
     }
 
@@ -1977,6 +2042,17 @@ final class FakeRecordStore: ShowRecordStore {
     var pushes = false
     /// Pretend the cloud is busy: writes are refused with the busy signal.
     var busy = false
+    /// Pretend the Wi-Fi dropped: writes fail with a plain error.
+    var fails = false
+    /// Pretend a slow network: each write takes 0.3 s to land.
+    var slow = false
+    /// Pretend the live line died without saying so: changes are kept but
+    /// not pushed, so only a read can bring them.
+    var mute = false
+    /// Every answer written, in order, by its command id.
+    private(set) var ackIds: [String] = []
+    /// How many times a live line was opened.
+    private(set) var listenCount = 0
     private var listeners: [@MainActor ([String: Any]) -> Void] = []
     private var writeSeq = 0
 
@@ -1986,14 +2062,18 @@ final class FakeRecordStore: ShowRecordStore {
     }
 
     func write(code: String, _ updates: [[String]: Any]) async throws {
+        if slow { try await Task.sleep(nanoseconds: 300_000_000) }
         if busy { throw CloudError(message: "The cloud is busy.", busy: true) }
+        if fails { throw CloudError(message: "Can't reach the internet. Check the Wi-Fi.") }
         writeCount += 1
+        if let ack = updates[["outrangutan", "cmdAck"]] as? [String: Any], let id = ack["commandId"] as? String { ackIds.append(id) }
         // Go through the written form and back, like the real cloud.
         for (path, value) in updates { set(path, FirestoreValue.decode(FirestoreValue.encode(value))) }
     }
 
     func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
         guard pushes else { throw CloudError(message: "no live line in this test", refused: true) }
+        listenCount += 1
         onMessage(["targetChange": ["targetChangeType": "ADD"]])
         onMessage(["documentChange": ["document": ["fields": FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:], "updateTime": stamp()]]])
         onMessage(["targetChange": ["targetChangeType": "CURRENT"]])
@@ -2005,7 +2085,7 @@ final class FakeRecordStore: ShowRecordStore {
     func set(_ path: [String], _ value: Any) {
         Self.insert(&doc, path[...], value)
         writeSeq += 1
-        guard pushes else { return }
+        guard pushes, !mute else { return }
         let fields = FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:]
         let message: [String: Any] = ["documentChange": ["document": ["fields": fields, "updateTime": stamp()]]]
         listeners.forEach { $0(message) }
