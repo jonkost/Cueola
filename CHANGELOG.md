@@ -58,8 +58,8 @@
   GO), and the volume, what stands by, what is on air and the clock on the
   strip. Settings, Stream Deck has the switch and the brightness; Show
   Check says whether a deck is plugged in. Tried on a pretend deck in test
-  mode; the real XL and + are Jon's to try. A deck on another Mac keeps
-  working through KeyWi Bird in the browser there.
+  mode, then on Jon's real deck on the playback Mac: it works. A deck on
+  another Mac keeps working through KeyWi Bird in the browser there.
 - **KeyWi Bird: VOL +, VOL - and MUTE keys**, for every deck without a
   dial (XL, MK.2, Mini). They ride the same lane as the dial, so the Mac
   app and the web player both hear them; the faces show the level, MUTE

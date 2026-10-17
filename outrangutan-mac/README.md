@@ -116,8 +116,8 @@ for students running the show.
   the volume, what stands by, what is on air and the clock on its strip.
   **Settings, Stream Deck** has the on-off switch and the brightness. A
   deck on another Mac keeps working through KeyWi Bird in the browser
-  there. Tried on the XL and the + so far; the Mini and the 2017 deck use
-  the older bitmap pictures and have not been tried.
+  there. Works on Jon's deck on the playback Mac (Oct 16). The Mini and
+  the 2017 deck use the older bitmap pictures and have not been tried.
 - **MIDI:** plug in any MIDI box (pad controller, fader box, keyboard). In
   **Settings, MIDI**, click **Learn a Control**, touch a button or fader,
   then pick what it does: GO, Pause, Stop, Fade, All Stop, a cue, a pad, or
