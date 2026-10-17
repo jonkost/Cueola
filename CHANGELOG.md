@@ -48,6 +48,18 @@
   standing by.
 - **Fade's button** shows a bank of faders being pulled down (the same
   symbol as KeyWi Bird's FADE key), not a stock chart.
+- **A Stream Deck plugged into the playback Mac works on its own.** The
+  Mac app drives it: no browser, no Elgato software. GO, Pause, Stop, Fade
+  and All Stop on the first keys with their keyboard keys printed on them,
+  then the cues by number (red on air, green standing by; the XL shows
+  sixteen at a time, the page the standby is on), then the pads with their
+  emoji. The XL gets VOL −, VOL + and MUTE keys too. A Stream Deck + puts
+  the volume on dial 1 (press to mute), the standby on dial 2 (press for
+  GO), and the volume, what stands by, what is on air and the clock on the
+  strip. Settings, Stream Deck has the switch and the brightness; Show
+  Check says whether a deck is plugged in. Tried on a pretend deck in test
+  mode; the real XL and + are Jon's to try. A deck on another Mac keeps
+  working through KeyWi Bird in the browser there.
 - **KeyWi Bird: VOL +, VOL - and MUTE keys**, for every deck without a
   dial (XL, MK.2, Mini). They ride the same lane as the dial, so the Mac
   app and the web player both hear them; the faces show the level, MUTE
@@ -130,7 +142,9 @@ back when the mouse moves or the screen is tapped.
 - **One name for things.** Flowmingo, Script Op and Flowmingo Op in the copy
   became "the prompter" and "the prompter controls"; Connect, Link and Load
   became Link; Reset became Top; To Time became Count to; Tech Difficulty
-  became Tech difficulties; "No talent ack" became "Talent did not answer".
+  became Tech difficulties; the "ack" wording is gone: the status says "The
+  prompter screen did not answer", and the Trouble signal lesson says the same
+  (that lesson's narration needs re-recording).
   The pop-out window calls itself Script Op, like the panel it mirrors.
 - **The Flowmingo Op preview follows the talent**: the copy moves so the
   talent's spot sits on the read line, the read line and width follow the
