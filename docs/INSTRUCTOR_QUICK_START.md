@@ -53,7 +53,59 @@ recorded (decision 14).*
    paperwork; **Lock groups** when you want assignments frozen. Your
    **Reviewing** picker flips your paperwork view and exports between groups.
 
-## 3 · During the run
+## 3 · The playback Mac (Outrangutan for Mac and its Stream Deck)
+
+The playback Mac runs the clips. The director's TAKE on the rundown fires
+them there, and a Stream Deck plugged into that Mac drives it with no
+browser open. Do this once before the show.
+
+1. **Finder:** open the disk image (Outrangutan.dmg) and drag Outrangutan
+   into Applications. Read the "Read me first" note in the image. The first
+   time you open the app the Mac may say it cannot check it for malware:
+   open **System Settings ▸ Privacy & Security**, scroll down, click **Open
+   Anyway** next to Outrangutan, and open it again. (The app is signed for
+   our own Macs, not through Apple, so the Mac asks once.)
+2. **The app:** open the show file (File ▸ **Open Show**, or double-click
+   it in Finder), or drag videos, sounds and stills into the window, or
+   click **Add Media**. Each file becomes a row in the cue list. Click a cue
+   to stand it by; it turns green.
+3. **The app:** click **Outputs** in the toolbar. The program picture goes
+   full screen on the second screen. With one screen it opens as a window.
+   Its menu has **Identify**, which puts each output's number on its screen
+   for three seconds, so you know which cable is which.
+4. **The app:** click **Show Check** in the toolbar. It lists what can bite
+   mid-show (missing media, closed outputs, an unplugged screen or sound
+   device, battery power, a full disk, the show link) in red, orange or
+   green, each with a button to fix it where it can. Fix the red ones.
+5. **The app:** File ▸ **Connect to a Show** (or click the light in the
+   bottom bar). Pick **Student** or **Instructor**, sign in with the same
+   username and PIN or password as the web front door, type the show code
+   and click **Connect**. The light turns green and says "Connected to"
+   and the code. From now on the rundown's TAKE fires cues here, and the
+   rundown and the deck show what is on air. Run only one Outrangutan on a
+   show at a time: this app or the web one.
+6. **The deck:** quit the Elgato Stream Deck app on this Mac, and leave the
+   deck unconnected in KeyWi Bird on this Mac (two drivers cannot share one
+   deck). Plug the deck in. The app takes it over by itself.
+7. **Settings ▸ Stream Deck** (Command-comma) shows the status line, like
+   "Stream Deck XL connected", with the on-off switch and the brightness.
+   Show Check lists the deck too.
+8. **The deck:** the first keys are GO, Pause, Stop, Fade and All Stop,
+   with their keyboard keys printed on them. Then the cues by number: red
+   while on air, green while standing by (the XL shows sixteen at a time,
+   the page the standby is on). Then the pads of the current bank, with
+   their emoji. The XL also gets volume down, volume up and MUTE keys. On a Stream
+   Deck + the volume sits on dial 1 (press it to mute), the standby on dial
+   2 (press it for GO), and the strip shows the volume, what stands by,
+   what is on air and the clock.
+9. **The director's Mac:** a deck plugged in there keeps working through
+   KeyWi Bird in the browser, nothing to change. Its playback keys reach the
+   playback Mac through the show.
+10. **After the show:** Window ▸ **Show Log** (Command-L) lists every GO,
+    stop, pause and pad hit with the time and who asked for it ("This Mac",
+    or the person in Cueola). Search it, export it as text or print it.
+
+## 4 · During the run
 
 - Your position roster lives on the Planda Bear hub: every student on the
   show with their positions and paperwork. Sign in as admin and tap **Assign
@@ -72,7 +124,7 @@ recorded (decision 14).*
   Cloud-trail snapshots restore the rundown for everyone (a recovery copy is
   saved first).
 
-## 4 · After the show / series
+## 5 · After the show / series
 
 - **Export PDF Package** per group; saved exports are stamped and traceable.
 - Running a series? On the dashboard, open the finished show's **Session
@@ -80,7 +132,7 @@ recorded (decision 14).*
   carry forward, the name auto-increments ("Ep 12" ▸ "Ep 13"), and the new
   session shows an **↳ From** chip.
 
-## 5 · End of term
+## 6 · End of term
 
 Follow [term-boundary-runbook.md](term-boundary-runbook.md): export/archive or
 purge sessions (purge is the PII wipe), revoke the term's class keys, mint next
