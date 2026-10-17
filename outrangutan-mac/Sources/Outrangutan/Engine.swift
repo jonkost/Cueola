@@ -143,6 +143,12 @@ final class Deck {
     func preload(_ cue: Cue, key: String, device: String?, viaLane: Bool, ended: @escaping () -> Void) {
         load(cue, device: device, viaLane: viaLane, ended: ended)
         player.volume = 0
+        // On the lane path the engine must stay quiet too: the lane's level
+        // is whatever the last cue left it, and its clock must say nothing
+        // is due yet, or the first frames the listener hands over during
+        // the preroll would go out while the cue only stands by.
+        lane.gain.outputVolume = 0
+        lane.clock.note(position: -1, speed: 0, host: 0)
         preloadKey = key
         guard let item = player.currentItem else { return }
         // With an output on the item, the decoder runs now, before any
@@ -257,7 +263,8 @@ final class Deck {
     /// engine plays exactly the frames that are due. Called every tick and
     /// after each play, pause and seek.
     func syncLane() {
-        guard viaLane else { return }
+        // A cue only standing by keeps its clock stopped until GO notes it.
+        guard viaLane, !isPreloaded else { return }
         let moving = player.timeControlStatus == .playing ? Double(player.rate) : 0
         lane.clock.note(position: current, speed: moving, host: CACurrentMediaTime())
     }

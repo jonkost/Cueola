@@ -24,6 +24,7 @@ extension TestSnapshot {
         }
         var pausedAt = 0
         var stoppedAt = 0
+        var standbyAt = 0
         return [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -43,12 +44,20 @@ extension TestSnapshot {
                 let applause = Cue(name: "Applause", path: media.appendingPathComponent("demo-applause.wav").path, kind: .audio, wireID: Cue.newWireID())
                 let tone = Cue(name: "Tone", path: toneURL.path, kind: .audio, wireID: Cue.newWireID(offsetMs: 1))
                 let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
-                engine.replaceShow(cues: [applause, tone, bars], pads: [], banks: [], multiTrigger: nil)
+                let still = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 3))
+                engine.replaceShow(cues: [applause, tone, bars, still], pads: [], banks: [], multiTrigger: nil)
                 engine.audio.cueFirstChannel = 2
                 note("a channels 3 and 4 picked: engine on=\(engine.cueSound.isOn) note=\(engine.cueSound.note)")
                 engine.go()
             }),
-            (1.0, {
+            (0.5, {
+                // The tone stands by on lane 3, loaded ahead: nothing of it
+                // may go out the engine until GO.
+                standbyAt = engine.cueSound.lanes[3].ring.tally.delivered
+                note("a2 tone standing by: \(engine.preloadState); lane 3 level \(engine.cueSound.lanes[3].gain.outputVolume)")
+            }),
+            (0.5, {
+                note("a3 half a second on, lane 3 handed out \(engine.cueSound.lanes[3].ring.tally.delivered - standbyAt) frames while the tone only stood by (must be 0)")
                 note("b applause (44.1 kHz mono): \(engine.soundRoutes); lane 2 \(tally(2)) \(lag(2)); meter \(meter())")
                 engine.go()
             }),
