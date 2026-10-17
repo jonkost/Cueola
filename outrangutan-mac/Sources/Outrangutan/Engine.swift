@@ -303,7 +303,9 @@ final class Engine: ObservableObject {
     }
 
     @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?(); scheduleStandbyPreload(after: 0.3) } }
-    @Published var standbyID: UUID? { didSet { if standbyID != oldValue { onTransport?(); scheduleStandbyPreload() } } }
+    /// The standby is not in the live packet, so moving it tells the show
+    /// link nothing: a dial spin would only flood the cloud with writes.
+    @Published var standbyID: UUID? { didSet { if standbyID != oldValue { scheduleStandbyPreload() } } }
     /// The outputs, in order. There is always at least one.
     @Published var outputs: [OutputConfig] { didSet { outputsChanged() } }
     /// Where sound goes.

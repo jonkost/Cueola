@@ -62,6 +62,8 @@ final class ShowLink: ObservableObject {
     private var pending: [[String]: Any] = [:]
     private var writing = false
     private var writeTroubleShown = false
+    /// The forced "what is on air" write waiting its turn, while one is.
+    private var liveTimer: Timer?
 
     init(engine: Engine, store: ShowRecordStore? = nil) {
         self.engine = engine
@@ -125,6 +127,8 @@ final class ShowLink: ObservableObject {
         heartbeat = nil
         flushTimer?.invalidate()
         flushTimer = nil
+        liveTimer?.invalidate()
+        liveTimer = nil
         writeBackoff = 0
         joined = false
         pending = [:]
@@ -308,10 +312,30 @@ final class ShowLink: ObservableObject {
     /// document the rundown, the deck and this Mac all write to, and the
     /// cloud starts refusing writes past about one a second. It did, in the
     /// show on Oct 16.)
+    ///
+    /// A change forces a write, but at most four a second: a spin of the
+    /// volume dial or a held arrow key is dozens of changes in a second, and
+    /// the cloud would start refusing. The last state always goes out, a
+    /// moment later.
     func publishLive(force: Bool) {
         guard joined else { return }
         let now = Self.now
         if !force && now - lastLiveAt < 2000 { return }
+        if force && now - lastLiveAt < 250 {
+            if liveTimer == nil {
+                let t = Timer(timeInterval: max(0.01, (250 - (now - lastLiveAt)) / 1000), repeats: false) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.liveTimer = nil
+                        self?.publishLive(force: true)
+                    }
+                }
+                RunLoop.main.add(t, forMode: .common)
+                liveTimer = t
+            }
+            return
+        }
+        liveTimer?.invalidate()
+        liveTimer = nil
         lastLiveAt = now
         liveSeq += 1
         let packet = LivePacket.make(engine.liveState(), ts: now, seq: liveSeq, sender: sender, build: build)
