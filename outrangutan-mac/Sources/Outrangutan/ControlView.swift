@@ -115,6 +115,14 @@ struct ControlView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showConnect)) { _ in showConnect = true }
         .onAppear { engine.undoManager = undoManager }
         .onReceive(NotificationCenter.default.publisher(for: .toggleInspector)) { _ in showInspector.toggle() }
+        // Edit, Move Cue Up or Down (Option-Command-Up and Down) moves the
+        // picked cues, like the right-click menu; with nothing picked, the
+        // cue standing by.
+        .onReceive(NotificationCenter.default.publisher(for: .moveCues)) { note in
+            guard let step = note.object as? Int else { return }
+            let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
+            engine.move(ids: ids, by: step)
+        }
         .onChange(of: engine.pads.touches) { _, _ in touchedPads = true }
     }
 

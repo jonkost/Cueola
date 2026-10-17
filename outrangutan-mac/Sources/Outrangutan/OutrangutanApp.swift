@@ -142,7 +142,16 @@ struct UndoButtons: View {
     }
 }
 
-/// Edit menu: a copy of the cue standing by, and moving it up or down.
+extension Notification.Name {
+    /// Move Cue Up or Down from the Edit menu. The step (-1 or 1) rides
+    /// along as the object. The cue list answers it, because only the list
+    /// knows which cues are picked.
+    static let moveCues = Notification.Name("outrangutan.moveCues")
+}
+
+/// Edit menu: a copy of the cue standing by, and moving the picked cues
+/// up or down (the same command as Move Up and Move Down in the list's
+/// right-click menu).
 struct DuplicateButton: View {
     @ObservedObject var engine: Engine
 
@@ -150,12 +159,14 @@ struct DuplicateButton: View {
         Button("Duplicate Cue") { if let id = engine.standbyID { engine.duplicate(id) } }
             .keyboardShortcut("d")
             .disabled(engine.locked || engine.standbyID == nil)
-        Button("Move Cue Up") { if let id = engine.standbyID { engine.move(ids: [id], by: -1) } }
+        // The menu cannot see which rows are picked, so the list does the
+        // move and decides whether the cues can go that way.
+        Button("Move Cue Up") { NotificationCenter.default.post(name: .moveCues, object: -1) }
             .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            .disabled(engine.locked || !engine.canMove(ids: Set([engine.standbyID].compactMap { $0 }), by: -1))
-        Button("Move Cue Down") { if let id = engine.standbyID { engine.move(ids: [id], by: 1) } }
+            .disabled(engine.locked || engine.cues.count < 2)
+        Button("Move Cue Down") { NotificationCenter.default.post(name: .moveCues, object: 1) }
             .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-            .disabled(engine.locked || !engine.canMove(ids: Set([engine.standbyID].compactMap { $0 }), by: 1))
+            .disabled(engine.locked || engine.cues.count < 2)
     }
 }
 
