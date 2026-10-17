@@ -81,10 +81,48 @@
   document.documentElement.dataset.theme = activeTheme;
   init();
 
+  // Hover help: the same floating chip the app draws for data-tip (the
+  // pop-out used to tag fourteen controls and show nothing on hover).
+  function bindFloatTips() {
+    let tip = null, anchor = null, timer = 0;
+    const hide = () => { clearTimeout(timer); timer = 0; tip?.remove(); tip = null; anchor = null; };
+    const show = el => {
+      const text = el.getAttribute('data-tip');
+      if (!text) return;
+      tip = document.createElement('div');
+      tip.className = 'ui-float-tip';
+      tip.setAttribute('role', 'tooltip');
+      tip.textContent = text;
+      document.body.appendChild(tip);
+      const r = el.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+      const x = Math.max(8, Math.min(r.left + r.width / 2 - tr.width / 2, innerWidth - tr.width - 8));
+      let y = r.bottom + 8;
+      if (y + tr.height > innerHeight - 8) y = r.top - tr.height - 8;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+      requestAnimationFrame(() => tip?.classList.add('on'));
+    };
+    const arm = el => { if (el === anchor) return; hide(); anchor = el; timer = setTimeout(() => { if (anchor === el && document.contains(el)) show(el); }, 150); };
+    const enter = e => {
+      const t = e.target.closest?.('[data-tip]');
+      if (!t) { if (anchor && e.type === 'mouseover') hide(); return; }
+      if (e.type === 'focusin') { try { if (!e.target.matches(':focus-visible')) return; } catch {} }
+      arm(t);
+    };
+    document.addEventListener('mouseover', enter);
+    document.addEventListener('focusin', enter);
+    document.addEventListener('mouseout', e => { if (anchor && !(e.relatedTarget && anchor.contains(e.relatedTarget))) hide(); });
+    document.addEventListener('focusout', hide);
+    document.addEventListener('click', hide, true);
+    document.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  }
+
   function init() {
     restoreTab();
     restorePanelZoom();
     bindEvents();
+    bindFloatTips();
     setCommandAvailability(false);
     // Section arranging + favorites quick row (shared with the built-in
     // Script Op sidebar via localStorage; this pop-out is the reference UI).
@@ -387,7 +425,7 @@
 
     if (button.matches('[data-command-kind]')) {
       const kind = button.dataset.commandKind;
-      if (kind === 'clear' && !window.confirm('Clear the live Flowmingo script? This immediately pushes an empty script to the talent display.')) return;
+      if (kind === 'clear' && window.prompt('Clear the script?\n\nThis sends an empty script to the prompter.\n\nType CLEAR to confirm.') !== 'CLEAR') return;
       let action = button.dataset.action || '';
       if (!action && button.dataset.dynamicAction) action = resolveDynamicAction(button.dataset.dynamicAction);
       if (button.dataset.dynamicAction && !action) {
@@ -707,8 +745,8 @@
       document.body.appendChild(ov);
     }
     ov.innerHTML = keymapApi.referenceHTML({
-      title: 'Keyboard shortcuts: Script Operator',
-      sections: keymapApi.sectionsForScope(OPERATOR_KEYMAP, 'scriptop'),
+      title: 'Keyboard shortcuts: Script Op',
+      sections: [...keymapApi.sectionsForScope(OPERATOR_KEYMAP, 'scriptop'), { title: 'Script', rows: [{ label: 'Push the script', keys: ['Cmd', 'Enter'] }, { label: 'Bold', keys: ['Cmd', 'B'] }, { label: 'Italic', keys: ['Cmd', 'I'] }], note: 'These work while the cursor is in the script. Ctrl works in place of Cmd.' }],
       foot: 'Arrows drive the rundown on the main Cueola window; Space/J/K/L drive the prompter from this desk. Typing in any field suppresses shortcuts.',
     });
     ov.hidden = false;
@@ -774,6 +812,11 @@
 
     const align = String(first(snapshot, ['align', 'alignment', 'prompter.align']) || 'left');
     controlsRoot.querySelectorAll('[data-align]').forEach((button) => button.classList.toggle('is-active', button.dataset.align === align));
+    // Read line height and text width on the talent screen (talent truth rides the host snapshot).
+    const readLine = String(first(snapshot, ['readLine', 'prompter.readLine']) || 'center');
+    controlsRoot.querySelectorAll('[data-readline]').forEach((button) => button.classList.toggle('is-active', button.dataset.readline === readLine));
+    const width = String(first(snapshot, ['width', 'prompter.width']) || 'normal');
+    controlsRoot.querySelectorAll('[data-width]').forEach((button) => button.classList.toggle('is-active', button.dataset.width === width));
 
     const reversing = Boolean(first(snapshot, ['reversing', 'reverse', 'prompter.reversing']) ?? false);
     patchStateButton('reversing', reversing);
@@ -793,7 +836,7 @@
 
     const techOn = Boolean(first(snapshot, ['techSlateOn', 'techSlate', 'slate.tech', 'prompter.techSlateOn']) ?? false);
     const barsOn = Boolean(first(snapshot, ['colorBarsOn', 'barsOn', 'slate.bars', 'prompter.colorBarsOn']) ?? false);
-    patchToggle('techButton', techOn, techOn ? 'slate_tech_off' : 'slate_tech_on', techOn ? 'Back on air' : 'Tech Difficulty', 'techButtonLabel');
+    patchToggle('techButton', techOn, techOn ? 'slate_tech_off' : 'slate_tech_on', techOn ? 'Back on air' : 'Tech difficulties', 'techButtonLabel');
     patchToggle('barsButton', barsOn, barsOn ? 'slate_bars_off' : 'slate_bars_on', barsOn ? 'Back on air' : 'Color bars', 'barsButtonLabel');
 
     // No Question toggle: Push card turns the indicator on, Clear all overlays
@@ -992,7 +1035,8 @@
   }
 
   function readyStatusLabel() {
-    if (talentLine) return talentLine;
+    // The chip's dot and color already say connected: the words say what the talent is doing.
+    if (talentLine) return talentLine.replace(/^Talent connected · /, '');
     return productionCode ? `Ready · ${productionCode}` : 'Ready';
   }
 

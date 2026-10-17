@@ -12701,11 +12701,11 @@ function projectPrompterSessionStatus(status, detail='') {
   const update = document.getElementById('lsPrompterUpdateStatus');
   const healthy = ['ready','running','paused'].includes(status);
   if (dot) dot.className = `ls-prompter-dot${healthy ? '' : ' off'}`;
-  if (txt) txt.textContent = detail || prompterStatusLabel(status);
+  if (txt) { const line = detail || prompterStatusLabel(status); if (txt.textContent !== line) txt.textContent = line; }
   if (update && status === 'error') {
     clearTimeout(livePrompterStatusTimer);
     livePrompterStatusTimer = null;
-    update.textContent = detail || 'Flowmingo error';
+    update.textContent = detail || 'Prompter error';
     update.className = 'ls-prompter-update error';
   } else if (update && healthy && update.classList.contains('error')) {
     update.textContent = prompterStatusLabel(status);
@@ -14151,7 +14151,7 @@ function _notePrompterTalentSeen(msg={}) {
   // status renders from the model transition (projectTalentLinkTransition) —
   // never directly from this event, which fires at heartbeat rate.
   const ready = prompterSessionController.isReady(_activePrompterOutputInstanceId);
-  liveLinkState.noteAck('talent', ready ? 'Talent connected' : 'Talent connected · applying state');
+  liveLinkState.noteAck('talent', ready ? 'Talent connected' : 'Talent connected · catching up');
   if (wasSilent) _setPrompterStatus(true);
   ensureLiveLinkTicker();
   return wasSilent;
@@ -14499,7 +14499,7 @@ function _ensurePrompterOperatorBridge(startHello=false) {
 function initPrompter() {
   _prompterOperatorRuntimeActive = true;
   ensurePrompterProtocolIdentity();
-  projectPrompterSessionStatus(_prompterHasRecentTalent() ? 'connected' : 'opening', _prompterHasRecentTalent() ? 'Talent connected · applying state' : 'Waiting for Flowmingo output');
+  projectPrompterSessionStatus(_prompterHasRecentTalent() ? 'connected' : 'opening', _prompterHasRecentTalent() ? 'Talent connected · catching up' : 'Waiting for the prompter');
   ensureLiveLinkTicker();
   _ensurePrompterOperatorBridge(true);
   _setPrompterStatus(_prompterHasRecentTalent());
@@ -14537,7 +14537,7 @@ function stopPrompterOperatorRuntime() {
 
 function _setPrompterStatus(connected, unavailable=false) {
   if (unavailable) {
-    projectPrompterSessionStatus('closed', 'Flowmingo unavailable');
+    projectPrompterSessionStatus('closed', 'Prompter unavailable');
     return;
   }
   if (connected) {
@@ -14545,8 +14545,8 @@ function _setPrompterStatus(connected, unavailable=false) {
     const pausedLabel = _talentHeldAtRow ? `Holding at row ${_talentHeldAtRow}` : 'Talent paused';
     // The line reads from heartbeat truth (row, transport, freshness); the
     // handshake state only colors the status, it is never the message.
-    const truth = _talentStatusLine();
-    projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', truth || (ready ? (ptPlaying ? 'Talent scrolling' : pausedLabel) : 'Talent connected · applying state'));
+    const truth = _talentStatusLine({ short:true });
+    projectPrompterSessionStatus(ready ? (ptPlaying ? 'running' : 'paused') : 'connected', truth || (ready ? (ptPlaying ? 'Talent scrolling' : pausedLabel) : 'Talent connected · catching up'));
   } else {
     projectPrompterSessionStatus(lastTalentPingTs ? 'recovering' : 'opening', lastTalentPingTs ? 'The talent screen stopped answering' : 'Waiting for the talent screen');
   }
@@ -14649,7 +14649,7 @@ function _talentRowAtPct(pct) {
 // The Script Op status line, from heartbeat truth only:
 // 'Talent connected · row 4 · rolling · seen 1s ago'. Empty when no accepted
 // heartbeat is on record for the bound talent.
-function _talentStatusLine() {
+function _talentStatusLine(opts={}) {
   const entry = _talentRegistryEntry();
   if (!entry) return '';
   const ageMs = Date.now() - entry.lastTs;
@@ -14662,6 +14662,8 @@ function _talentStatusLine() {
   const seen = ageS < 2 ? 'seen just now' : `seen ${ageS}s ago`;
   // How long is left in the row the talent is reading, at their speed.
   const left = (entry.rowLeftSec != null && !entry.heldAtRow) ? `${window.CueolaPrompterEngine.formatSeconds(entry.rowLeftSec)} left in row` : '';
+  // short: the Script Op head line (row and time left live on the rail below it).
+  if (opts.short) return [head, row ? `row ${row}` : '', transport].filter(Boolean).join(' · ');
   return [head, row ? `row ${row}` : '', transport, left, seen].filter(Boolean).join(' · ');
 }
 // Rebind evidence for a heartbeat from an output other than the pinned one.
@@ -14785,7 +14787,7 @@ async function sendToPrompter(isInit=false) {
     return true;
   } catch (err) {
     markLivePrompterStatus('Update failed', 'error');
-    toast(firebaseConnectionLabel(err, 'Flowmingo update failed'));
+    toast(firebaseConnectionLabel(err, 'Prompter update failed'));
     return false;
   } finally {
     renderLivePrompterControls();
@@ -14872,6 +14874,10 @@ function patchScriptOpPrompterControls(region) {
     const active = button.dataset.prompterWidth === ptTextWidth;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  region.querySelectorAll('[data-prompter-mirror]').forEach(button => {
+    button.classList.toggle('active', !!ptMirrored);
+    button.setAttribute('aria-pressed', ptMirrored ? 'true' : 'false');
   });
 }
 
@@ -14986,7 +14992,8 @@ const SCRIPT_OPERATOR_CONTROL_ACTIONS = new Set([
   'align_left','align_center','align_right','slate_tech_on','slate_tech_off',
   'slate_bars_on','slate_bars_off','clock_timeofday','clock_off',
   'clock_size_up','clock_size_down','question_on','question_off','overlays_clear',
-  'rowinfo_on','rowinfo_off'
+  'rowinfo_on','rowinfo_off',
+  'readline_center','readline_high','width_narrow','width_normal','width_wide'
 ]);
 let _scriptOpWin = null;
 let _scriptOpHost = null;
@@ -15041,6 +15048,8 @@ function scriptOperatorSnapshot() {
     size:Number(ptFontSize),
     fontSize:Number(ptFontSize),
     align:ptAlign,
+    readLine:ptReadLinePos,
+    width:ptTextWidth,
     // The op window's own track is hidden (max scroll 0), so ptProgressPct()
     // is always 0 there — prefer the talent's self-reported percent so the
     // pop-out's seek slider shows the real position instead of snapping to 0.
@@ -15072,6 +15081,8 @@ function scriptOperatorSnapshot() {
       speed:Number(ptTargetSpeed),
       size:Number(ptFontSize),
       align:ptAlign,
+      readLine:ptReadLinePos,
+      width:ptTextWidth,
       progress:ptProgressPct(),
       mirrored:Boolean(ptMirrored),
       rowInfoOn:Boolean(ptRowInfoOn),
@@ -15216,14 +15227,14 @@ async function scriptOperatorExecuteCommand(command) {
     livePrompterDraftVersion += 1;
     adoptPrompterText(text, { forceEditor:true, source:'script-op-popout' });
     const pushed = await pushToPrompter();
-    return { ok:Boolean(pushed), detail:pushed ? 'Pushed to Flowmingo' : 'Flowmingo push failed', error:pushed ? '' : 'Flowmingo push failed' };
+    return { ok:Boolean(pushed), detail:pushed ? 'Pushed to the prompter' : 'Prompter push failed', error:pushed ? '' : 'Prompter push failed' };
   }
   if (kind === 'clear') {
     if (data.confirmed !== true) throw new Error('Clear requires confirmation in the Script Operator window.');
     adoptPrompterText('', { forceEditor:true, source:'cleared' });
     livePrompterDraftDirty = false;
     const pushed = await sendToPrompter(true);
-    return { ok:Boolean(pushed), detail:pushed ? 'Flowmingo script cleared' : 'Clear failed', error:pushed ? '' : 'Clear failed' };
+    return { ok:Boolean(pushed), detail:pushed ? 'Prompter script cleared' : 'Clear failed', error:pushed ? '' : 'Clear failed' };
   }
   if (kind === 'edit-script') {
     try { window.focus(); } catch {}
@@ -15559,7 +15570,7 @@ async function pushToPrompter() {
   const draftVersion = livePrompterDraftVersion;
   const pushed = await sendToPrompter();
   if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
-  if (pushed) toast('Pushed to Flowmingo');
+  if (pushed) toast('Pushed to the prompter');
   return pushed;
 }
 
@@ -15723,8 +15734,8 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     delete _pendingPrompterControls[control.controlId];
     pending?.settle?.({ ok:false, acknowledged:false, error:`${label} was sent, but the talent screen did not answer` });
     markPrompterToggleState(control.action, 'failed');
-    if (origin === 'flowop') flowOpSetStatus(`${label} sent · no talent ack`, true);
-    else markLivePrompterStatus('No talent ack', 'busy');
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · talent did not answer`, true);
+    else markLivePrompterStatus('Talent did not answer', 'busy');
   }, 5000);
   _pendingPrompterControls[control.controlId] = { action:control.action, origin, waitTimer, failTimer };
 }
@@ -16110,7 +16121,7 @@ function sendPrompterControl(action, payload=null) {
       return (sent && _activePrompterOutputInstanceId) ? sent : false;
     }
     prompterSessionController.queueCommand(control);
-    projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for talent to apply state' : 'Waiting for Flowmingo output');
+    projectPrompterSessionStatus(_activePrompterOutputInstanceId ? 'connected' : 'opening', _activePrompterOutputInstanceId ? 'Waiting for the talent' : 'Waiting for the prompter');
     markLivePrompterStatus(`${prompterControlLabel(action)} queued`, 'busy');
     // Queued for a talent that has not linked yet applies on link: not a dead
     // press, so the deck does not flash it red (review 9/13).
@@ -16381,9 +16392,9 @@ function ptLoadSavedOrDefault() {
     return;
   }
   ptSetScriptText(
-    'Welcome to Flowmingo\n\n' +
+    'Welcome to the prompter\n\n' +
     'Upload a PDF, DOCX, Pages, TXT, or Markdown file, or paste your script directly.\n\n' +
-    'Cueola can feed Flowmingo when you have a show code, but it is optional.\n\n' +
+    'A show code keeps the prompter in step with the rundown, but it is optional.\n\n' +
     'Press PLAY, or tap the stage, to begin scrolling.\n\n' +
     'Use the controls to adjust speed, text size, alignment, theme, mirror, and fullscreen.'
   );
@@ -16482,6 +16493,9 @@ function stopPrompterTalentRuntime() {
   if (_ptRaf) cancelAnimationFrame(_ptRaf);
   _ptRaf = null;
   _ptStopFreeRunFallback();
+  ptReversing = false;
+  ptBraking = false;
+  ptBoosting = false;
   if (ptHeartbeatInterval) ptHeartbeatInterval.cancel();
   ptHeartbeatInterval = null;
   ptPingBurstTimers.forEach(clearTimeout);
@@ -17442,6 +17456,11 @@ function ptRowHTML(row) {
     : '<p class="pt-row-blank">&nbsp;</p>';
   return `${head}<div class="pt-row-body">${body}</div>`;
 }
+// The whole script as row boxes, for a preview that is not the talent
+// screen (the Flowmingo Op): same markup, same look, no engine.
+function ptScriptRowsHTML(text) {
+  return PT_ENGINE.parseRows(text).map(row => `<section class="pt-row" data-key="${row.key}"${row.num != null ? ` data-row="${row.num}"` : ''} data-name="${esc(row.name || '')}">${ptRowHTML(row)}</section>`).join('');
+}
 function ptMakeRowEl(row) {
   const el = document.createElement('section');
   el.className = 'pt-row';
@@ -17646,12 +17665,19 @@ function poTransportSectionHTML(scope) {
     </div>`;
 }
 // Brake / Boost / Reverse / Forward: behind More (J / L and the arrow keys still work).
+// A hold button: pointer down starts, every way of letting go stops, and a
+// held Space or Enter does the same from the keyboard.
+function poHoldButtonHTML(send, action, label, dis='') {
+  const start = `this.setAttribute('aria-pressed','true');${send}('${action}_start')`;
+  const stop = `this.setAttribute('aria-pressed','false');${send}('${action}_stop')`;
+  return `<button class="pt-btn" aria-pressed="false" data-tip="Hold to ${label.toLowerCase()}" onpointerdown="${start}" onpointerup="${stop}" onpointerleave="${stop}" onpointercancel="${stop}" onlostpointercapture="${stop}" onkeydown="if((event.key===' '||event.key==='Enter')&&!event.repeat){event.preventDefault();${start}}" onkeyup="if(event.key===' '||event.key==='Enter'){${stop}}"${dis}>${label}</button>`;
+}
 function poTransportExtrasHTML() {
   return `<div class="flow-control-section flow-control-transport-extras">
       <div class="flow-control-title">Hold &amp; direction</div>
       <div class="flow-control-grid four">
-        <button class="pt-btn" onpointerdown="sendPrompterControl('brake_start')" onpointerup="sendPrompterControl('brake_stop')" onpointerleave="sendPrompterControl('brake_stop')" onpointercancel="sendPrompterControl('brake_stop')" onlostpointercapture="sendPrompterControl('brake_stop')">Brake</button>
-        <button class="pt-btn" onpointerdown="sendPrompterControl('boost_start')" onpointerup="sendPrompterControl('boost_stop')" onpointerleave="sendPrompterControl('boost_stop')" onpointercancel="sendPrompterControl('boost_stop')" onlostpointercapture="sendPrompterControl('boost_stop')">Boost</button>
+        ${poHoldButtonHTML('sendPrompterControl', 'brake', 'Brake')}
+        ${poHoldButtonHTML('sendPrompterControl', 'boost', 'Boost')}
         <button class="pt-btn" onclick="sendPrompterControl('direction_reverse')">Reverse</button>
         <button class="pt-btn" onclick="sendPrompterControl('direction_forward')">Forward</button>
       </div>
@@ -17663,18 +17689,17 @@ function poDisplaySectionHTML(scope) {
       <div class="flow-control-title">Speed &amp; Size</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="${scope}-speed-value" for="${scope}-speed-range" data-prompter-speed-value>${Math.round(ptTargetSpeed)}</output></span>
-      <input type="range" class="pt-range" id="${scope}-speed-range" data-prompter-speed min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value);this.dataset.controlDragging=''">
+      <input type="range" class="pt-range" id="${scope}-speed-range" data-prompter-speed aria-label="Prompter speed" min="5" max="200" value="${ptTargetSpeed}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSpeed(this.value);sendPrompterPreviewControl('speed_set_'+this.value)" onchange="sendPrompterControl('speed_set_'+this.value);this.dataset.controlDragging=''">
       </div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="${scope}-size-value" for="${scope}-size-range" data-prompter-size-value>${Math.round(ptFontSize)}</output></span>
-      <input type="range" class="pt-range" id="${scope}-size-range" data-prompter-size min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value);this.dataset.controlDragging=''">
+      <input type="range" class="pt-range" id="${scope}-size-range" data-prompter-size aria-label="Prompter text size" min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="ptSetSize(this.value);sendPrompterPreviewControl('size_set_'+this.value)" onchange="sendPrompterControl('size_set_'+this.value);this.dataset.controlDragging=''">
       </div>
     </div>`;
 }
 // Align: behind More on the Display pane.
 function poAlignSectionHTML() {
   return `<div class="flow-control-section flow-control-align">
-      <div class="flow-control-title">Align</div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
         <button class="pt-btn${ptAlign==='left'?' active':''}" data-prompter-align="left" onclick="sendPrompterControl('align_left')" aria-label="Align left" aria-pressed="${ptAlign === 'left' ? 'true' : 'false'}">Left</button>
@@ -17708,9 +17733,9 @@ function poScreenSectionHTML() {
   return `<div class="flow-control-section flow-control-screen">
       <div class="flow-control-title">Screen</div>
       <div class="flow-control-grid four">
-        <button class="pt-btn" onclick="sendPrompterControl('reset')">Reset</button>
-        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')">Hide controls</button>
-        <button class="pt-btn" onclick="sendPrompterControl('mirror')">Mirror</button>
+        <button class="pt-btn" onclick="sendPrompterControl('reset')" data-tip="Stop and go back to the top of the script">Top</button>
+        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')" data-tip="Hide or show the bar and panel on the talent screen">Hide controls</button>
+        <button class="pt-btn${ptMirrored ? ' active' : ''}" data-prompter-mirror onclick="sendPrompterControl('mirror')" aria-pressed="${ptMirrored ? 'true' : 'false'}" data-tip="Flip the copy for a beam splitter">Mirror</button>
         <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Fullscreen</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
@@ -17730,13 +17755,13 @@ function scriptOpDisplayPaneHTML() {
   const formatting = `<div class="flow-control-section flow-control-format">
       <div class="flow-control-title">Formatting &amp; Markers</div>
       <div class="ls-format-cascade" aria-label="Formatting and markers">
-        <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" data-tip="Make the selected text bold (Cmd+B)" aria-label="Bold"><strong>B</strong></button>
-        <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" data-tip="Make the selected text italic (Cmd+I)" aria-label="Italic"><em>I</em></button>
+        <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" data-tip="Make the selected text bold (Cmd/Ctrl+B)" aria-label="Bold"><strong>B</strong></button>
+        <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" data-tip="Make the selected text italic (Cmd/Ctrl+I)" aria-label="Italic"><em>I</em></button>
         <span class="fmt-sep"></span>
         <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
         <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
         <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\\n\\n')" data-tip="Start a new paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Line</span></button>
+        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\\n\\n')" data-tip="Start a new paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Paragraph</span></button>
       </div>
     </div>`;
   const panelText = `<div class="flow-control-section flow-control-paneltext">
@@ -17744,7 +17769,7 @@ function scriptOpDisplayPaneHTML() {
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Zoom <output class="pt-ctrl-val" id="lsq-zoom-value" for="lsq-zoom-range">${zoom}%</output></span>
         <button class="pt-btn" onclick="stepLiveTextZoom(-0.05)" aria-label="Smaller text">−</button>
-        <input type="range" class="pt-range" id="lsq-zoom-range" min="85" max="150" step="5" value="${zoom}" oninput="setLiveTextZoomPct(this.value)">
+        <input type="range" class="pt-range" id="lsq-zoom-range" aria-label="Panel text size" min="85" max="150" step="5" value="${zoom}" oninput="setLiveTextZoomPct(this.value)">
         <button class="pt-btn" onclick="stepLiveTextZoom(0.05)" aria-label="Bigger text">+</button>
       </div>
     </div>`;
@@ -17819,7 +17844,7 @@ function syncTechButtons() {
   const anyOn = anyTalentSlateOn();
   const tech = document.getElementById('lsq-tech-btn');
   if (tech) {
-    patchIconLabelButton(tech, 'state.warning', ptTechSlateOn ? 'Back on air' : 'Tech Difficulty');
+    patchIconLabelButton(tech, 'state.warning', ptTechSlateOn ? 'Back on air' : 'Tech difficulties');
     tech.classList.toggle('active', ptTechSlateOn);
     tech.classList.toggle('muted', anyOn && !ptTechSlateOn);
     tech.setAttribute('aria-pressed', ptTechSlateOn ? 'true' : 'false');
@@ -17835,7 +17860,7 @@ function syncTechButtons() {
   const flowAnyOn = flowOpTechSlate || flowOpColorBarsOn;
   const flowTech = document.getElementById('flow-tech-btn');
   if (flowTech) {
-    patchIconLabelButton(flowTech, 'state.warning', flowOpTechSlate ? 'Back on air' : 'Tech Difficulty');
+    patchIconLabelButton(flowTech, 'state.warning', flowOpTechSlate ? 'Back on air' : 'Tech difficulties');
     flowTech.classList.toggle('active', flowOpTechSlate);
     flowTech.classList.toggle('muted', flowAnyOn && !flowOpTechSlate);
     flowTech.setAttribute('aria-pressed', flowOpTechSlate ? 'true' : 'false');
@@ -17919,22 +17944,22 @@ function liveActionsHTML(scope = 'lsq', disabled = false) {
   const rowCue = `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
       <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
-        <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${rowDisplayNumber(Math.max(liveActiveCueIndex(), 0))}')" data-tip="Cue Flowmingo to the current rundown row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
-        <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx >= 0 ? rowDisplayNumber(nextRowIdx) : 0}')" data-tip="Cue Flowmingo to the next rundown row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+        <button class="pt-btn" data-script-op-cue="now" onclick="sendPrompterControl('seek_row_${rowDisplayNumber(Math.max(liveActiveCueIndex(), 0))}')" data-tip="Cue the prompter to the current row"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
+        <button class="pt-btn" data-script-op-cue="next" onclick="sendPrompterControl('seek_row_${nextRowIdx >= 0 ? rowDisplayNumber(nextRowIdx) : 0}')" data-tip="Cue the prompter to the next row"${nextRowIdx < 0 || disabled ? ' disabled' : ''}>${sfIcon('action.forward')}<span>Cue Next</span></button>
       </div>
       <div class="pt-ctrl-group pt-live-find">
-        <input type="text" class="admin-in pt-find-in" id="${scope}-find" placeholder="Find in script…" onkeydown="if(event.key==='Enter'){event.preventDefault();poFindInScript('${scope}')}"${dis}>
-        <button class="pt-btn" onclick="poFindInScript('${scope}')" data-tip="Cue Flowmingo to the next line containing this text (repeat to walk through matches)"${dis}><span>Find</span></button>
+        <input type="text" class="admin-in pt-find-in" id="${scope}-find" placeholder="Find in script…" aria-label="Find in script" onkeydown="if(event.key==='Enter'){event.preventDefault();poFindInScript('${scope}')}"${dis}>
+        <button class="pt-btn" onclick="poFindInScript('${scope}')" data-tip="Cue the prompter to the next line with these words (repeat to walk through matches)"${dis}><span>Find</span></button>
       </div>
     </div>`;
   // Returns bare control groups so they nest inside #lsLiveActions.
   return `${rowCue}
     <details class="cc-more sop-more"><summary>More</summary>
     <div class="flow-control-section flow-control-onair">
-      <div class="flow-control-title">On Air</div>
+      <div class="flow-control-title">On air</div>
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
-        <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech Difficulty'}</span></button>
-        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Show color bars on Flowmingo" aria-label="Toggle color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'Color bars'}</span></button>
+        <button class="pt-btn pt-tech-btn${techOn ? ' active' : ''}" id="${scope}-tech-btn" onclick="${techCall}" data-tip="Show a stand-by cover on the prompter" aria-label="Toggle technical difficulties cover" aria-pressed="${techOn ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${techOn ? 'Back on air' : 'Tech difficulties'}</span></button>
+        <button class="pt-btn pt-bars-btn${barsOn ? ' active' : ''}" id="${scope}-bars-btn" onclick="${barsCall}" data-tip="Show color bars on the prompter" aria-label="Toggle color bars" aria-pressed="${barsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${barsOn ? 'Back on air' : 'Color bars'}</span></button>
       </div>
     </div>
 	    <div class="flow-control-section flow-control-cue">
@@ -17978,7 +18003,7 @@ function ptToggleMirror() {
   const screen = ptEl('promptypus');
   if (screen) screen.classList.toggle('mirrored', ptMirrored);
   const btn = ptEl('pt-mirror-btn');
-  if (btn) btn.classList.toggle('active', ptMirrored);
+  if (btn) { btn.classList.toggle('active', ptMirrored); btn.setAttribute('aria-pressed', ptMirrored ? 'true' : 'false'); }
 }
 
 // Row info on the talent screen (NEXT / HOLDING chips). CSS does the hiding
@@ -18031,31 +18056,82 @@ function ptToggleFullscreen() {
   }
 }
 
-function ptToggleKeys(force) {
-  const hint = ptEl('pt-hint');
-  if (!hint) return;
-  const show = typeof force === 'boolean' ? force : hint.classList.contains('hidden');
-  hint.classList.toggle('hidden', !show);
-  const btn = ptEl('pt-keys-btn');
-  if (btn) { btn.setAttribute('aria-pressed', show ? 'true' : 'false'); btn.classList.toggle('active', show); }
+// The Settings sheet (gear, S): theme, align, width, read line, row info,
+// overlay and panel size, hide controls, and the keys. The gear used to hide
+// the whole bar and panel instead (Jon 10/16: "the gear doesn't show the
+// settings").
+function ptSettingsOpen() {
+  return !!ptEl('pt-settings-overlay')?.classList.contains('open');
 }
+let _ptSheetReturnFocus = null;
+// While a sheet is up the screen behind it is out of reach for the keyboard
+// and the screen reader; the sheet itself takes focus and gives it back.
+function ptSheetBackdrop(inert) {
+  ['pt-bar', 'pt-stage', 'pt-panel'].forEach(id => { const el = ptEl(id); if (el) el.inert = !!inert; });
+}
+function ptOpenSettings() {
+  ptCloseEdit();
+  const ov = ptEl('pt-settings-overlay');
+  if (!ov) return;
+  if (!ov.classList.contains('open')) _ptSheetReturnFocus = document.activeElement;
+  ov.classList.add('open');
+  ptSheetBackdrop(true);
+  ptSetOverlaySize(ptClockState?.size ?? 1, { persist:false });   // refresh the readout
+  ptRenderSettingsState();
+  ptEl('pt-settings-box')?.focus({ preventScroll:true });
+}
+function ptCloseSettings() {
+  const ov = ptEl('pt-settings-overlay');
+  if (!ov || !ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  ptSheetBackdrop(false);
+  const back = _ptSheetReturnFocus; _ptSheetReturnFocus = null;
+  try { if (back && back.isConnected && back !== document.body) back.focus({ preventScroll:true }); } catch {}
+}
+function ptToggleSettings() {
+  ptSettingsOpen() ? ptCloseSettings() : ptOpenSettings();
+}
+function ptToggleKeys(force) {
+  if (force === false) { ptCloseSettings(); return; }
+  ptOpenSettings();
+}
+// Every control in the sheet shows the current truth when it opens.
+function ptRenderSettingsState() {
+  ptSetAlign(ptAlign);
+  ptSetReadLine(ptReadLinePos, { persist:false });
+  ptSetWidth(ptTextWidth, { persist:false });
+  const box = ptEl('pt-rowinfo-toggle');
+  if (box && box.checked !== ptRowInfoOn) box.checked = ptRowInfoOn;
+  const mirror = ptEl('pt-mirror-btn');
+  if (mirror) { mirror.classList.toggle('active', ptMirrored); mirror.setAttribute('aria-pressed', ptMirrored ? 'true' : 'false'); }
+  const hide = ptEl('pt-hide-controls-btn');
+  if (hide) hide.textContent = ptPanelVisible ? 'Hide controls' : 'Show controls';
+  const rev = ptEl('pt-reverse-btn');
+  if (rev) { rev.classList.toggle('active', !!ptReversing); rev.setAttribute('aria-pressed', ptReversing ? 'true' : 'false'); }
+}
+// Reverse is a switch the talent can see: on the panel button, and from
+// the keys (Option + Down on, Option + Up off) or the operator.
+function ptSetReversing(on) {
+  ptReversing = !!on;
+  const rev = ptEl('pt-reverse-btn');
+  if (rev) { rev.classList.toggle('active', ptReversing); rev.setAttribute('aria-pressed', ptReversing ? 'true' : 'false'); }
+  ptKick();
+}
+function ptAdjustOverlaySize(delta) {
+  ptSetOverlaySize((ptClockState?.size ?? 1) + (Number(delta) || 0));
+}
+// Hide controls (H, or the operator's Hide controls): the bar and the panel
+// fade; moving the mouse brings the bar back for a moment (ptResetIdle).
 function ptTogglePanel() {
   ptPanelVisible = !ptPanelVisible;
   const panel = ptEl('pt-panel');
-  const hint = ptEl('pt-hint');
   if (panel) panel.classList.toggle('hidden', !ptPanelVisible);
-  if (hint && !ptPanelVisible) ptToggleKeys(false);
+  if (!ptPanelVisible) ptCloseSettings();
   ptMeasurePanelLift();
   // The bar fades with the controls (opacity only: the stage top stays put).
   const bar = ptEl('pt-bar');
   if (bar) bar.classList.toggle('hidden', !ptPanelVisible);
-  // Reflect the state on the gear button by id. (The old querySelector on
-  // .pt-bar-controls-btn grabbed the Load Session button and relabeled it.)
-  const btn = ptEl('pt-gear-btn');
-  if (btn) {
-    btn.setAttribute('aria-pressed', ptPanelVisible ? 'true' : 'false');
-    btn.classList.toggle('active', ptPanelVisible);
-  }
+  ptResetIdle();
 }
 
 // The control panel and the key-hint card float: dragging their grip strip
@@ -18063,8 +18139,7 @@ function ptTogglePanel() {
 // Position and panel scale persist per browser, and every restore re-clamps so
 // a spot saved at another window size snaps back into view.
 const PT_FLOAT_CARDS = {
-  'pt-panel': { varX: '--pt-panel-x', varY: '--pt-panel-y', store: 'cueola_pt_panel_pos', pos: null },
-  'pt-hint':  { varX: '--pt-hint-x',  varY: '--pt-hint-y',  store: 'cueola_pt_hint_pos',  pos: null }
+  'pt-panel': { varX: '--pt-panel-x', varY: '--pt-panel-y', store: 'cueola_pt_panel_pos', pos: null }
 };
 let _ptCardDrag = null;
 
@@ -18201,9 +18276,9 @@ function ptSetTheme(name) {
   document.documentElement.style.setProperty('--pt-ui-bg', t.uiBg);
   document.documentElement.style.setProperty('--pt-ui-border', t.uiBorder);
   try { localStorage.setItem('cueola_prompter_theme', name); } catch {}
-  document.querySelectorAll('.pt-theme-dot').forEach(d => { d.classList.remove('active'); d.classList.remove('on'); });
+  document.querySelectorAll('.pt-theme-dot').forEach(d => { d.classList.remove('active'); d.classList.remove('on'); if (d.hasAttribute('aria-pressed')) d.setAttribute('aria-pressed', 'false'); });
   const dot = ptEl('pt-t-' + name);
-  if (dot) { dot.classList.add('active'); dot.classList.add('on'); }
+  if (dot) { dot.classList.add('active'); dot.classList.add('on'); dot.setAttribute('aria-pressed', 'true'); }
   // P6 theme tiles (Script Op / op overlay) carry the kit's "on" state too
   document.querySelectorAll(`.pt-theme-dot[onclick*="theme_${name}"]`).forEach(d => { d.classList.add('active'); d.classList.add('on'); });
 }
@@ -18337,7 +18412,7 @@ function ptSetUploadStatus(text, isError=false) {
   const status = ptEl('pt-upload-status');
   if (!status) return;
   status.textContent = text;
-  status.style.color = isError ? '#f05252' : '';
+  status.classList.toggle('warn', !!isError);
   status.classList.add('on');
 }
 
@@ -18438,7 +18513,7 @@ function ptUpdateReady() {
   else                                   { state = 'bad';        text = 'Not connected'; }
 
   const pill = ptEl('pt-sync-label');
-  if (pill) { pill.textContent = text; pill.className = 'pt-bar-sync pt-state-' + state; }
+  if (pill) { if (pill.textContent !== text) pill.textContent = text; pill.className = 'pt-bar-sync pt-state-' + state; }
   const showCheck = ptEl('pt-check-show');   if (showCheck)   showCheck.classList.toggle('ok', !!code);
   const scriptCheck = ptEl('pt-check-script'); if (scriptCheck) scriptCheck.classList.toggle('ok', hasScript);
   const s1 = ptEl('pt-step-1'); if (s1) s1.classList.toggle('ok', !!code);
@@ -18579,7 +18654,7 @@ function ptSetupConnect() {
     input?.focus();
     return;
   }
-  if (status) { status.textContent = 'Connecting to ' + code + '…'; status.className = 'pt-setup-status'; }
+  if (status) { status.textContent = 'Linking to ' + code + '…'; status.className = 'pt-setup-status'; }
   ptConnMessage = '';
   const ci = ptEl('pt-cueola-code-input'); if (ci) ci.value = code;
   ptLoadFromCueolaCode(code);
@@ -18774,6 +18849,8 @@ function ptSetOverlaySize(n, options={}) {
   if (!Number.isFinite(size)) return;
   if ((ptClockState?.size ?? 1) !== size) ptClockState = { ...ptClockState, size };
   if (options.persist !== false) ptPersistOverlaySize(size);
+  const val = ptEl('pt-overlay-size-val');
+  if (val) val.textContent = ['S','M','L','XL','MAX'][size];
   ptRenderClockOverlay();
 }
 
@@ -19161,8 +19238,8 @@ function ptHandleRemoteControl(action, payload=null) {
     case 'brake_stop':  ptBraking = false; break;
     case 'boost_start': ptBoosting = true; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); break;
     case 'boost_stop':  ptBoosting = false; break;
-    case 'direction_reverse': ptReversing = true; break;
-    case 'direction_forward': ptReversing = false; break;
+    case 'direction_reverse': ptSetReversing(true); break;
+    case 'direction_forward': ptSetReversing(false); break;
     case 'reset':
     case 'rewind':     ptResetScroll(); break;
   }
@@ -19172,9 +19249,9 @@ function prompterControlLabel(action) {
   if (action === 'seek_text') return 'Find in script';
   const labels = {
     pause:'Pause', resume:'Play', speed_up:'Faster', speed_down:'Slower',
-    size_up:'Bigger text', size_down:'Smaller text', reset:'Reset',
+    size_up:'Bigger text', size_down:'Smaller text', reset:'Top of script',
     align_left:'Left', align_center:'Center', align_right:'Right',
-    mirror:'Mirror talent', fullscreen:'Talent fullscreen', hide_interface:'Talent controls',
+    mirror:'Mirror', fullscreen:'Fullscreen', hide_interface:'Hide controls',
     direction_reverse:'Reverse', direction_forward:'Forward',
     brake_start:'Brake', brake_stop:'Brake release',
     boost_start:'Boost', boost_stop:'Boost release',
@@ -19262,7 +19339,7 @@ function clockAndAlertControlsHTML(scope='lsq', disabled=false) {
       <div class="flow-clock-grid flow-clock-modes flow-control-grid four">
         ${btn('state.timed', 'Time', send('clock_timeofday'), mode === 'timeofday', '', 'data-clock-mode="timeofday"')}
         ${btn('state.timed', 'Duration', `sendDurationClock('${scope}')`, mode === 'duration', '', 'data-clock-mode="duration"')}
-        ${btn('time.clock', 'To Time', `sendCountdownClock('${scope}')`, mode === 'countdown', '', 'data-clock-mode="countdown"')}
+        ${btn('time.clock', 'Count to', `sendCountdownClock('${scope}')`, mode === 'countdown', '', 'data-clock-mode="countdown" data-tip="Count down to the time in the Count to box"')}
         ${btn('media.stop', 'Hide', send('clock_off'), false, '', 'data-clock-mode="off"')}
       </div>
       <div class="flow-clock-fields">
@@ -19322,8 +19399,8 @@ function flowOpEl(id) {
 function flowOpSetStatus(text, isError=false) {
   const el = flowOpEl('flowOpStatus');
   if (!el) return;
-  el.textContent = text;
-  el.style.color = isError ? '#f05252' : '';
+  if (el.textContent !== text) el.textContent = text;   // a replaced identical text re-announces
+  el.classList.toggle('error', !!isError);
 }
 
 function flowOpSetSpeed(val) {
@@ -19457,8 +19534,8 @@ function flowOpApplyControlPreview(action, quiet=false, payload=null) {
 
 // Icon tabs pick one flat group, the same inspector standard as the Script Op
 // drawer, remembered per machine.
-const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display', screen: 'Screen' };
-const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script', screen: 'action.fullscreen' };
+const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' };
+const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script' };
 function opInspHeadHTML(scope) {
   return `<div class="insp-head op-insp-head">
     <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
@@ -19485,10 +19562,25 @@ function opInspRestoreTab(scope) {
   opInspTab(scope, key);
 }
 
+// The Screen group (Top, Hide controls, Mirror, Fullscreen, Row info): it
+// rides the Playback tab's More, like the Script Op.
+function flowOpScreenSectionHTML(dis='') {
+  return `<div class="flow-control-section flow-control-screen">
+      <div class="flow-control-title">Screen</div>
+      <div class="flow-control-grid four">
+        <button class="pt-btn" onclick="flowOpSendControl('reset')" data-tip="Stop and go back to the top of the script"${dis}>Top</button>
+        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')" data-tip="Hide or show the bar and panel on the talent screen"${dis}>Hide controls</button>
+        <button class="pt-btn${ptMirrored ? ' active' : ''}" data-flowop-mirror onclick="flowOpSendControl('mirror')" aria-pressed="${ptMirrored ? 'true' : 'false'}" data-tip="Flip the copy for a beam splitter"${dis}>Mirror</button>
+        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Fullscreen</button>
+      </div>
+      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
+    </div>`;
+}
 function flowOpControlsHTML(disabled=false) {
   const dis = disabled ? ' disabled' : '';
   const playAction = flowOpPlaying ? 'pause' : 'resume';
-  const hold = (action, label) => `<button class="pt-btn" onpointerdown="flowOpSendControl('${action}_start')" onpointerup="flowOpSendControl('${action}_stop')" onpointerleave="flowOpSendControl('${action}_stop')" onpointercancel="flowOpSendControl('${action}_stop')" onlostpointercapture="flowOpSendControl('${action}_stop')"${dis}>${label}</button>`;
+  const screen = flowOpScreenSectionHTML(dis);
+  const hold = (action, label) => poHoldButtonHTML('flowOpSendControl', action, label, dis);
   const drag = `onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''"`;
   const transport = `<div class="flow-control-section flow-control-transport">
       <div class="flow-control-title">Playback</div>
@@ -19499,11 +19591,11 @@ function flowOpControlsHTML(disabled=false) {
     <div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Speed &amp; Size</div>
       <div class="pt-ctrl-group flow-control-slider">
-        <span class="pt-ctrl-label">Speed</span>
+        <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="flowOpSpeedValue" for="flowOpSpeedRange">${Math.round(ptTargetSpeed)}</output></span>
         <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" aria-label="Speed" ${drag} oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
       </div>
       <div class="pt-ctrl-group flow-control-slider">
-        <span class="pt-ctrl-label">Size</span>
+        <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="flowOpSizeValue" for="flowOpSizeRange">${Math.round(ptFontSize)}</output></span>
         <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" aria-label="Text size" ${drag} oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
       </div>
     </div>
@@ -19515,20 +19607,24 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
         <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
       </div>
-    </div>`)}`;
+    </div>${screen}`)}`;
   const seekDrag = `onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
   const live = `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
+      <div class="pt-ctrl-group pt-live-rowcue flow-control-grid two">
+        <button class="pt-btn" data-flowop-cue="now" onclick="flowOpCueRow('now')" data-tip="Cue the prompter to the row on air"${dis}>${sfIcon('marker.active')}<span>Cue Now</span></button>
+        <button class="pt-btn" data-flowop-cue="next" onclick="flowOpCueRow('next')" data-tip="Cue the prompter to the next row"${dis}>${sfIcon('action.forward')}<span>Cue Next</span></button>
+      </div>
       <div class="pt-ctrl-group pt-live-find">
-        <input type="text" class="admin-in pt-find-in" id="flow-find" placeholder="Find in script…" onkeydown="if(event.key==='Enter'){event.preventDefault();flowOpFindInScript()}"${dis}>
-        <button class="pt-btn" onclick="flowOpFindInScript()" data-tip="Cue Flowmingo to the next line containing this text (repeat to walk through matches)"${dis}><span>Find</span></button>
+        <input type="text" class="admin-in pt-find-in" id="flow-find" placeholder="Find in script…" aria-label="Find in script" onkeydown="if(event.key==='Enter'){event.preventDefault();flowOpFindInScript()}"${dis}>
+        <button class="pt-btn" onclick="flowOpFindInScript()" data-tip="Cue the prompter to the next line with these words (repeat to walk through matches)"${dis}><span>Find</span></button>
       </div>
     </div>
     ${scriptOpMoreHTML(`<div class="flow-control-section flow-control-onair">
-      <div class="flow-control-title">On Air</div>
+      <div class="flow-control-title">On air</div>
       <div class="pt-ctrl-group pt-live-slate flow-control-grid two">
-        <button class="pt-btn pt-tech-btn${flowOpTechSlate ? ' active' : ''}" id="flow-tech-btn" onclick="flowOpToggleTechDifficulty()" data-tip="Show a Technical Difficulties stand-by cover on Flowmingo" aria-label="Toggle technical difficulties cover" aria-pressed="${flowOpTechSlate ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${flowOpTechSlate ? 'Back on air' : 'Tech Difficulty'}</span></button>
-        <button class="pt-btn pt-bars-btn${flowOpColorBarsOn ? ' active' : ''}" id="flow-bars-btn" onclick="flowOpToggleColorBars()" data-tip="Show color bars on Flowmingo" aria-label="Toggle color bars" aria-pressed="${flowOpColorBarsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${flowOpColorBarsOn ? 'Back on air' : 'Color bars'}</span></button>
+        <button class="pt-btn pt-tech-btn${flowOpTechSlate ? ' active' : ''}" id="flow-tech-btn" onclick="flowOpToggleTechDifficulty()" data-tip="Show a stand-by cover on the prompter" aria-label="Toggle technical difficulties cover" aria-pressed="${flowOpTechSlate ? 'true' : 'false'}"${dis}>${sfIcon('state.warning')}<span>${flowOpTechSlate ? 'Back on air' : 'Tech difficulties'}</span></button>
+        <button class="pt-btn pt-bars-btn${flowOpColorBarsOn ? ' active' : ''}" id="flow-bars-btn" onclick="flowOpToggleColorBars()" data-tip="Show color bars on the prompter" aria-label="Toggle color bars" aria-pressed="${flowOpColorBarsOn ? 'true' : 'false'}"${dis}>${sfIcon('content.display')}<span>${flowOpColorBarsOn ? 'Back on air' : 'Color bars'}</span></button>
       </div>
     </div>
     <div class="flow-control-section flow-control-cue">
@@ -19542,30 +19638,19 @@ function flowOpControlsHTML(disabled=false) {
       </div>
     </div>`)}`;
   const display = `<div class="flow-control-section flow-control-align">
-      <div class="flow-control-title">Align</div>
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
-        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left"${dis}>Left</button>
-        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center"${dis}>Center</button>
-        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right"${dis}>Right</button>
+        <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left" aria-pressed="${ptAlign === 'left' ? 'true' : 'false'}"${dis}>Left</button>
+        <button class="pt-btn${ptAlign==='center'?' active':''}" data-flowop-align="center" onclick="flowOpSendControl('align_center')" aria-label="Align center" aria-pressed="${ptAlign === 'center' ? 'true' : 'false'}"${dis}>Center</button>
+        <button class="pt-btn${ptAlign==='right'?' active':''}" data-flowop-align="right" onclick="flowOpSendControl('align_right')" aria-label="Align right" aria-pressed="${ptAlign === 'right' ? 'true' : 'false'}"${dis}>Right</button>
       </div>
     </div>
     ${poLayoutSectionHTML('flow', 'flowOpSendControl', 'flowop', disabled)}
     <div class="flow-control-section flow-theme-section">
       <div class="flow-control-title">Theme</div>
       <div class="pt-ctrl-group flow-theme-grid ui-theme-grid">
-        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
+        ${CUEOLA_THEMES.map(name => `<button type="button" class="ui-theme-tile flowop-theme-dot${ptThemeName===name?' on active':''}" data-flowop-theme="${name}" onclick="flowOpSendControl('theme_${name}')" data-tip="${CUEOLA_THEME_LABELS[name] || name}" aria-label="${CUEOLA_THEME_LABELS[name] || name}" aria-pressed="${ptThemeName===name ? 'true' : 'false'}"${dis}><span class="tt-prev" style="background:${CUEOLA_THEME_SWATCHES[name]}"></span><span class="tt-name">${CUEOLA_THEME_LABELS[name] || name}</span></button>`).join('')}
       </div>
-    </div>`;
-  const screen = `<div class="flow-control-section flow-control-screen">
-      <div class="flow-control-title">Screen</div>
-      <div class="flow-control-grid four">
-        <button class="pt-btn" onclick="flowOpSendControl('reset')"${dis}>Reset</button>
-        <button class="pt-btn" onclick="flowOpSendControl('hide_interface')"${dis}>Hide controls</button>
-        <button class="pt-btn" onclick="flowOpSendControl('mirror')"${dis}>Mirror</button>
-        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Fullscreen</button>
-      </div>
-      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
     </div>`;
   return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
     ${opInspHeadHTML('flow')}
@@ -19573,7 +19658,6 @@ function flowOpControlsHTML(disabled=false) {
     <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${live}</div></div>
     <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('flow', disabled)}</div>
     <div class="insp-pane" data-insp-pane="display">${display}</div>
-    <div class="insp-pane" data-insp-pane="screen">${screen}</div>
   </div>`;
 }
 
@@ -19630,8 +19714,23 @@ function flowOpSyncControls() {
   const size = flowOpEl('flowOpSizeRange');
   if (size && document.activeElement !== size && !size.dataset.controlDragging) size.value = ptFontSize;
   document.querySelectorAll('[data-flowop-align]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.flowopAlign === ptAlign);
+    const on = btn.dataset.flowopAlign === ptAlign;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  document.querySelectorAll('[data-flowop-mirror]').forEach(btn => {
+    btn.classList.toggle('active', !!ptMirrored);
+    btn.setAttribute('aria-pressed', ptMirrored ? 'true' : 'false');
+  });
+  const sv = flowOpEl('flowOpSpeedValue'); if (sv) sv.textContent = String(Math.round(ptTargetSpeed));
+  const zv = flowOpEl('flowOpSizeValue'); if (zv) zv.textContent = String(Math.round(ptFontSize));
+  // The preview follows the talent's read line and text width, then its position.
+  const op = flowOpEl('flowOp');
+  if (op) {
+    op.style.setProperty('--pt-read', (PT_READ_LINES[ptReadLinePos] * 100) + '%');
+    op.style.setProperty('--pt-width', PT_WIDTHS[ptTextWidth] + 'px');
+  }
+  flowOpFollowTalent();
   const rowInfo = flowOpEl('flowOpRowInfo');
   if (rowInfo && rowInfo.checked !== ptRowInfoOn) rowInfo.checked = ptRowInfoOn;
   document.querySelectorAll('[data-flowop-readline]').forEach(btn => {
@@ -19649,12 +19748,56 @@ function flowOpSyncControls() {
   const seek = flowOpEl('flow-seek');
   if (scriptOpInputCanPatch(seek, 'seekDragging') && Number.isFinite(_talentReportedPct)) seek.value = String(Math.round(_talentReportedPct));
   document.querySelectorAll('[data-flowop-theme]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.flowopTheme === ptThemeName);
-    btn.classList.toggle('on', btn.dataset.flowopTheme === ptThemeName);
+    const on = btn.dataset.flowopTheme === ptThemeName;
+    btn.classList.toggle('active', on);
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   flowOpRenderClockPreview();
 }
 
+// Cue Now / Cue Next from the remote: the row numbers come from the show
+// record at click time, so a stale button can never send an old row.
+function flowOpCueRow(which) {
+  const rows = Array.isArray(flowOpData?.beats) ? flowOpData.beats.map(migrateBeat) : [];
+  if (!rows.length) { flowOpSetStatus('No rows in this show yet', true); return false; }
+  const liveIdx = Number.isFinite(Number(flowOpData?.live?.idx)) ? Number(flowOpData.live.idx)
+    : Number.isFinite(Number(flowOpData?.activeIdx)) ? Number(flowOpData.activeIdx)
+    : Number.isFinite(Number(flowOpData?.prompter?.activeIdx)) ? Number(flowOpData.prompter.activeIdx) : 0;
+  let idx = Math.max(0, Math.min(rows.length - 1, liveIdx));
+  if (which === 'next') {
+    do { idx += 1; } while (idx < rows.length && rows[idx]?.style === 'segment');
+    if (idx >= rows.length) { flowOpSetStatus('That was the last row', true); return false; }
+  }
+  return flowOpSendControl(`seek_row_${rowDisplayNumber(idx, rows)}`);
+}
+// The script preview shows where the talent is: the copy moves so the
+// talent's reported position sits on the read line (the pane itself never
+// scrolls; its read line and fades are fixed children). With no talent
+// reporting yet, the row on air lands on the read line instead.
+function flowOpFollowTalent() {
+  const script = flowOpEl('flowOpScriptPreview');
+  const pane = script?.parentElement;
+  if (!script || !pane || !script.querySelector('.pt-row')) return;
+  const h = pane.clientHeight;
+  if (!(h > 0)) return;
+  const frac = PT_READ_LINES[ptReadLinePos] || 0.5;
+  const padTop = Math.round(h * frac), padBottom = Math.max(0, Math.round(h - padTop));
+  if (script.style.paddingTop !== padTop + 'px') script.style.paddingTop = padTop + 'px';
+  if (script.style.paddingBottom !== padBottom + 'px') script.style.paddingBottom = padBottom + 'px';
+  const max = Math.max(0, script.scrollHeight - h);
+  let pos;
+  if (Number.isFinite(_talentReportedPct)) pos = max * Math.max(0, Math.min(100, _talentReportedPct)) / 100;
+  else {
+    const live = script.querySelector('.pt-row.live');
+    const body = live?.querySelector('.pt-row-body > *') || live;
+    // Rect math, not offsetTop: every row box is positioned, so offsetTop
+    // would measure from the row, not the script.
+    pos = body ? Math.max(0, Math.min(max, (body.getBoundingClientRect().top - script.getBoundingClientRect().top) - padTop)) : 0;
+  }
+  const t = `translate3d(0,${-Math.round(pos)}px,0)`;
+  if (script.style.transform !== t) script.style.transform = t;
+}
 function flowOpRenderSession(data=null) {
   const titleEl = flowOpEl('flowOpTitle');
   const meta = flowOpEl('flowOpSessionMeta');
@@ -19670,9 +19813,9 @@ function flowOpRenderSession(data=null) {
   if (fingerprint === flowOpSessionRenderFingerprint) return false;
   flowOpSessionRenderFingerprint = fingerprint;
   if (!data) {
-    if (titleEl) titleEl.textContent = 'Flowmingo Op';
+    if (titleEl) titleEl.textContent = 'Flowmingo Op';   // the window title, until a show is linked
     if (meta) meta.innerHTML = `<div class="flowop-session-title">No show loaded</div><div class="flowop-note">Enter the same show code the talent screen uses.</div>`;
-    if (preview) preview.innerHTML = `<div class="flowop-empty">Load a show code to run the prompter from here.</div>`;
+    if (preview) preview.innerHTML = `<div class="flowop-empty">Type a show code to run the prompter from here.</div>`;
     flowOpOfferAssignedSessions();
     return true;
   }
@@ -19685,17 +19828,29 @@ function flowOpRenderSession(data=null) {
   if (titleEl) titleEl.textContent = showName;
   if (preview) {
     preview.innerHTML = text.trim()
-      ? ptSanitizeHTML(ptPlainTextToHTML(text))
+      ? ptScriptRowsHTML(text)
       : `<div class="flowop-empty">This show has no script yet.</div>`;
+    // The ON AIR and NEXT tags follow the show record, like the talent screen.
+    const liveRow = beatsInSession.length ? rowDisplayNumber(activeIdx, beatsInSession) : null;
+    preview.querySelectorAll('.pt-row').forEach(el => {
+      const n = parseInt(el.dataset.row, 10);
+      const live = Number.isFinite(liveRow) && n === liveRow;
+      const next = Number.isFinite(liveRow) && n === liveRow + 1;
+      el.classList.toggle('live', live);
+      el.classList.toggle('next', next);
+      const tag = el.querySelector('.pt-row-tag');
+      if (tag) tag.textContent = live ? 'On air' : next ? 'Next' : '';
+    });
+    requestAnimationFrame(flowOpFollowTalent);
   }
   if (meta) {
     meta.innerHTML = `
       <div class="flowop-session-title">${esc(showName)}</div>
       <div class="flowop-meta">
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Code</div><div class="flowop-meta-value">${esc(flowOpCode || '—')}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Rows</div><div class="flowop-meta-value">${beatsInSession.length || '—'}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">On air</div><div class="flowop-meta-value">${esc(cur?.name || cur?.info || '—')}</div></div>
-        <div class="flowop-meta-item"><div class="flowop-meta-label">Standby</div><div class="flowop-meta-value">${esc(next?.name || next?.info || '—')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Code</div><div class="flowop-meta-value">${esc(flowOpCode || '--')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Rows</div><div class="flowop-meta-value">${beatsInSession.length || '--'}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">On air</div><div class="flowop-meta-value">${esc(cur?.name || cur?.info || 'None yet')}</div></div>
+        <div class="flowop-meta-item"><div class="flowop-meta-label">Standby</div><div class="flowop-meta-value">${esc(next?.name || next?.info || 'None yet')}</div></div>
       </div>`;
   }
   return true;
@@ -19736,7 +19891,7 @@ async function flowOpLoadSession(codeOverride='') {
   // arranged on a second device, but connecting it to a real show starts
   // writing prompter control commands, which needs a signed-in operator.
   if (!requireProfileForCloud('drive a live prompter', 'flowOp')) {
-    flowOpSetStatus('Sign in to connect', true);
+    flowOpSetStatus('Sign in to link', true);
     return;
   }
   if (input) input.value = code;
@@ -19957,6 +20112,7 @@ function flowOpBindKeys() {
 }
 
 function openFlowmingoOperator(codeOverride='') {
+  ptLeaveOwnFullscreen();
   flowOpReturnScreen = document.getElementById('promptypus')?.classList.contains('on') ? 'promptypus'
     : document.getElementById('rundown')?.classList.contains('on') ? 'rundown'
       : document.getElementById('liveshow')?.classList.contains('on') ? 'live'
@@ -20016,19 +20172,28 @@ function openPrompterFromFlowOp() {
 
 function ptOpenEdit() {
   ptStopPlay();
+  ptCloseSettings();
   const ta = ptEl('pt-script-input');
   if (ta) ta.value = ptExtractText().trim();
   const codeIn = ptEl('pt-cueola-code-input');
   if (codeIn && (ptLinkedCueolaCode || session?.code)) codeIn.value = ptLinkedCueolaCode || session.code;
   const ov = ptEl('pt-edit-overlay');
+  if (ov && !ov.classList.contains('open')) _ptSheetReturnFocus = document.activeElement;
   if (ov) ov.classList.add('open');
+  ptSheetBackdrop(true);
   ptOfferAssignedSessions();
-  setTimeout(() => { if (ta) ta.focus(); }, 50);
+  // The show code box first when nothing is linked yet; the script otherwise.
+  const first = (!ptLinkedCueolaCode && !ptHasScript()) ? codeIn : ta;
+  setTimeout(() => { try { (first || ta)?.focus({ preventScroll:true }); } catch {} }, 50);
 }
 
 function ptCloseEdit() {
   const ov = ptEl('pt-edit-overlay');
-  if (ov) ov.classList.remove('open');
+  if (!ov || !ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  if (!ptSettingsOpen()) ptSheetBackdrop(false);
+  const back = _ptSheetReturnFocus; _ptSheetReturnFocus = null;
+  try { if (back && back.isConnected && back !== document.body) back.focus({ preventScroll:true }); } catch {}
 }
 
 function ptSaveScript() {
@@ -20043,8 +20208,8 @@ let ptLastCueolaScript = null; // last script SOURCE applied from the cloud feed
 function ptSetCueolaStatus(text, isError=false) {
   const status = ptEl('pt-cueola-status');
   if (!status) return;
-  status.textContent = text;
-  status.style.color = isError ? '#f05252' : '';
+  if (status.textContent !== text) status.textContent = text;
+  status.classList.toggle('warn', !!isError);
   status.classList.add('on');
 }
 
@@ -20130,13 +20295,13 @@ async function ptLoadFromCueolaCode(codeOverride='') {
       if (ptCueolaSub) { ptCueolaSub(); ptCueolaSub = null; }
       ptCueolaSub = window._onSnapshot(window._doc(window._db, 'sessions', code), snap => {
         if (!snap.exists()) {
-          ptSetCueolaStatus('Not found', true);
+          ptSetCueolaStatus('Show not found. Check the code', true);
           ptConnState = 'notfound';
           ptConnMessage = '';
           if (loadedOnce) ptShowTechSlate();
           ptUpdateReady();
           ptOfferAssignedSessions();   // a typo must not hide 'Your shows' until the next identity change
-          const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show found for "${code}". Double-check the code.`; ss.className = 'pt-setup-status warn'; }
+          const ss = ptEl('pt-setup-status'); if (ss) { ss.textContent = `No show called ${code}. Check the code.`; ss.className = 'pt-setup-status warn'; }
           if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
           return;
         }
@@ -20227,14 +20392,14 @@ async function ptLoadFromCueolaCode(codeOverride='') {
           ptUpdateSyncLabel();
           if (!loadedOnce) {
             loadedOnce = true;
-            toast(text.trim() ? `Flowmingo ready for ${code}` : `Flowmingo linked to ${code}`);
+            toast(text.trim() ? `Prompter ready for ${code}` : `Prompter linked to ${code}`);
             ptCloseEdit();   // reveal the script the instant it is in
           }
         } else {
           ptSetCueolaStatus(`READY · ${code} · no script yet`);
           if (!loadedOnce) {
             loadedOnce = true;
-            toast(`Flowmingo linked to ${code}`);
+            toast(`Prompter linked to ${code}`);
             ptCloseEdit();
           }
         }
@@ -20341,10 +20506,12 @@ function ptResetIdle() {
   const screen = ptEl('promptypus');
   if (!screen) return;
   screen.classList.add('show-cursor');
-  if (ptPlaying && ptPanelVisible) {
-    clearTimeout(ptIdleTimer);
+  clearTimeout(ptIdleTimer);
+  ptIdleTimer = null;
+  if (ptPlaying || !ptPanelVisible) {
     ptIdleTimer = setTimeout(() => {
-      if (ptPlaying) screen.classList.remove('show-cursor');
+      ptIdleTimer = null;
+      if (ptPlaying || !ptPanelVisible) screen.classList.remove('show-cursor');
     }, 3000);
   }
 }
@@ -20397,10 +20564,15 @@ function enterPrompter() {
       if (e.key === 'Escape') ptCloseEdit();
       return;
     }
+    if (ptSettingsOpen()) {
+      if (e.key === 'Escape') ptCloseSettings();
+      else if (!isInteractiveEventTarget(e) && (e.key === 's' || e.key === 'S')) ptCloseSettings();
+      return;
+    }
     if (isInteractiveEventTarget(e)) return;
     if (e.metaKey || e.ctrlKey) return;   // Cmd+F / Cmd+R / Cmd+M belong to the browser
-    if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptReversing = true; return; }
-    if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptReversing = false; return; }
+    if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptSetReversing(true); return; }
+    if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptSetReversing(false); return; }
     if (e.repeat) return;
     switch (e.key) {
       case ' ':          e.preventDefault(); ptTogglePlay(); break;
@@ -20415,15 +20587,14 @@ function enterPrompter() {
       case 'm': case 'M': ptToggleMirror(); break;
       case 'l': case 'L': ptToggleReadLine(); break;
       case 'w': case 'W': ptCycleWidth(); break;
-      case 'k': case 'K': case '?': ptToggleKeys(); break;
+      case 's': case 'S': case 'k': case 'K': case '?': ptOpenSettings(); break;
       case 'Escape':
-        if (ptEl('pt-hint') && !ptEl('pt-hint').classList.contains('hidden')) { ptToggleKeys(false); break; }
+        // Close a sheet, leave fullscreen, or pause: never leave the screen
+        // (a talent pressing Esc to dismiss something used to drop the link).
         if (document.fullscreenElement || document.webkitFullscreenElement) {
           (document.exitFullscreen || document.webkitExitFullscreen).call(document);
         } else if (ptPlaying) {
           ptStopPlay();
-        } else {
-          exitPrompter();
         }
         break;
     }
@@ -20438,6 +20609,17 @@ function enterPrompter() {
 
   // Idle cursor tracking
   ptEl('promptypus').addEventListener('mousemove', ptResetIdle);
+  // A clicked button keeps focus in Chrome, and Space would press it again
+  // instead of playing: every panel and bar button lets go after a click.
+  ['pt-panel', 'pt-bar'].forEach(id => {
+    const host = ptEl(id);
+    if (host && !host._ptBlur) {
+      host._ptBlur = true;
+      host.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
+    }
+  });
+  // The screen never comes back with its controls hidden.
+  if (!ptPanelVisible) ptTogglePanel();
 
   // One pointer model for mouse, trackpad, pen, and touch. Interactive controls
   // own their gestures; only the bare talent stage can toggle or change speed.
@@ -20456,6 +20638,9 @@ function enterPrompter() {
       ptBraking = false;
       ptBoosting = false;
       if (!tap) return;
+      // Hidden controls: a finger tap brings them back (no mouse, no H key
+      // on an iPad) and does nothing else.
+      if (!ptPanelVisible && e?.pointerType !== 'mouse') { ptTogglePanel(); return; }
       // Two taps on the same spot cue that line to the read line; one tap
       // plays or pauses, after a short wait to see if a second one follows.
       const now = Date.now();
@@ -20470,7 +20655,22 @@ function enterPrompter() {
       clearTimeout(tapTimer);
       tapTimer = setTimeout(() => { tapTimer = null; ptTogglePlay(); }, 300);
     };
+    // Two fingers: a pinch makes the text bigger or smaller (4px per 40px of spread).
+    const fingers = new Map();
+    let pinchDist = 0;
     stage.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'touch') {
+        fingers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+        if (fingers.size === 2) {
+          release(null, false);
+          clearTimeout(tapTimer); tapTimer = null;
+          const [a, b] = [...fingers.values()];
+          pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+          e.preventDefault();
+          return;
+        }
+      }
+      if (fingers.size > 1) return;
       if (!e.isPrimary || isInteractiveTarget(e.target)) return;
       pointerId = e.pointerId;
       startY = e.clientY;
@@ -20481,6 +20681,14 @@ function enterPrompter() {
       e.preventDefault();
     });
     stage.addEventListener('pointermove', e => {
+      if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+      if (fingers.size === 2) {
+        const [a, b] = [...fingers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinchDist && Math.abs(d - pinchDist) >= 40) { ptAdjustSize(d > pinchDist ? 4 : -4); pinchDist = d; }
+        e.preventDefault();
+        return;
+      }
       if (e.pointerId !== pointerId) return;
       const dy = e.clientY - startY;
       if (dy > 20) { ptBraking = true; ptBoosting = false; dragged = true; }
@@ -20488,8 +20696,9 @@ function enterPrompter() {
       else { ptBraking = false; ptBoosting = false; }
       e.preventDefault();
     });
-    stage.addEventListener('pointerup', e => release(e, true));
-    stage.addEventListener('pointercancel', e => release(e, false));
+    const unfinger = e => { fingers.delete(e.pointerId); if (fingers.size < 2) pinchDist = 0; };
+    stage.addEventListener('pointerup', e => { const pinching = fingers.size === 2; unfinger(e); if (!pinching) release(e, true); });
+    stage.addEventListener('pointercancel', e => { unfinger(e); release(e, false); });
     stage.addEventListener('lostpointercapture', e => release(e, false));
   }
   const fileInput = ptEl('pt-file-input');
@@ -20503,7 +20712,16 @@ function enterPrompter() {
   }
 }
 
+// The talent's own fullscreen (F) ends with the screen; a launcher's
+// document fullscreen is not ours to drop.
+function ptLeaveOwnFullscreen() {
+  const el = ptEl('promptypus');
+  if (el && (document.fullscreenElement === el || document.webkitFullscreenElement === el)) ptExitFullscreenForDialog();
+}
 function exitPrompter() {
+  ptLeaveOwnFullscreen();
+  ptCloseSettings();
+  ptCloseEdit();
   stopPrompterTalentRuntime();
   document.getElementById('promptypus').classList.remove('on');
   // Go back to whichever screen was active before

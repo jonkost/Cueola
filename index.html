@@ -285,8 +285,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .rd-scroll{width:100%}
 .sync-word{font-size:11px;color:var(--text3);margin-right:8px}
 .sync-word:empty{display:none}
-.insp-tab{width:auto;min-width:56px;padding:4px 8px;display:inline-flex;flex-direction:column;align-items:center;gap:2px}
-.insp-tab-lbl{font-size:10px;font-family:var(--sans);font-weight:600;letter-spacing:.02em}
 .admin-tab{width:auto;height:auto;padding:8px 12px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:var(--sans);font-weight:600}
 @media (pointer:coarse){.tbtn,.chip,.row-ea-btn,.info-btn,.btn-primary,.btn-secondary,.ar-back,.ar-next,.opt-card,.field-in,.pb-note-act,.admin-mini-btn,.cue-add-btn,.cue-cell-filled{min-height:44px}.info-btn{min-width:44px}}
 .rd-table{min-width:1280px}
@@ -801,6 +799,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ls-sidebar-head{padding:12px 14px 8px;border-bottom: 1px solid transparent;flex-shrink:0;background:linear-gradient(180deg,color-mix(in srgb,var(--text) 4%,transparent),transparent)}
 .ls-sidebar-title{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin-bottom:4px}
 .ls-prompter-status{font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px}
+#prompterStatusTxt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ls-prompter-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .ls-prompter-dot.off{background:var(--text3)}
 .ls-prompter-update{margin-left:auto;font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid rgba(34,211,160,.25);border-radius:999px;padding:2px 7px;background:rgba(34,211,160,.06)}
@@ -1225,7 +1224,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .ls-grant-user{margin-left:auto;font-size:10.5px;font-family:var(--mono);color:var(--text3)}
 /* Find-in-script row (Script Op Cue section) */
 .pt-live-find{display:flex;gap:6px;margin-top:6px}
-.pt-live-find .pt-find-in{flex:1;min-width:0;font-size:12px;padding:6px 9px}
+.pt-live-find .pt-find-in{flex:1;min-width:0;min-height:36px;font-size:12px;padding:6px 9px}
 .admin-src-chip .rm{cursor:pointer;color:var(--text3);font-size:11px;border:none;background:none;font-family:var(--mono);line-height:1;padding:0}.admin-src-chip .rm:hover{color:var(--red)}
 .admin-src-new{width:140px;height:28px;padding:0 8px;border-radius:5px;font-size:11px;font-family:var(--mono);background:var(--s2);border:1px solid transparent;color:var(--text)}
 .admin-src-add{padding:3px 8px;border-radius:5px;font-size:11px;font-family:var(--mono);background:var(--btn-fill);border:1px solid transparent;color:var(--text3);cursor:pointer;transition:all .12s}
@@ -2604,10 +2603,12 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
      dark regardless of these. */
   --pt-ovl-bg:color-mix(in srgb,var(--pt-bg,#0a0a0a) 66%,transparent);
   --pt-ovl-fg:var(--pt-text,#fff);
-  --pt-ovl-fg-dim:color-mix(in srgb,var(--pt-text,#fff) 78%,transparent)}
+  --pt-ovl-fg-dim:color-mix(in srgb,var(--pt-text,#fff) 78%,transparent);
+  /* Status colors for the bar pill, the check chips and the connect card, readable on every prompter theme. */
+  --pt-ok:#22d3a0;--pt-warn:#f5b731;--pt-bad:#f05252}
 /* Polar Bear (white) theme: a white glass slab on a white stage has no
    visible edge, so the glass is a light grey tint instead (no stroke). */
-#promptypus[data-pt-theme="white"]{--pt-ovl-bg:color-mix(in srgb,#000 9%,rgba(255,255,255,.88));--pt-ovl-fg:#000;--pt-ovl-fg-dim:rgba(0,0,0,.72)}
+#promptypus[data-pt-theme="white"]{--pt-ovl-bg:color-mix(in srgb,#000 9%,rgba(255,255,255,.88));--pt-ovl-fg:#000;--pt-ovl-fg-dim:rgba(0,0,0,.72);--pt-ok:#157a5e;--pt-warn:#8a5400;--pt-bad:#c80000}
 #promptypus.show-cursor{cursor:default}
 /* Fullscreen talent display: the operator chrome fades out and comes back
    with the cursor (mouse move adds .show-cursor). Two fullscreen shapes:
@@ -2636,19 +2637,24 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
   radial-gradient(circle at 14% 16%,rgba(89,235,218,.08),transparent 34%)}
 #promptypus[data-pt-theme="flamingo"] #pt-text{text-shadow:0 1px 0 rgba(8,6,17,.7)}
 #promptypus[data-pt-theme="flamingo"] #pt-read-line{height:3px}
-#promptypus[data-pt-theme="flamingo"] #pt-panel,
-#promptypus[data-pt-theme="flamingo"] #pt-bar,
 /* Outrangutan prompter theme — orange-forward material, calm stage. */
 #promptypus[data-pt-theme="outrangutan"]{background:#0c0906}
 #promptypus[data-pt-theme="outrangutan"] #pt-stage{background:color-mix(in srgb,#ff6a00 4%,transparent)}
 #promptypus[data-pt-theme="outrangutan"] #pt-text{text-shadow:0 1px 0 rgba(12,9,6,.72)}
 #promptypus[data-pt-theme="outrangutan"] #pt-read-line{height:3px}
-#promptypus[data-pt-theme="white"] :is(#pt-panel,#pt-bar,.pt-hint,#pt-edit-box,#pt-script-input){background:#fff;color:#000;border-color:#c9c5bd}
-#promptypus[data-pt-theme="white"] :is(.pt-btn,.pt-cueola-input,.pt-bar-controls-btn,.pt-back-btn){background:#f4f2ee;color:#000;border-color:#c9c5bd}
+#promptypus[data-pt-theme="white"] :is(#pt-panel,#pt-bar,#pt-edit-box,#pt-settings-box,#pt-script-input){background:#fff;color:#000;border-color:#c9c5bd}
+#promptypus[data-pt-theme="white"] :is(.pt-btn,.pt-cueola-input,.pt-bar-controls-btn,.pt-back-btn,.pt-setup-input){background:#f4f2ee;color:#000;border-color:#c9c5bd}
 
 /* Top nav bar */
 #pt-bar{position:absolute;top:0;left:0;right:0;height:var(--pt-bar-h,48px);display:grid;grid-template-columns:auto auto 1fr auto auto auto auto;align-items:center;gap:10px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));background:var(--pt-ui-bg,rgba(20,20,20,.92));border-bottom: 1px solid transparent;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));z-index:200;transition:opacity .4s;font-family:var(--sans)}
-#pt-bar.hidden{opacity:0;pointer-events:none}
+#pt-bar.hidden{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .4s,visibility 0s linear .4s}
+/* Hidden controls (H): the bar comes back while the mouse moves, and goes again when it rests. */
+#promptypus.show-cursor #pt-bar.hidden{opacity:1;pointer-events:auto;visibility:visible;transition-delay:0s}
+/* Fullscreen: the faded bar leaves the Tab order as well. */
+:fullscreen #promptypus #pt-bar:not(.hidden){visibility:hidden;transition:opacity .4s,visibility 0s linear .4s}
+:fullscreen #promptypus.show-cursor #pt-bar:not(.hidden){visibility:visible;transition-delay:0s}
+:-webkit-full-screen #promptypus #pt-bar:not(.hidden){visibility:hidden;transition:opacity .4s,visibility 0s linear .4s}
+:-webkit-full-screen #promptypus.show-cursor #pt-bar:not(.hidden){visibility:visible;transition-delay:0s}
 .pt-back-btn{background:none;border: 1px solid transparent;color:var(--pt-accent,#c8a97e);border-radius:var(--ui-radius-control);height:32px;padding:0 10px;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s;display:flex;align-items:center;gap:4px}
 .pt-back-btn:hover{background:rgba(200,169,126,.12)}
 .pt-bar-title{font-family:var(--syne);font-size:14px;font-weight:800;color:var(--pt-text,#f0ead6);letter-spacing:0;white-space:nowrap}
@@ -2657,15 +2663,19 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-bar-row{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--pt-text,#f0ead6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(42vw,520px)}
 .pt-bar-time{font-family:var(--mono);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--pt-text,#f0ead6);opacity:.62;white-space:nowrap}
 .pt-bar-row[hidden],.pt-bar-time[hidden]{display:none}
-.pt-status{display:flex;align-items:center;gap:7px;min-width:0}
-.pt-bar-sync{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:0;white-space:nowrap;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
+.pt-status{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
+.pt-bar-sync{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:0;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;border-radius:999px;padding:5px 11px 5px 9px;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent}
 .pt-bar-sync::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 0 1px transparent}
-.pt-state-bad{color:var(--red,#f05252);background:color-mix(in srgb,var(--red,#f05252) 14%,transparent);border-color:transparent}
+.pt-bar-sync{color:var(--pt-text,#f0ead6)}
+.pt-state-bad{color:var(--pt-bad,#f05252);background:color-mix(in srgb,var(--pt-bad,#f05252) 14%,transparent);border-color:transparent}
+.pt-state-ready{color:var(--pt-ok,#22d3a0);background:color-mix(in srgb,var(--pt-ok,#22d3a0) 14%,transparent);border-color:transparent}
+.pt-state-warn,.pt-state-connecting{color:var(--pt-warn,#f5b731);background:color-mix(in srgb,var(--pt-warn,#f5b731) 14%,transparent);border-color:transparent}
+.pt-state-connecting::before{animation:pt-pulse 1.2s ease-in-out infinite}
 
 @keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .pt-check{font-size:10px;font-family:var(--sans);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--pt-text,#d6e8f0);opacity:.4;border: 1px solid transparent;border-radius:999px;padding:3px 9px 3px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .pt-check::before{content:"○";font-size:11px;line-height:1}
-.pt-check.ok{opacity:1;color:var(--green,#22d3a0);border-color:transparent;background:color-mix(in srgb,var(--green,#22d3a0) 12%,transparent)}
+.pt-check.ok{opacity:1;color:var(--pt-ok,#22d3a0);border-color:transparent;background:color-mix(in srgb,var(--pt-ok,#22d3a0) 12%,transparent)}
 .pt-check.ok::before{content:"✓"}
 @media (max-width:700px){.pt-check{display:none}}
 .pt-setup{position:absolute;inset:0;z-index:150;display:none;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--pt-bg,#08090f) 86%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
@@ -2675,16 +2685,16 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-setup-title{font-family:var(--syne);font-size:21px;font-weight:800;color:var(--pt-text,#eef);margin:0 0 6px}
 .pt-setup-sub{font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.72;margin:0 0 18px;line-height:1.5}
 .pt-setup-row{display:flex;gap:8px;margin-bottom:8px}
-.pt-setup-input{flex:1;min-width:0;background:rgba(0,0,0,.35);border: 1px solid transparent;color:var(--pt-text,#eef);border-radius:12px;padding:13px 14px;font-family:var(--mono);font-size:17px;letter-spacing:.18em;text-transform:uppercase;text-align:center;outline:none}
+.pt-setup-input{flex:1;min-width:0;background:rgba(0,0,0,.35);border: 1px solid transparent;color:var(--pt-text,#eef);border-radius:var(--ui-radius-control);padding:13px 14px;font-family:var(--mono);font-size:17px;letter-spacing:.18em;text-transform:uppercase;text-align:center;outline:none}
 .pt-setup-input:focus{border-color:var(--pt-accent,#7eb8c8);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#7eb8c8) 25%,transparent)}
-.pt-setup-btn{flex:none;background:var(--pt-accent,#7eb8c8);color:#04121a;border:0;border-radius:12px;padding:0 22px;font-family:var(--syne);font-weight:800;font-size:15px;cursor:pointer;letter-spacing:.03em}
+.pt-setup-btn{flex:none;min-height:48px;background:var(--pt-accent,#7eb8c8);color:var(--pt-bg,#04121a);border:0;border-radius:var(--ui-radius-control);padding:0 22px;font-family:var(--syne);font-weight:800;font-size:15px;cursor:pointer;letter-spacing:.03em}
 .pt-setup-btn:hover{filter:brightness(1.08)}
 .pt-setup-status{min-height:17px;font-size:12px;color:var(--pt-accent,#7eb8c8);margin-bottom:14px;font-family:var(--sans);font-weight:600}
-.pt-setup-status.warn{color:var(--yellow,#f5b731)}
+.pt-setup-status.warn{color:var(--pt-warn,#f5b731)}
 .pt-setup-steps{list-style:none;margin:0 0 16px;padding:0;text-align:left;display:flex;flex-direction:column;gap:9px}
 .pt-setup-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--pt-text,#d6e8f0);opacity:.85;line-height:1.35}
 .pt-step-dot{flex:none;width:18px;height:18px;border-radius:50%;border: 1.5px solid transparent;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:transparent}
-.pt-step-dot.ok{background:var(--green,#22d3a0);border-color:var(--green,#22d3a0);color:var(--bg,#04121a)}
+.pt-step-dot.ok{background:var(--pt-ok,#22d3a0);border-color:var(--pt-ok,#22d3a0);color:var(--pt-bg,#04121a)}
 .pt-step-dot.ok::before{content:"✓"}
 .pt-setup-alt{background:none;border:0;color:var(--pt-text,#d6e8f0);opacity:.55;font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--sans)}
 .pt-setup-alt:hover{opacity:.85}
@@ -2707,8 +2717,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
    panel and Script Op; talent truth rides the ack as rowInfoOn). */
 #pt-hold-chip,#pt-next-chip{position:absolute;z-index:40;bottom:calc(28px + env(safe-area-inset-bottom));max-width:min(440px,calc(50vw - 40px));display:flex;flex-direction:row;align-items:baseline;gap:10px;padding:8px 14px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:var(--pt-ovl-bg);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));color:var(--pt-ovl-fg);font-family:var(--mono);font-size:19px;font-weight:800;letter-spacing:.08em;pointer-events:none}
 #pt-hold-chip[hidden],#pt-next-chip[hidden],#promptypus.rowinfo-off #pt-hold-chip,#promptypus.rowinfo-off #pt-next-chip{display:none}
-#pt-next-chip{left:28px;opacity:.72}
-#pt-hold-chip{right:28px;animation:ptHoldPulse 2.4s ease-in-out 3}
+#pt-next-chip{left:max(28px,env(safe-area-inset-left));opacity:.72}
+#pt-hold-chip{right:max(28px,env(safe-area-inset-right));animation:ptHoldPulse 2.4s ease-in-out 3}
 #pt-hold-chip .pt-chip-label{color:var(--pt-accent,#7ec8ff)}
 /* --pt-panel-lift is the talent panel's measured height from the bottom edge
    (ptWatchPanelLift, ResizeObserver); the panel wraps to two or three rows on
@@ -2724,6 +2734,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 }
 /* Narrow windows: the bar keeps the row, drops the time and the check chips. */
 @media(max-width:1000px){.pt-bar-time{display:none}.pt-check{display:none}}
+@media(max-width:700px){.pt-bar-title{display:none}}
 .pt-chip-label{font-family:var(--mono);font-size:13px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--pt-ovl-fg-dim);line-height:1.15}
 .pt-chip-row{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:0;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 @keyframes ptHoldPulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -2742,7 +2753,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 /* Rows: one box per rundown row, its number and name in the same words as the rundown.
    The ON AIR row carries a red tag; the row under the read line is .reading. */
 .pt-row{position:relative;margin:0 0 .85em}
-.pt-row-head{display:block;text-align:var(--pt-align,center);font-family:var(--sans);font-size:.34em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:var(--pt-text,#f0ead6);opacity:.52;margin:0 0 .5em;padding-top:.9em;border-top:1px solid color-mix(in srgb,currentColor 30%,transparent)}
+.pt-row-head{display:block;text-align:var(--pt-align,center);font-family:var(--sans);font-size:max(.34em,13px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:var(--pt-text,#f0ead6);opacity:.52;margin:0 0 .5em;padding-top:.9em;border-top:1px solid color-mix(in srgb,currentColor 30%,transparent)}
 .pt-row:first-child .pt-row-head{border-top:0;padding-top:0}
 .pt-row-head>*{display:inline-block;vertical-align:middle;margin-right:.6em}
 .pt-row-head>*:last-child{margin-right:0}
@@ -2774,23 +2785,15 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 #pt-progress{position:absolute;top:env(safe-area-inset-top);left:0;height:3px;background:var(--pt-accent,#c8a97e);width:0%;transition:width .3s;z-index:300;pointer-events:none}
 
 /* Floating control panel */
-#pt-panel{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom));left:50%;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:4px 16px 14px;display:flex;flex-direction:column;align-items:stretch;gap:10px;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));transition:opacity .4s;font-family:var(--sans);font-size:12px;width:max-content;max-width:min(96vw,1180px);transform:translateX(-50%) scale(var(--pt-panel-scale,1));transform-origin:bottom center}
+#pt-panel{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom));left:50%;z-index:100;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:4px 16px 14px;display:flex;flex-direction:column;align-items:stretch;gap:10px;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));transition:opacity .4s;font-family:var(--sans);font-size:12px;width:max-content;max-width:calc(min(96vw,1180px) / var(--pt-panel-scale,1));transform:translateX(-50%) scale(var(--pt-panel-scale,1));transform-origin:bottom center}
 .pt-panel-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 18px}
-#pt-panel.hidden{opacity:0;pointer-events:none}
+#pt-panel.hidden{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .4s,visibility 0s linear .4s}
 /* Movable cards: dragging the grip strip writes the vars and floats the card; unset vars keep the stock spot */
 #pt-panel.pt-floating{left:var(--pt-panel-x);top:var(--pt-panel-y);bottom:auto;transform:scale(var(--pt-panel-scale,1));transform-origin:top left}
-.pt-hint.pt-floating{left:var(--pt-hint-x);top:var(--pt-hint-y);right:auto}
 .pt-card-grip{position:relative;flex:1 1 100%;display:flex;align-items:center;justify-content:center;min-height:26px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .pt-card-grip:active{cursor:grabbing}
 .pt-grip-bar{width:44px;height:5px;border-radius:999px;background:color-mix(in srgb,var(--pt-text,#f0ead6) 30%,transparent);pointer-events:none}
-.pt-hint .pt-card-grip{margin:-10px -6px 4px}
-.pt-hint-title{font-family:var(--syne);font-size:13px;font-weight:800;color:var(--pt-text,#f0ead6);margin:0 0 6px}
-.pt-panel-zoom{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:4px}
-.pt-zoom-btn{padding:1px 8px;font-size:12px}
-.pt-zoom-val{min-width:38px;text-align:center;font-size:10px;opacity:.65;letter-spacing:.04em}
-.pt-hint{position:absolute;top:calc(var(--pt-bar-h,48px) + 10px);right:14px;z-index:120;background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:14px 18px 16px;backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));font-family:var(--sans);font-size:12.5px;transition:opacity .2s}
-.pt-hint.hidden{opacity:0;pointer-events:none}
-.pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:22px;line-height:1.95}
+.pt-hint-row{display:grid;grid-template-columns:auto 1fr;gap:18px;line-height:2}
 .pt-hint-key{color:var(--pt-accent,#c8a97e);font-family:var(--mono);font-weight:700;white-space:nowrap;letter-spacing:0}
 .pt-hint-desc{color:var(--pt-text,#f0ead6);opacity:.66;white-space:nowrap;text-align:right}
 .pt-ctrl-group{display:flex;align-items:center;gap:8px}
@@ -2798,7 +2801,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-ctrl-num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;min-width:2.4em;text-align:right;color:var(--pt-text,#f0ead6)}
 .pt-ctrl-slider .pt-range{width:120px;min-width:120px}
 /* A segmented group: same-size buttons, one picked */
-.pt-seg{display:inline-flex;gap:0;padding:2px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--pt-text,#f0ead6) 7%,transparent)}
+.pt-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;padding:2px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--pt-text,#f0ead6) 7%,transparent)}
 .pt-seg .pt-btn{background:transparent;border-radius:calc(var(--ui-radius-control) - 2px);min-width:60px}
 .pt-seg .pt-btn.active{background:color-mix(in srgb,var(--pt-text,#f0ead6) 16%,transparent);color:var(--pt-text,#f0ead6)}
 #promptypus .pt-step{width:34px;min-width:34px;padding:0;font-size:16px}
@@ -2813,6 +2816,8 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-btn.active{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 20%,transparent);border-color:transparent;color:var(--pt-accent,var(--accent))}
 .pt-icon-btn{width:34px;height:34px;padding:0;flex:0 0 auto}
 #pt-play-btn{min-width:104px;font-size:13px;background:var(--pt-accent,var(--accent));border-color:transparent;color:var(--pt-bg,#08090f)}
+/* Buttons that belong together are the same size (Jon): every word button on the panel matches Play. */
+#pt-panel .pt-ctrl-group:not(.pt-ctrl-slider) .pt-btn:not(.pt-step){min-width:104px}
 #pt-play-btn:hover{filter:brightness(1.08);color:var(--pt-bg,#08090f)}
 #pt-play-btn.active{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 26%,transparent);color:var(--pt-accent,var(--accent))}
 input.pt-range{-webkit-appearance:none;appearance:none;flex:1;min-width:100px;height:18px;background:transparent;border-radius:2px;outline:none;cursor:pointer;touch-action:pan-y}
@@ -2887,7 +2892,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .pt-clock-overlay.wrap .pt-clock-label{font-size:calc(max(15px,min(3.6vw,2.6vh))*var(--pt-ovl-scale));color:#fff;letter-spacing:.1em}
 .pt-clock-overlay.wrap .pt-clock-value{font-size:calc(max(36px,min(10vw,7vh))*var(--pt-ovl-scale));color:#fff}
 /* The wrap banner lifts above the talent's own panel while the panel is up. */
-#promptypus:has(#pt-panel:not(.hidden)) .pt-clock-overlay.wrap{bottom:calc(132px + env(safe-area-inset-bottom))}
+#promptypus:has(#pt-panel:not(.hidden)) .pt-clock-overlay.wrap{bottom:calc(var(--pt-panel-lift,140px) + 16px + env(safe-area-inset-bottom))}
 /* Expired countdown: dark red card, copy pinned white, digits pulse four
    times then hold. */
 .pt-clock-overlay.expired:not(.timeofday){background:color-mix(in srgb,#72101a 84%,transparent);color:#fff}
@@ -2948,6 +2953,13 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .ls-playout-panic:hover{background:var(--red);color:#fff}
 .ls-playout-panic:active{transform:translateY(-50%) scale(.96)}
 @media(pointer:coarse){.ls-playout-panic{height:30px}}
+/* Touch: 44 pt targets on the talent screen and the Flowmingo Op (HIG). */
+@media(pointer:coarse){
+  :is(#promptypus,#flowOp) :is(.pt-btn,.pt-back-btn,.pt-bar-controls-btn,.flowop-code){min-height:44px}
+  #promptypus :is(.pt-step,.pt-icon-btn,.pt-bar-controls-btn.icon-only){width:44px;min-width:44px}
+  #promptypus{--pt-bar-h:calc(56px + env(safe-area-inset-top))}
+  :is(#promptypus,#flowOp) input.pt-range{height:44px}
+}
 .ls-playout-strip[hidden]{display:none}
 .ls-playout-strip[data-status="idle"] .ls-playout-tag{background:color-mix(in srgb,var(--text) 5%,transparent);color:var(--text3)}
 .ls-playout-strip[data-status="idle"] .ls-playout-name{color:var(--text3);font-weight:600}
@@ -3020,6 +3032,15 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .insp-tab:hover{color:var(--text);border-color: transparent;background:color-mix(in srgb,var(--s3) 72%,transparent);transform:translateY(-1px)}
 .insp-tab.on{background:color-mix(in srgb,var(--accent) 18%,var(--s2));color:var(--accent);border-color:transparent;box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent)}
 .insp-caption{text-align:center;font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--text3);margin-top:5px;text-transform:uppercase;font-family:var(--mono)}
+/* Tabs that carry a word (Script Op, Flowmingo Op) are one segmented control, like .admin-tabs:
+   one rounded group, equal-width segments, icon beside the word. Icon-only tabs (stage plot) stay round. */
+.insp-tabs:has(.insp-tab-lbl){justify-content:stretch;gap:4px;padding:4px;border-radius:12px;background:var(--btn-fill);border:var(--btn-hairline);container-type:inline-size}
+.insp-tab:has(.insp-tab-lbl){flex:1 1 0;min-width:0;width:auto;height:36px;padding:0 8px;border-radius:9px;flex-direction:row;gap:6px;font-size:12px;font-family:var(--sans);font-weight:600;color:var(--text2);background:transparent;box-shadow:none;border-color:transparent}
+.insp-tab:has(.insp-tab-lbl) .sf-symbol{font-size:15px;flex:none}
+.insp-tab:has(.insp-tab-lbl):hover{transform:none;color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.insp-tab:has(.insp-tab-lbl).on{color:var(--text);background:color-mix(in srgb,var(--accent) 20%,var(--s2));box-shadow:none}
+.insp-tab-lbl{font-size:inherit;font-family:var(--sans);font-weight:600;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@container (max-width:400px){.insp-tab:has(.insp-tab-lbl){flex-direction:column;gap:1px;height:auto;padding:5px 4px 4px;font-size:10px}}
 .insp-pane{display:none;padding:12px}
 .insp-pane.on{display:block}
 .flow-clock-stack{display:flex;flex-direction:column;gap:9px;border: 1px solid transparent;background:rgba(0,0,0,.14);border-radius:12px;padding:10px}
@@ -3027,7 +3048,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-clock-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
 .flow-clock-grid .pt-btn{min-width:0;min-height:34px;padding:7px 7px;font-size:11px}
 .flow-clock-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.flow-clock-fields label,.flow-wrap-custom{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:center;border: 1px solid transparent;border-radius:8px;padding:6px 8px;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.flow-clock-fields label,.flow-wrap-custom{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:center;border: 1px solid transparent;border-radius:var(--ui-radius-control);padding:6px 8px;color:var(--pt-text,#f0ead6);font-family:var(--sans);font-size:12px;font-weight:800;text-transform:none;letter-spacing:0}
 .flow-clock-fields label>span,.flow-wrap-custom>span{display:inline-flex;align-items:center;gap:5px;min-width:0}
 .flow-clock-fields b,.flow-wrap-custom b{font:inherit}
 .flow-clock-fields input,.flow-wrap-custom input{min-width:0;width:100%;background:transparent;border:0;color:var(--pt-text,#f0ead6);font-family:var(--mono);font-size:14px;outline:none}
@@ -3189,7 +3210,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 .flow-control-slider .pt-range{min-width:0;width:100%}
 .flow-control-segment{
   display:grid!important;
-  grid-template-columns:auto repeat(3,minmax(42px,1fr))!important;
+  grid-template-columns:auto!important;grid-auto-flow:column;grid-auto-columns:minmax(42px,1fr);
   gap:8px;
   align-items:center;
 }
@@ -3273,8 +3294,10 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* Script Op quick-controls: smaller buttons + more per row → fits horizontally, less scrolling. */
 /* Auto-fit so the bigger labels never clip — 4-across on a wide sidebar, 2-across when narrow. */
 .ls-sidebar .flow-clock-modes,.ls-sidebar .flow-wrap-grid{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important}
-.ls-sidebar .flow-clock-fields{grid-template-columns:1fr 1fr}
+.ls-sidebar .flow-clock-fields{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .ls-sidebar .flow-control-grid.four,.ls-sidebar .flow-control-grid.five{grid-template-columns:repeat(auto-fit,minmax(84px,1fr))}
+/* The Flowmingo Op side column is 390 to 420px: four words do not fit on one row. */
+#flowOp .flow-control-grid.four,#flowOp .flow-control-grid.five{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ls-sidebar .flow-control-section .pt-btn,.ls-sidebar .flow-clock-stack .pt-btn{min-height:36px;padding:6px 8px;font-size:13px;border-radius:var(--ui-radius-control)}
 .ls-sidebar .flow-control-slider .pt-btn,.ls-sidebar .pt-icon-btn{width:40px;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:50%}
 .ls-sidebar .flow-control-section{padding:9px 11px;gap:7px}
@@ -3287,7 +3310,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 @media(max-width:560px){
   .flow-control-grid.three,.flow-control-grid.four,.flow-control-grid.five{grid-template-columns:1fr 1fr}
   .flow-clock-fields{grid-template-columns:1fr}
-  .flow-control-segment{grid-template-columns:1fr repeat(3,minmax(42px,1fr))!important}
+  .flow-control-segment{grid-template-columns:auto!important}
 }
 
 /* Shared liquid controls pass: toolbars stay translucent, content stays solid. */
@@ -3559,12 +3582,35 @@ input.pt-range::-moz-range-thumb,
 
 /* Script edit overlay */
 #pt-edit-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:250;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-#pt-edit-overlay.open{display:flex}
-#pt-edit-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
+#pt-settings-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.8);z-index:250;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#pt-edit-overlay.open,#pt-settings-overlay.open{display:flex}
+#pt-edit-box,#pt-settings-box{background:var(--pt-ui-bg,rgba(20,20,20,.92));border: 1px solid transparent;border-radius:var(--ui-radius-panel);padding:24px 28px;width:min(700px,92vw);display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
 #pt-edit-box h2{font-family:var(--sans);font-size:11.5px;font-weight:800;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;margin:0}
-#pt-script-input{background:rgba(0,0,0,.5);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:10px;padding:14px;font-size:13px;font-family:var(--mono);resize:vertical;min-height:200px;outline:none;line-height:1.6;width:100%}
+/* Settings sheet: a title row, then sections of label + control rows */
+#pt-settings-box{width:min(560px,92vw);gap:18px;padding:18px 24px 22px}
+#pt-edit-box .pt-sheet-head h2{font-family:var(--syne);font-size:19px;font-weight:800;color:var(--pt-text,#f0ead6);text-transform:none;letter-spacing:0}
+.pt-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pt-sheet-head h2{font-family:var(--syne);font-size:19px;font-weight:800;color:var(--pt-text,#f0ead6);margin:0}
+.pt-sheet-section{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid color-mix(in srgb,var(--pt-text,#f0ead6) 12%,transparent)}
+.pt-sheet-section h3{font-family:var(--sans);font-size:11.5px;font-weight:800;color:var(--pt-accent,#c8a97e);text-transform:uppercase;letter-spacing:.08em;margin:0}
+.pt-sheet-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;min-height:38px}
+.pt-sheet-row .pt-ctrl-label{font-size:12.5px;text-transform:none;letter-spacing:0;opacity:.85;white-space:normal}
+.pt-sheet-row .pt-seg .pt-btn{min-width:72px}
+.pt-sheet-switch{cursor:pointer}
+.pt-sheet-switch input{--sw-on:var(--pt-accent,var(--accent));--sw-w:36px;--sw-h:20px;flex:none}
+.pt-stepper{display:inline-flex;align-items:center;gap:6px}
+.pt-stepper-val{min-width:3.2em;text-align:center}
+#promptypus .pt-icon-btn{width:34px;min-width:34px;padding:0}
+.pt-keys{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+#pt-settings-box .tt-name{color:color-mix(in srgb,var(--pt-text,#f0ead6) 70%,transparent)}
+#pt-settings-box .ui-theme-tile.on .tt-name{color:var(--pt-accent)}
+#pt-settings-box .ui-theme-tile .tt-prev{border-color:color-mix(in srgb,var(--pt-text,#f0ead6) 22%,transparent)}
+#pt-settings-box .ui-theme-tile.on .tt-prev{box-shadow:0 0 0 2px var(--pt-ui-bg),0 0 0 4px var(--pt-accent)}
+#pt-settings-box .ui-theme-tile:hover{background:color-mix(in srgb,var(--pt-text,#f0ead6) 6%,transparent)}
+@media(max-width:700px){.pt-keys{grid-template-columns:1fr}}
+#pt-script-input{background:rgba(0,0,0,.5);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:var(--ui-radius-control);padding:14px;font-size:13px;font-family:var(--mono);resize:vertical;min-height:200px;outline:none;line-height:1.6;width:100%}
 #pt-script-input:focus{border-color:var(--pt-accent,#c8a97e);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#c8a97e) 25%,transparent)}
-#pt-script-input::placeholder{color:rgba(200,169,126,.35)}
+#pt-script-input::placeholder{color:color-mix(in srgb,var(--pt-text,#f0ead6) 40%,transparent)}
 .pt-upload-bar{display:flex;align-items:center;gap:10px}
 .pt-upload-btn{border-color:transparent;background:color-mix(in srgb,var(--pt-accent,#c8a97e) 16%,transparent);color:var(--pt-accent,#c8a97e);white-space:nowrap}
 .pt-upload-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;transition:opacity .2s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3573,13 +3619,15 @@ input.pt-range::-moz-range-thumb,
 .pt-modal-sep{border:none;border-top: 1px solid var(--pt-ui-border,rgba(200,169,126,.25));margin:0}
 .pt-cueola-bar{display:grid;grid-template-columns:auto minmax(120px,1fr) auto auto;gap:8px;align-items:center}
 .pt-cueola-label{font-family:var(--sans);font-weight:800;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--pt-accent,#c8a97e);opacity:.65;white-space:nowrap}
-.pt-cueola-input{background:rgba(0,0,0,.45);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;outline:none;min-width:0}
+.pt-cueola-input{background:rgba(0,0,0,.45);border: 1px solid transparent;color:var(--pt-text,#f0ead6);border-radius:var(--ui-radius-control);padding:9px 11px;font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;outline:none;min-width:0}
 .pt-cueola-input:focus{border-color:var(--pt-accent,#c8a97e);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent,#c8a97e) 25%,transparent)}
-.pt-cueola-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent,#c8a97e);opacity:0;white-space:nowrap}
+.pt-cueola-status{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--pt-accent,#c8a97e);opacity:0;white-space:nowrap}
+.pt-cueola-status.warn,.pt-upload-status.warn{color:var(--pt-bad,#f05252)}
 .pt-cueola-status.on{opacity:1}
-.pt-cueola-help{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--pt-text,#f0ead6);opacity:.58;background:rgba(0,0,0,.18);border: 1px solid transparent;border-radius:9px;padding:9px 11px}
+.pt-cueola-help{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--pt-text,#f0ead6);opacity:.58;background:rgba(0,0,0,.18);border: 1px solid transparent;border-radius:var(--ui-radius-control);padding:9px 11px}
 .pt-edit-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-.pt-edit-actions .pt-btn{padding:7px 18px}
+.pt-edit-actions .pt-btn{padding:0 18px;min-width:112px}
+.pt-edit-side{display:flex;align-items:center;gap:8px;margin-top:-6px}
 .pt-save-btn{background:rgba(200,169,126,.15);border-color:transparent;color:var(--pt-accent,#c8a97e)}
 
 /* Standalone Flowmingo Op */
@@ -3591,16 +3639,19 @@ input.pt-range::-moz-range-thumb,
 .flowop-connect{display:grid;grid-template-columns:minmax(120px,1fr) auto auto;gap:8px;align-items:center;min-width:0}
 .flowop-code{background:rgba(0,0,0,.36);border: 1px solid transparent;border-radius:8px;padding:8px 10px;color:var(--pt-text);font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;min-width:0;outline:none}
 .flowop-code:focus{border-color:var(--pt-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent) 25%,transparent)}
-.flowop-status{font-family:var(--mono);font-size:10px;color:var(--pt-accent);white-space:nowrap;opacity:.78}
+.flowop-status{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--pt-accent);white-space:nowrap;opacity:.78}
+.flowop-status.error{color:var(--red);opacity:1}
 .flowop-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(390px,420px);background:linear-gradient(180deg,color-mix(in srgb,var(--pt-accent) 5%,transparent),transparent 120px)}
 .flowop-preview{position:relative;overflow:hidden;display:flex;justify-content:center;align-items:flex-start;border-right: 1px solid transparent;min-width:0}
 .flowop-preview::before,.flowop-preview::after{content:'';position:absolute;left:0;right:0;height:24%;pointer-events:none;z-index:2}
 .flowop-preview::before{top:0;background:linear-gradient(to bottom,var(--pt-bg),transparent)}
 .flowop-preview::after{bottom:0;background:linear-gradient(to top,var(--pt-bg),transparent)}
-.flowop-readline{position:absolute;left:0;right:0;top:50%;height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent) 18%,var(--pt-accent) 82%,transparent 100%);opacity:.72;z-index:3;pointer-events:none}
-.flowop-script{width:min(900px,88vw);padding:18vh 28px 36vh;font-family:var(--display);font-size:var(--pt-size);font-weight:600;line-height:1.55;text-align:var(--pt-align);color:var(--pt-text);white-space:pre-wrap;word-break:break-word;letter-spacing:0;opacity:.96}
-.flowop-script p{margin:0;min-height:1.55em}
-.flowop-side{min-width:0;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:color-mix(in srgb,var(--pt-bg) 78%,black)}
+.flowop-readline{position:absolute;left:0;right:0;top:var(--pt-read,50%);transform:translateY(-50%);height:2px;background:linear-gradient(90deg,transparent 0%,var(--pt-accent) 18%,var(--pt-accent) 82%,transparent 100%);opacity:.72;z-index:3;pointer-events:none}
+.flowop-script{width:min(var(--pt-width,900px),88vw);padding:50vh 28px;will-change:transform;font-family:var(--display);font-size:var(--pt-size);font-weight:600;line-height:1.55;text-align:var(--pt-align);color:var(--pt-text);white-space:pre-wrap;word-break:break-word;letter-spacing:0;opacity:.96}
+.flowop-script p{margin:0 0 .14em;min-height:1.62em}
+/* The preview shows the same row boxes as the talent screen; the ON AIR tag follows the show record there. */
+.flowop-script .pt-row-head{white-space:normal}
+.flowop-side{min-width:0;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;background:color-mix(in srgb,var(--pt-bg) 78%,black)}
 .flowop-panel{border: 1px solid transparent;background:var(--pt-ui-bg);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:11px}
 .flowop-panel-title{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:0;text-transform:none;color:var(--pt-accent);opacity:.9}
 .flowop-session-title{font-family:var(--syne);font-size:18px;font-weight:800;line-height:1.2;color:var(--pt-text)}
@@ -3618,14 +3669,14 @@ input.pt-range::-moz-range-thumb,
 .flowop-controls .pt-ctrl-group{display:flex;align-items:center;gap:8px}
 #flowOpPlayBtn{width:100%;padding:9px;font-size:13px;border-color:transparent;background:color-mix(in srgb,var(--pt-accent) 16%,transparent);color:var(--pt-accent);border-radius:10px}
 #flowOpPlayBtn.active{background:color-mix(in srgb,var(--pt-accent) 38%,transparent)}
-.flowop-theme-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border: 1.5px solid color-mix(in srgb,var(--pt-text,#fff) 26%,transparent);transition:transform .15s var(--ease),box-shadow .2s var(--ease);flex-shrink:0;padding:0}
-.flowop-theme-dot:hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
-.flowop-theme-dot.active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg),0 0 0 4px var(--pt-accent)}
+.flowop-theme-dot:not(.ui-theme-tile){width:22px;height:22px;border-radius:50%;cursor:pointer;border: 1.5px solid color-mix(in srgb,var(--pt-text,#fff) 26%,transparent);transition:transform .15s var(--ease),box-shadow .2s var(--ease);flex-shrink:0;padding:0}
+.flowop-theme-dot:not(.ui-theme-tile):hover{transform:scale(1.12);border-color:rgba(255,255,255,.5)}
+.flowop-theme-dot:not(.ui-theme-tile).active{transform:scale(1.1);border-color:#fff;box-shadow:0 0 0 2px var(--pt-bg),0 0 0 4px var(--pt-accent)}
 .flowop-note{font-size:12px;line-height:1.5;color:var(--pt-text);opacity:.62}
 /* The Hotkeys panel reuses the talent screen's key-first hint rows (.pt-hint-row,
    key chip leading, dim description trailing); the card container brings the mono
    face itself, so this panel restates it. */
-.flowop-panel .pt-hint-row{font-family:var(--mono);font-size:13px;line-height:1.9}
+.flowop-panel .pt-hint-row{font-family:var(--sans);font-size:12.5px;line-height:1.95}
 .flowop-empty{font-family:var(--mono);font-size:14px;color:var(--pt-accent);opacity:.72;text-align:center;padding:30vh 24px}
 @media(max-width:900px){
   .flowop-top{height:auto;grid-template-columns:auto minmax(0,1fr);align-items:center;padding:8px 10px;gap:8px}
@@ -3634,6 +3685,7 @@ input.pt-range::-moz-range-thumb,
   .flowop-connect,.flowop-top>.pt-btn:last-child{grid-column:1/-1}
   .flowop-status{grid-column:1/-1}
   .flowop-main{grid-template-columns:1fr;grid-template-rows:minmax(210px,32vh) minmax(0,1fr)}
+  .flowop-script{padding:24px 20px 48px}
   .flowop-preview{min-height:0;border-right:none;border-bottom: 1px solid transparent}
   .flowop-side{max-height:none;min-height:0}
 }
@@ -3690,7 +3742,7 @@ input.pt-range::-moz-range-thumb,
   --flow-glass-strong:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 86%,transparent);
   --flow-glass-edge:color-mix(in srgb,var(--pt-accent,#7eb8c8) 30%,rgba(255,255,255,.16));
 }
-:is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
+:is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-setup-card,#pt-edit-box,#pt-settings-box,.flowop-top,.flowop-panel){
   background:var(--flow-glass-surface);
   border-color:var(--flow-glass-edge);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
@@ -3718,11 +3770,12 @@ input.pt-range::-moz-range-thumb,
 #promptypus #pt-play-btn.active{background:color-mix(in srgb,var(--pt-accent,#7eb8c8) 22%,var(--flow-glass-strong));color:var(--pt-accent,#7eb8c8)}
 #promptypus .pt-seg .pt-btn{background:transparent;border-color:transparent;box-shadow:none}
 #promptypus .pt-seg .pt-btn.active{background:color-mix(in srgb,var(--pt-text,#f0ead6) 16%,transparent);color:var(--pt-text,#f0ead6)}
+#promptypus[data-pt-theme="white"] .pt-ctrl-group .pt-btn.active:not(.pt-seg .pt-btn),#promptypus[data-pt-theme="white"] #pt-play-btn.active{color:#a30000}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn):focus-visible{
   outline:2px solid color-mix(in srgb,var(--pt-accent,#7eb8c8) 78%,white);
   outline-offset:2px;
 }
-#pt-edit-overlay{
+#pt-edit-overlay,#pt-settings-overlay{
   background:color-mix(in srgb,var(--pt-bg,#08090f) 58%,transparent);
   backdrop-filter:blur(var(--liquid-blur)) saturate(125%);
   -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(125%);
@@ -3742,7 +3795,7 @@ input.pt-range::-moz-range-thumb,
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.paperwork-card,.pb-comments,.pb-hub-activity,.pb-assign-card,.pb-board,.pb-thread,.pb-compose-card,.prepro-section){background:var(--s1)}
-  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-setup-card,#pt-edit-box,#pt-settings-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 
 @media(prefers-reduced-transparency:reduce){
@@ -3750,16 +3803,16 @@ input.pt-range::-moz-range-thumb,
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal,
   .pb-modal-header,
   :is(.plandabear-settings-btn,.paperwork-back,.pb-chat-tool,.pb-tag-chip,.pb-attach-add,.pb-mini-btn),
-  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-setup-card,#pt-edit-box,#pt-settings-box,.flowop-top,.flowop-panel){
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
   }
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{background:var(--s1)}
-  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-setup-card,#pt-edit-box,#pt-settings-box,.flowop-top,.flowop-panel){background:var(--pt-ui-bg)}
 }
 @media(prefers-contrast:more){
   :is(#paperworkHubModal,#preProModal,#productionScheduleModal,#safetyPlanModal,#pbAssignModal,#patchSheetModal,#stagePlotModal,#paperPreviewModal,#productionNotesModal) .modal{border-color: transparent}
-  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-hint,.pt-setup-card,#pt-edit-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
+  :is(#promptypus,#flowOp) :is(#pt-bar,#pt-panel,.pt-setup-card,#pt-edit-box,#pt-settings-box,.flowop-top,.flowop-panel){border-color:color-mix(in srgb,var(--pt-accent) 62%,var(--pt-ui-border))}
 }
 
 /* ── Planda Bear layout (owner redesign Aug 2026) ──
@@ -4687,6 +4740,10 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 /* The sidebar-head circles stay 34x34 (44px would squash them into ovals);
    touch gets the full hit area via width+height together. */
 @media(pointer:coarse){#liveshow .ls-popout-btn{width:44px;height:44px}}
+@media(forced-colors:active){
+  :is(#promptypus,#flowOp) :is(.pt-btn.active,.pt-btn[aria-pressed="true"],.ui-theme-tile.on){outline:2px solid Highlight;outline-offset:-2px}
+  #pt-read-line,.flowop-readline{background:Highlight;forced-color-adjust:none}
+}
 .ls-nav{gap:10px}
 .ls-nav .ls-btn{min-height:44px;min-width:116px;justify-content:center}
 /* D11.5 fixed geometry: the GO control NEVER resizes, so the click target
@@ -5514,21 +5571,21 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <button class="ls-popout-btn" id="lsPopoutBtn" onclick="openScriptOpPopout()" data-tip="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
           <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" data-tip="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
-        <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt">Waiting for Flowmingo…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
+        <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" role="status">Waiting for the prompter…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
-      <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live Flowmingo script" placeholder="Live Flowmingo script appears here. Type updates, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
+      <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live prompter script" placeholder="The prompter script appears here. Type changes, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <!-- D11.2: where the talent copy IS, always visible — the preview flows
            with the talent position so the op never loses the read. -->
       <div class="ls-talent-pos" id="lsTalentPos" hidden>
         <div class="ls-talent-pos-rail" aria-hidden="true"><div class="ls-talent-pos-fill" id="lsTalentPosFill"></div><span class="ls-talent-pos-arrow" id="lsTalentPosArrow">▶</span></div>
-        <span class="ls-talent-pos-label" id="lsTalentPosLabel" role="status">Talent · —</span>
+        <span class="ls-talent-pos-label" id="lsTalentPosLabel" role="status">Talent · --</span>
         <label class="ls-talent-pos-follow" data-tip="Keep the script scrolled to where the talent is reading. Pauses while you type."><input type="checkbox" id="lsTalentPosFollow" checked> Follow</label>
       </div>
       <div class="ls-script-resizer" id="lsScriptResizer" onpointerdown="startScriptHeightResize(event)" onkeydown="resizeLiveScriptByKey(event)" data-tip="Drag or use arrow keys to resize the script" role="separator" tabindex="0" aria-label="Resize the script editor" aria-orientation="horizontal" aria-valuemin="120" aria-valuemax="1400" aria-valuenow="120"></div>
       <div class="ls-editor-actions">
         <button class="ls-pact-btn ls-clear-btn ls-pact-circle" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Edit this cue's script" aria-label="Edit cue script"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span></button>
         <span class="ls-destructive-zone"><button class="ls-pact-btn ls-clear-btn ls-pact-circle ls-destructive-action" onclick="clearPrompter()" data-tip="Clear the script. Asks you to confirm first." aria-label="Clear script; confirmation required"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span></button></span>
-        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" data-tip="Send the script to Flowmingo (Cmd+Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to Flowmingo</span></button>
+        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" data-tip="Send the script to the prompter (Cmd/Ctrl+Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to prompter</span></button>
       </div>
       <!-- Inspector pattern (Keynote-style): icon tabs pick ONE control group,
            shown as a flat single page — no stacked accordion, no nested cards. -->
@@ -5583,35 +5640,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="pt-bar-title">Flowmingo</div>
     <div class="pt-bar-readout" aria-live="polite">
       <span class="pt-bar-row" id="pt-row-readout" hidden></span>
-      <span class="pt-bar-time" id="pt-time-left" hidden></span>
+      <span class="pt-bar-time" id="pt-time-left" aria-live="off" hidden></span>
     </div>
     <div class="pt-status">
-      <span class="pt-bar-sync pt-state-bad" id="pt-sync-label">Not connected</span>
+      <span class="pt-bar-sync pt-state-bad" id="pt-sync-label" role="status">Not connected</span>
       <span class="pt-check" id="pt-check-show" data-tip="Connected to your show">Show</span>
       <span class="pt-check" id="pt-check-script" data-tip="A script is loaded">Script</span>
     </div>
     <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Link a show</button>
-    <button class="pt-bar-controls-btn icon-only" id="pt-keys-btn" onclick="ptToggleKeys()" data-tip="Keyboard shortcuts (K)" aria-label="Show the keyboard shortcuts" aria-pressed="false"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span></button>
-    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptTogglePanel()" data-tip="Show or hide controls (H)" aria-label="Show or hide controls" aria-pressed="true"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
-  </div>
-
-  <!-- Keyboard shortcuts (K): a popover under the bar, hidden until asked -->
-  <div class="pt-hint hidden" id="pt-hint" role="dialog" aria-label="Keyboard shortcuts">
-    <div class="pt-card-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-hint')"><span class="pt-grip-bar" aria-hidden="true"></span></div>
-    <div class="pt-hint-title">Keys</div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">Double tap a line</span><span class="pt-hint-desc">Cue that line</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">L</span><span class="pt-hint-desc">Read line center / high</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">W</span><span class="pt-hint-desc">Text width</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Fullscreen</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide controls</span></div>
-    <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">Link a show, load a script</span></div>
+    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptOpenSettings()" data-tip="Settings (S)" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
   </div>
 
   <!-- Stage: the copy rolls under the read line -->
@@ -5647,34 +5684,28 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <div id="pt-setup" class="pt-setup">
     <div class="pt-setup-card">
       <div class="pt-setup-logo"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
-      <h2 class="pt-setup-title">Connect Flowmingo to your show</h2>
-      <p class="pt-setup-sub">Tap your show, or enter the show code from your Script Op or Flowmingo Op.</p>
+      <h2 class="pt-setup-title">Link this prompter to your show</h2>
+      <p class="pt-setup-sub">Tap your show, or type the show code from the prompter controls.</p>
       <div class="pt-setup-yours" id="pt-setup-yours" hidden></div>
       <div class="pt-setup-row">
-        <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" onkeydown="if(event.key==='Enter')ptSetupConnect()">
-        <button class="pt-setup-btn" onclick="ptSetupConnect()">Connect</button>
+        <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" aria-label="Show code" onkeydown="if(event.key==='Enter')ptSetupConnect()">
+        <button class="pt-setup-btn" onclick="ptSetupConnect()">Link</button>
       </div>
       <div class="pt-setup-status" id="pt-setup-status"></div>
       <button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript()">Keep this script (not linked to a show)</button>
       <ol class="pt-setup-steps">
-        <li><span class="pt-step-dot" id="pt-step-1"></span>Connect to your show</li>
-        <li><span class="pt-step-dot" id="pt-step-2"></span>Script loads automatically from the Script Op</li>
+        <li><span class="pt-step-dot" id="pt-step-1"></span>Link to your show</li>
+        <li><span class="pt-step-dot" id="pt-step-2"></span>The script loads from the prompter controls</li>
         <li><span class="pt-step-dot" id="pt-step-3"></span>When it turns green <strong>READY</strong>, you're set</li>
       </ol>
       <button class="pt-setup-alt" onclick="ptOpenEdit()">No code? Load a file or paste a script instead</button>
     </div>
   </div>
 
-  <!-- Floating control panel: one glass bubble, every button the same size -->
+  <!-- Floating control panel: one glass bubble, one row, every button the same size.
+       The looks (theme, align, read line, width, row info) live in Settings (gear, S). -->
   <div id="pt-panel">
-    <div class="pt-card-grip" id="pt-panel-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-panel')">
-      <span class="pt-grip-bar" aria-hidden="true"></span>
-      <span class="pt-panel-zoom" role="group" aria-label="Panel size">
-        <button class="pt-btn pt-zoom-btn" onclick="ptAdjustPanelScale(-0.1)" data-tip="Shrink this panel" aria-label="Shrink the control panel">−</button>
-        <span class="pt-zoom-val" id="pt-panel-zoom-val">100%</span>
-        <button class="pt-btn pt-zoom-btn" onclick="ptAdjustPanelScale(0.1)" data-tip="Grow this panel" aria-label="Grow the control panel">+</button>
-      </span>
-    </div>
+    <div class="pt-card-grip" id="pt-panel-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-panel')"><span class="pt-grip-bar" aria-hidden="true"></span></div>
     <div class="pt-panel-row">
       <div class="pt-ctrl-group pt-ctrl-transport">
         <button class="pt-btn pt-primary" id="pt-play-btn" onclick="ptTogglePlay()" aria-label="Play or pause">
@@ -5682,6 +5713,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <span>Play</span>
         </button>
         <button class="pt-btn" onclick="ptResetScroll()" data-tip="Back to the top of the script (R)"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Top</span></button>
+        <button class="pt-btn" id="pt-reverse-btn" onclick="ptSetReversing(!ptReversing)" data-tip="Roll the script backward while on (Option + Down on, Option + Up off)" aria-pressed="false">Reverse</button>
       </div>
       <div class="pt-ctrl-group pt-ctrl-slider" role="group" aria-label="Prompter speed">
         <span class="pt-ctrl-label">Speed</span>
@@ -5697,54 +5729,134 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <button class="pt-btn pt-step" onclick="ptAdjustSize(4)" data-tip="Make the text larger" aria-label="Increase text size">+</button>
         <output class="pt-ctrl-num" id="pt-size-value" for="pt-size-slider">52</output>
       </div>
-    </div>
-    <div class="pt-panel-row">
-      <div class="pt-ctrl-group" role="group" aria-label="Align">
-        <span class="pt-ctrl-label">Align</span>
-        <div class="pt-seg">
-          <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" data-tip="Align the script left" aria-label="Align script left" aria-pressed="false">Left</button>
-          <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" data-tip="Center the script" aria-label="Align script center" aria-pressed="true">Center</button>
-          <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" data-tip="Align the script right" aria-label="Align script right" aria-pressed="false">Right</button>
-        </div>
-      </div>
-      <div class="pt-ctrl-group" role="group" aria-label="Read line">
-        <span class="pt-ctrl-label">Read line</span>
-        <div class="pt-seg">
-          <button class="pt-btn active" id="pt-readline-c" onclick="ptSetReadLine('center')" data-tip="Read line in the middle of the screen" aria-pressed="true">Center</button>
-          <button class="pt-btn" id="pt-readline-h" onclick="ptSetReadLine('high')" data-tip="Read line in the upper third, nearer the lens" aria-pressed="false">High</button>
-        </div>
-      </div>
-      <div class="pt-ctrl-group" role="group" aria-label="Text width">
-        <span class="pt-ctrl-label">Width</span>
-        <div class="pt-seg">
-          <button class="pt-btn" id="pt-width-n" onclick="ptSetWidth('narrow')" data-tip="Narrow copy, short lines" aria-pressed="false">Narrow</button>
-          <button class="pt-btn active" id="pt-width-no" onclick="ptSetWidth('normal')" data-tip="Normal width" aria-pressed="true">Normal</button>
-          <button class="pt-btn" id="pt-width-w" onclick="ptSetWidth('wide')" data-tip="Wide copy, long lines" aria-pressed="false">Wide</button>
-        </div>
-      </div>
       <div class="pt-ctrl-group">
-        <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()" data-tip="Flip the copy for a beam splitter (M)">Mirror</button>
+        <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()" data-tip="Flip the copy for a beam splitter (M)" aria-pressed="false">Mirror</button>
         <button class="pt-btn" onclick="ptToggleFullscreen()" data-tip="Fullscreen (F)"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
-        <label class="pt-switch" data-tip="Show the NEXT and HOLDING row chips along the bottom"><input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)"><span>Row info</span></label>
+        <button class="pt-btn" onclick="ptOpenSettings()" data-tip="Theme, text, read line, keys (S)"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Settings</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings sheet (gear, S): the looks, the screen, the keys -->
+  <div id="pt-settings-overlay" class="pt-sheet-overlay" onclick="if(event.target===this)ptCloseSettings()">
+    <div id="pt-settings-box" class="pt-sheet" role="dialog" aria-modal="true" aria-labelledby="pt-settings-title" tabindex="-1">
+      <div class="pt-sheet-head">
+        <h2 id="pt-settings-title">Settings</h2>
+        <button class="pt-btn pt-icon-btn" onclick="ptCloseSettings()" aria-label="Close settings" data-tip="Close (Esc)"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+      </div>
+      <div class="pt-sheet-section">
+        <h3>Theme</h3>
+        <!-- Swatches painted at boot from CUEOLA_THEME_SWATCHES (INC-6: no hex here).
+             pt-theme-dot class + pt-t-* ids keep ptSetTheme's active-state sync working. -->
+        <div class="pt-ctrl-group ui-theme-grid">
+          <button type="button" class="ui-theme-tile pt-theme-dot active on" id="pt-t-cool" onclick="ptSetTheme('cool')" data-tip="Glacier theme" aria-label="Glacier theme" aria-pressed="true"><span class="tt-prev"></span><span class="tt-name">Glacier</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-warm" onclick="ptSetTheme('warm')" data-tip="Honey theme" aria-label="Honey theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Honey</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-white" onclick="ptSetTheme('white')" data-tip="Polar Bear theme" aria-label="Polar Bear theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Polar Bear</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-green" onclick="ptSetTheme('green')" data-tip="Eucalyptus theme" aria-label="Eucalyptus theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Eucalyptus</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-koala" onclick="ptSetTheme('koala')" data-tip="Koala theme" aria-label="Koala theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Koala</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-panda" onclick="ptSetTheme('panda')" data-tip="Planda Bear theme" aria-label="Planda Bear theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Planda Bear</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-flamingo" onclick="ptSetTheme('flamingo')" data-tip="Flowmingo theme" aria-label="Flowmingo theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Flowmingo</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-outrangutan" onclick="ptSetTheme('outrangutan')" data-tip="Outrangutan theme" aria-label="Outrangutan theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">Outrangutan</span></button>
+          <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-prepbear" onclick="ptSetTheme('prepbear')" data-tip="PrepBear theme" aria-label="PrepBear theme" aria-pressed="false"><span class="tt-prev"></span><span class="tt-name">PrepBear</span></button>
+        </div>
+      </div>
+      <div class="pt-sheet-section">
+        <h3>Text</h3>
+        <div class="pt-sheet-row" role="group" aria-label="Align">
+          <span class="pt-ctrl-label">Align</span>
+          <div class="pt-seg">
+            <button class="pt-btn" id="pt-align-l" onclick="ptSetAlign('left')" data-tip="Align the script left" aria-label="Align script left" aria-pressed="false">Left</button>
+            <button class="pt-btn active" id="pt-align-c" onclick="ptSetAlign('center')" data-tip="Center the script" aria-label="Align script center" aria-pressed="true">Center</button>
+            <button class="pt-btn" id="pt-align-r" onclick="ptSetAlign('right')" data-tip="Align the script right" aria-label="Align script right" aria-pressed="false">Right</button>
+          </div>
+        </div>
+        <div class="pt-sheet-row" role="group" aria-label="Text width">
+          <span class="pt-ctrl-label">Width</span>
+          <div class="pt-seg">
+            <button class="pt-btn" id="pt-width-n" onclick="ptSetWidth('narrow')" data-tip="Narrow copy, short lines (W cycles)" aria-pressed="false">Narrow</button>
+            <button class="pt-btn active" id="pt-width-no" onclick="ptSetWidth('normal')" data-tip="Normal width (W cycles)" aria-pressed="true">Normal</button>
+            <button class="pt-btn" id="pt-width-w" onclick="ptSetWidth('wide')" data-tip="Wide copy, long lines (W cycles)" aria-pressed="false">Wide</button>
+          </div>
+        </div>
+        <div class="pt-sheet-row" role="group" aria-label="Read line">
+          <span class="pt-ctrl-label">Read line</span>
+          <div class="pt-seg">
+            <button class="pt-btn active" id="pt-readline-c" onclick="ptSetReadLine('center')" data-tip="Read line in the middle of the screen (L toggles)" aria-pressed="true">Center</button>
+            <button class="pt-btn" id="pt-readline-h" onclick="ptSetReadLine('high')" data-tip="Read line in the upper third, nearer the lens (L toggles)" aria-pressed="false">High</button>
+          </div>
+        </div>
+      </div>
+      <div class="pt-sheet-section">
+        <h3>Screen</h3>
+        <label class="pt-sheet-row pt-sheet-switch" for="pt-rowinfo-toggle" data-tip="Show the NEXT and HOLDING row chips along the bottom">
+          <span class="pt-ctrl-label">Row info chips (NEXT and HOLDING)</span>
+          <input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)">
+        </label>
+        <div class="pt-sheet-row" role="group" aria-label="Overlay size">
+          <span class="pt-ctrl-label">Clock and question size</span>
+          <span class="pt-stepper">
+            <button class="pt-btn pt-step" onclick="ptAdjustOverlaySize(-1)" aria-label="Smaller overlays">−</button>
+            <output class="pt-ctrl-num pt-stepper-val" id="pt-overlay-size-val">M</output>
+            <button class="pt-btn pt-step" onclick="ptAdjustOverlaySize(1)" aria-label="Bigger overlays">+</button>
+          </span>
+        </div>
+        <div class="pt-sheet-row" role="group" aria-label="Panel size">
+          <span class="pt-ctrl-label">Control panel size</span>
+          <span class="pt-stepper">
+            <button class="pt-btn pt-step" onclick="ptAdjustPanelScale(-0.1)" aria-label="Shrink the control panel">−</button>
+            <output class="pt-ctrl-num pt-stepper-val" id="pt-panel-zoom-val">100%</output>
+            <button class="pt-btn pt-step" onclick="ptAdjustPanelScale(0.1)" aria-label="Grow the control panel">+</button>
+          </span>
+        </div>
+        <div class="pt-sheet-row">
+          <span class="pt-ctrl-label">Controls</span>
+          <button class="pt-btn" id="pt-hide-controls-btn" onclick="ptCloseSettings();ptTogglePanel()" data-tip="Hide the bar and the panel. Tap the screen, move the mouse or press H to bring them back">Hide controls</button>
+        </div>
+      </div>
+      <div class="pt-sheet-section">
+        <h3>Keys</h3>
+        <div class="pt-keys">
+          <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Tap the script</span><span class="pt-hint-desc">Play or pause</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Double tap a line</span><span class="pt-hint-desc">Cue that line</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Drag down / up</span><span class="pt-hint-desc">Brake / boost</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Pinch</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">L</span><span class="pt-hint-desc">Read line center / high</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">W</span><span class="pt-hint-desc">Text width</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Fullscreen</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide or show controls</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">S</span><span class="pt-hint-desc">Settings</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">Link a show, load a script</span></div>
+          <div class="pt-hint-row"><span class="pt-hint-key">Esc</span><span class="pt-hint-desc">Close or pause</span></div>
+        </div>
+      </div>
+      <div class="pt-edit-actions">
+        <button class="pt-btn" onclick="ptCloseSettings();ptOpenEdit()">Link a show or load a script</button>
       </div>
     </div>
   </div>
 
   <!-- Link a show / load a script sheet -->
   <input type="file" id="pt-file-input" accept=".pdf,.docx,.pages,.txt,.md" style="display:none">
-  <div id="pt-edit-overlay">
-    <div id="pt-edit-box">
-      <h2>Link a show</h2>
+  <div id="pt-edit-overlay" onclick="if(event.target===this)ptCloseEdit()">
+    <div id="pt-edit-box" class="pt-sheet" role="dialog" aria-modal="true" aria-label="Link a show or load a script" tabindex="-1">
+      <div class="pt-sheet-head"><h2>Link a show</h2><button class="pt-btn pt-icon-btn" onclick="ptCloseEdit()" aria-label="Close" data-tip="Close (Esc)"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button></div>
       <div class="pt-cueola-yours" id="pt-cueola-yours" hidden></div>
       <div class="pt-cueola-bar">
-        <span class="pt-cueola-label">Cueola</span>
-        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Show code e.g. 2605A" maxlength="20" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
-        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Load</button>
+        <span class="pt-cueola-label">Show</span>
+        <input class="pt-cueola-input" id="pt-cueola-code-input" type="text" placeholder="Show code e.g. 2605A" maxlength="20" aria-label="Show code" onkeydown="if(event.key==='Enter')ptLoadFromCueolaCode()">
+        <button class="pt-btn" id="pt-cueola-load-btn" onclick="ptLoadFromCueolaCode()">Link</button>
         <span class="pt-cueola-status" id="pt-cueola-status"></span>
       </div>
-      <div class="pt-cueola-help">Link a Cueola show code to keep Flowmingo synced. The script panel and Flowmingo Op can play, pause, brake, boost, resize, align, theme, and mirror this talent screen remotely.</div>
+      <div class="pt-cueola-help">Link a show code and this prompter follows the show. The prompter controls can play, pause, brake, boost, resize, align, theme and mirror it from another computer.</div>
       <div class="pt-edit-actions" style="justify-content:flex-start"><!-- one-off layout: left-align the single action -->
-        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || (session.isDemo || session.isExpert ? '' : session.code) || '')">Open Remote Operator</button>
+        <button class="pt-btn" onclick="openFlowmingoOperator(ptEl('pt-cueola-code-input')?.value || ptLinkedCueolaCode || (session.isDemo || session.isExpert ? '' : session.code) || '')">Open prompter controls</button>
       </div>
       <hr class="pt-modal-sep">
       <h2>Edit / Load Script</h2>
@@ -5756,28 +5868,16 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <span class="pt-upload-status" id="pt-upload-status"></span>
       </div>
       <hr class="pt-modal-sep">
-      <h2>Theme</h2>
-      <!-- Swatches painted at boot from CUEOLA_THEME_SWATCHES (INC-6: no hex here).
-           pt-theme-dot class + pt-t-* ids keep ptSetTheme's active-state sync working. -->
-      <div class="pt-ctrl-group ui-theme-grid">
-        <button type="button" class="ui-theme-tile pt-theme-dot active on" id="pt-t-cool" onclick="ptSetTheme('cool')" data-tip="Glacier theme" aria-label="Glacier theme"><span class="tt-prev"></span><span class="tt-name">Glacier</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-warm" onclick="ptSetTheme('warm')" data-tip="Honey theme" aria-label="Honey theme"><span class="tt-prev"></span><span class="tt-name">Honey</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-white" onclick="ptSetTheme('white')" data-tip="Polar Bear theme" aria-label="Polar Bear theme"><span class="tt-prev"></span><span class="tt-name">Polar Bear</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-green" onclick="ptSetTheme('green')" data-tip="Eucalyptus theme" aria-label="Eucalyptus theme"><span class="tt-prev"></span><span class="tt-name">Eucalyptus</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-koala" onclick="ptSetTheme('koala')" data-tip="Koala theme" aria-label="Koala theme"><span class="tt-prev"></span><span class="tt-name">Koala</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-panda" onclick="ptSetTheme('panda')" data-tip="Planda Bear theme" aria-label="Planda Bear theme"><span class="tt-prev"></span><span class="tt-name">Planda Bear</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-flamingo" onclick="ptSetTheme('flamingo')" data-tip="Flowmingo theme" aria-label="Flowmingo theme"><span class="tt-prev"></span><span class="tt-name">Flowmingo</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-outrangutan" onclick="ptSetTheme('outrangutan')" data-tip="Outrangutan theme" aria-label="Outrangutan theme"><span class="tt-prev"></span><span class="tt-name">Outrangutan</span></button>
-        <button type="button" class="ui-theme-tile pt-theme-dot" id="pt-t-prepbear" onclick="ptSetTheme('prepbear')" data-tip="PrepBear theme" aria-label="PrepBear theme"><span class="tt-prev"></span><span class="tt-name">PrepBear</span></button>
-      </div>
-      <hr class="pt-modal-sep">
       <h2>Or Paste / Type</h2>
-      <textarea id="pt-script-input" rows="12" placeholder="Paste or type your script here..."></textarea>
-      <div class="pt-edit-actions">
+      <textarea id="pt-script-input" rows="12" placeholder="Paste or type your script here..." aria-label="Script text"></textarea>
+      <div class="pt-edit-side">
+        <span class="pt-ctrl-label">Save a copy</span>
         <button class="pt-btn" onclick="ptDownloadAsTxt()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Text</span></button>
         <button class="pt-btn" onclick="ptDownloadAsPDF()"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>PDF</span></button>
+      </div>
+      <div class="pt-edit-actions">
         <button class="pt-btn" onclick="ptCloseEdit()">Cancel</button>
-        <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Load Script</button>
+        <button class="pt-btn pt-save-btn" onclick="ptSaveScript()">Use this script</button>
       </div>
     </div>
   </div>
@@ -5790,21 +5890,21 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <div class="flowop-top">
     <button class="pt-back-btn" onclick="exitFlowmingoOperator()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cueola</span></button>
     <div class="flowop-title-wrap">
-      <div class="flowop-kicker">Standalone remote</div>
+      <div class="flowop-kicker">Prompter controls</div>
       <div class="flowop-title" id="flowOpTitle">Flowmingo Op</div>
     </div>
     <div class="flowop-connect">
-      <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SHOW CODE" maxlength="20" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
-      <button class="pt-btn" id="flowOpLoadBtn" onclick="flowOpLoadSession()">Load</button>
-      <span class="flowop-status" id="flowOpStatus">Not connected</span>
+      <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SHOW CODE" maxlength="20" aria-label="Show code" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
+      <button class="pt-btn" id="flowOpLoadBtn" onclick="flowOpLoadSession()">Link</button>
+      <span class="flowop-status" id="flowOpStatus" role="status">Not connected</span>
     </div>
-    <button class="pt-btn" onclick="openPrompterFromFlowOp()">Talent Screen</button>
+    <button class="pt-btn" onclick="openPrompterFromFlowOp()">Open prompter</button>
   </div>
   <div class="flowop-main">
     <div class="flowop-preview">
       <div class="flowop-readline"></div>
       <div class="flowop-script" id="flowOpScriptPreview">
-        <div class="flowop-empty">Load a show code to control Flowmingo remotely.</div>
+        <div class="flowop-empty">Type a show code to run the prompter from here.</div>
       </div>
     </div>
     <aside class="flowop-side">
@@ -5819,18 +5919,17 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <div id="flowOpControls"></div>
       </section>
       <section class="flowop-panel">
-        <div class="flowop-panel-title">Hotkeys</div>
-        <div class="pt-hint-row"><span class="pt-hint-key">SPACE</span><span class="pt-hint-desc">play / pause</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">DOWN hold</span><span class="pt-hint-desc">brake</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">UP hold</span><span class="pt-hint-desc">boost</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">LEFT / RIGHT</span><span class="pt-hint-desc">text size</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">OPT + DOWN</span><span class="pt-hint-desc">reverse</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">OPT + UP</span><span class="pt-hint-desc">forward</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">fullscreen</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">reset</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">hide controls</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">mirror</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">ESC</span><span class="pt-hint-desc">exit</span></div>
+        <div class="flowop-panel-title">Keys</div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Talent fullscreen</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide or show talent controls</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
+        <div class="pt-hint-row"><span class="pt-hint-key">Esc</span><span class="pt-hint-desc">Back to Cueola</span></div>
       </section>
     </aside>
   </div>
@@ -6003,7 +6102,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     </div>
     <div class="marker-divider"></div>
     <textarea class="field-in u-script-edit" id="lsScriptEditText" rows="14"></textarea>
-    <button class="btn-primary btn-save" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save &amp; Push to Flowmingo</span></button>
+    <button class="btn-primary btn-save" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save and push to prompter</span></button>
     <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
   </div>
 </div>
@@ -7178,7 +7277,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 #flowOp .flowop-script:has(> .flowop-choices) { padding:40px 28px 48px; }
 #flowOp .flowop-preview:has(.flowop-choices) { overflow-y:auto; }
 #flowOp .flowop-preview:has(.flowop-choices) .flowop-readline { display:none; }
-#flowOp .flowop-choices { padding:0; font-family:var(--sans); font-size:14px; }
+#flowOp .flowop-choices { padding:0; font-family:var(--sans); font-size:14px; opacity:1; }
 :is(#flowOp,#promptypus) .fd-sessions { max-width:420px; margin:10px auto 0; }
 :is(#flowOp,#promptypus) .fd-session { background:rgba(0,0,0,.3); border-color: transparent; color:var(--pt-text); }
 /* Talent door: assigned-show rows on the Connect card and in the Link a show overlay. */
@@ -7467,7 +7566,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=5e503e91f7"></script>
+<script src="cueola-app.js?v=5c95543f0c"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

@@ -1500,7 +1500,7 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   assert.match(app, /docMessage\.positionPct = null;/);
   assert.match(app, /docMessage\.state\.running = false;/);
   // Honest status line, pop-out copy, and the talent's refused-write notice.
-  assert.match(app, /function _talentStatusLine\(\)/);
+  assert.match(app, /function _talentStatusLine\(opts=\{\}\)/);
   assert.match(app, /talent:\{ line:_talentStatusLine\(\), connected:_talentMirrorFresh\(\) \}/);
   assert.match(app, /'Sent to the prompter'/);
   assert.match(app, /ptSetCueolaStatus\('Cloud write refused: sign in again on this device', true\)/);
@@ -1732,7 +1732,8 @@ test('talent door: your shows, signed-out link path, stale script honesty, launc
   // the keep-this-script dismiss, Link a show first, the bar button renamed.
   assert.match(html, /<div class="pt-setup-yours" id="pt-setup-yours" hidden><\/div>\n      <div class="pt-setup-row">/);
   assert.match(html, /<button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript\(\)">Keep this script/);
-  assert.match(html, /<h2>Link a show<\/h2>\n      <div class="pt-cueola-yours" id="pt-cueola-yours" hidden><\/div>\n      <div class="pt-cueola-bar">/);
+  // 10/16: the sheet opens with a title row and a Close button, like Settings.
+  assert.match(html, /<div class="pt-sheet-head"><h2>Link a show<\/h2><button class="pt-btn pt-icon-btn" onclick="ptCloseEdit\(\)" aria-label="Close"[^\n]*<\/div>\n      <div class="pt-cueola-yours" id="pt-cueola-yours" hidden><\/div>\n      <div class="pt-cueola-bar">/);
   assert.ok(html.indexOf('<h2>Link a show</h2>') < html.indexOf('<h2>Edit / Load Script</h2>'));
   assert.ok(html.indexOf('<h2>Edit / Load Script</h2>') < html.indexOf('id="pt-upload-file-btn"'));
   assert.match(html, /onclick="ptOpenEdit\(\)">Link a show<\/button>/);
@@ -1781,7 +1782,7 @@ test('talent door: your shows, signed-out link path, stale script honesty, launc
   // re-lists on open.
   const enter = app.slice(app.indexOf('function enterPrompter()'), app.indexOf('ptKeydownHandler = (e) =>'));
   assert.match(enter, /if \(setupCode && !setupCode\.value\) setupCode\.value = ptLastLinkedCode\(\);\n  ptOfferAssignedSessions\(\);/);
-  assert.match(app, /if \(ov\) ov\.classList\.add\('open'\);\n  ptOfferAssignedSessions\(\);/);
+  assert.match(app, /if \(ov\) ov\.classList\.add\('open'\);\n  ptSheetBackdrop\(true\);\n  ptOfferAssignedSessions\(\);/);
   // Launcher: read-only talent link for another machine, Copy, sign-in note.
   assert.match(html, /<label class="field-lbl" for="ws-talent-link">Talent display on another machine<\/label>/);
   assert.match(html, /<input class="field-in" id="ws-talent-link" type="text" readonly value="https:\/\/cueola\.live\/flowmingo"/);
@@ -2342,7 +2343,7 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   // doors and the Guide's "remote" action all open it.
   assert.match(html, /<div class="screen" id="flowOp">/);
   assert.match(html, /onclick="event\.stopPropagation\(\);openFlowmingoOperator\(\)">Remote Op<\/button>/);
-  assert.match(html, /Open Remote Operator<\/button>/);
+  assert.match(html, /Open prompter controls<\/button>/);
   assert.match(app, /params\.has\('flowop'\) \|\| params\.has\('operator'\)\) \{[\s\S]*?openFlowmingoOperator\(code\);/);
   assert.match(app, /else if \(action === 'remote'\) openFlowmingoOperator\(/);
   // It follows the simple tier too: Play, Speed and Size up front; holds,
