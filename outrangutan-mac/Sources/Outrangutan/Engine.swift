@@ -335,6 +335,9 @@ final class Engine: ObservableObject {
     @Published var standbyID: UUID? {
         didSet {
             guard standbyID != oldValue else { return }
+            // A start point from a crash belongs to the cue it was offered
+            // for; standing by elsewhere lets it go.
+            if let r = pendingResume, r.id != standbyID { pendingResume = nil }
             scheduleStandbyPreload(after: 0.15, restart: true)
         }
     }
@@ -754,6 +757,9 @@ final class Engine: ObservableObject {
             paused = false
             stillLeft = nil
         }
+        // A start point from a crash is for the next cue to fire; firing
+        // another cue first lets it go.
+        if let r = pendingResume, r.id != cue.id { pendingResume = nil }
         let result: WireResult
         readEnvelope(cue)
         switch cue.kind {
@@ -1520,6 +1526,9 @@ final class Engine: ObservableObject {
         return (out, item.currentTime())
     }
 
+    /// How many files the decks have opened so far, for test mode.
+    var deckLoads: Int { Deck.loads }
+
     /// What is loaded ahead right now, for test mode and Show Check.
     var preloadState: String {
         var parts = (videoDecks + soundDecks).filter(\.isPreloaded).map { d in
@@ -1546,9 +1555,6 @@ final class Engine: ObservableObject {
     /// The clock ticks 30 times a second, on the main run loop in common
     /// mode so it keeps counting while a menu is open or the list scrolls.
     private func startClock() {
-    /// How many files the decks have opened so far, for test mode.
-    var deckLoads: Int { Deck.loads }
-
         let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer, forMode: .common)
         clock = timer

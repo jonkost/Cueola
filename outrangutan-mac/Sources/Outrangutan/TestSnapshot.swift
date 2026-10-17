@@ -1700,7 +1700,26 @@ enum TestSnapshot {
                 let live = engine.liveState()
                 note("i the same cue again starts from the top: \(live.name) at \(String(format: "%.1f", live.offset ?? 0)) s")
                 engine.allStop()
-                state("j done")
+                // The crash banner again, but another cue runs first: the
+                // start point is for the next cue to fire, so the recovered
+                // cue later starts from its top, not 30 s in.
+                let first = engine.cues[0]
+                engine.recovered = RecoveryPoint(wireID: first.wireID ?? "", name: first.name, offset: 30, cueID: first.id)
+                engine.standbyRecovered()
+                if let other = engine.cues.first(where: { $0.id != first.id && $0.fileIsThere }) {
+                    engine.standbyID = other.id
+                    engine.go()
+                    note("j another cue run first: \(engine.pictureCue?.name ?? engine.soundCue?.name ?? "-")")
+                }
+                engine.allStop()
+                engine.standbyID = first.id
+                engine.go()
+            }),
+            (1.0, {
+                let live = engine.liveState()
+                note("k the recovered cue after another ran first: \(live.name) at \(String(format: "%.1f", live.offset ?? 0)) s (should be near its in point of \(String(format: "%.1f", engine.cues[0].trimIn)), not 30)")
+                engine.allStop()
+                state("l done")
             }),
         ]
     }
