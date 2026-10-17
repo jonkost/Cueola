@@ -1723,23 +1723,49 @@
     if (p._identityMigrationError) {
       profileWarnings += '<div class="id-portal-empty">Your profile could not be saved yet. Assignments may be unavailable until you are back online. <button type="button" class="jis-btn" onclick="CueolaIdentity.renderPortal()">Retry</button></div>';
     }
-    body().innerHTML = profileWarnings +
+    // The profile card (Jon, 2026-10-16: "clicking on the profile should do
+    // more"): who you are, since when, and the things you can do about it.
+    var since = p.createdAt ? new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
+    var meCard = '<div class="id-me">' + avatarChipHTML(p, 'id-me-ava') +
+      '<div class="id-me-text"><div class="id-me-name">' + esc(p.fullName || p.username) + '</div>' +
+      '<div class="id-me-sub">@' + esc(p.username) + ' · ' + (p.role === 'admin' ? 'Instructor' : 'Student') + (since ? ' · since ' + esc(since) : '') + '</div>' +
+      '<div class="id-me-summary" id="id-me-summary">' + (codes.length ? 'Checking what needs you…' : 'No shows on your profile yet.') + '</div>' +
+      '<div class="id-me-acts">' +
+      '<button type="button" class="jis-btn" onclick="CueolaIdentity.deviceOnlyLook()">Edit look</button>' +
+      '<button type="button" class="jis-btn" onclick="CueolaIdentity.openAgreement()">User agreement</button>' +
+      '<button type="button" class="jis-btn" onclick="CueolaIdentity.signOut()">Sign out on this device</button>' +
+      '</div></div></div>';
+    body().innerHTML = profileWarnings + meCard +
+      '<div class="id-portal-head">Your shows</div>' +
       '<div class="id-portal-cards" id="id-portal-cards">' +
       (codes.length ? '<div class="id-portal-loading">Checking your sessions…</div>'
                     : '<div class="id-portal-empty">No sessions on your profile yet. Add a show code below.</div>') +
       '</div>' +
       '<div class="id-addcode-row"><input class="field-in" id="id-portal-addcode" type="text" placeholder="Add a show code…" autocapitalize="characters">' +
-      '<button type="button" class="jis-btn" onclick="CueolaIdentity.portalAddCode()">Add</button></div>' +
-      '<div class="id-portal-foot">' +
-      '  <button type="button" class="btn-secondary" onclick="CueolaIdentity.deviceOnlyLook()">Edit look</button>' +
-      '  <button type="button" class="btn-secondary" onclick="CueolaIdentity.signOut()">Sign out on this device</button>' +
-      '</div>';
+      '<button type="button" class="jis-btn" onclick="CueolaIdentity.portalAddCode()">Add</button></div>';
     if (!codes.length) return;
 
     var docs = await Promise.all(codes.map(function (code) { return loadPortalSession(w, code, p); }));
     if (requestId !== portalRequestGeneration) return;
     var wrap = document.getElementById('id-portal-cards');
     if (!wrap) return;
+    // One line on the profile card: what needs you across every show.
+    var totals = { todos: 0, unseen: 0, positions: [] };
+    docs.forEach(function (entry) {
+      if (!entry.doc || entry.sessionStatus !== 'ok') return;
+      var s = summarizeSession(entry.code, entry.doc, p, entry.notes, entry.assignment || { positions: [], paperwork: [], source: 'unavailable' });
+      totals.todos += s.todos || 0;
+      totals.unseen += s.unseen || 0;
+      (s.positions || []).forEach(function (pos) { if (totals.positions.indexOf(pos) < 0) totals.positions.push(pos); });
+    });
+    var summaryEl = document.getElementById('id-me-summary');
+    if (summaryEl) {
+      var bits = [];
+      if (totals.positions.length) bits.push(esc(totals.positions.slice(0, 3).join(', ')));
+      bits.push(totals.todos ? '<b>' + totals.todos + ' open to-do' + (totals.todos === 1 ? '' : 's') + '</b>' : 'no open to-dos');
+      bits.push(totals.unseen ? '<b>' + totals.unseen + ' unseen note' + (totals.unseen === 1 ? '' : 's') + '</b>' : 'no unseen notes');
+      summaryEl.innerHTML = bits.join(' · ');
+    }
     wrap.innerHTML = docs.map(function (entry) {
       if (!entry.doc || entry.sessionStatus === 'missing' || entry.sessionStatus === 'deleted'
           || entry.sessionStatus === 'denied' || entry.sessionStatus === 'error') return unavailableSessionCard(entry);
