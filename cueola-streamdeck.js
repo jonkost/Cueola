@@ -133,6 +133,13 @@
     });
     for (var p = 1; p <= 8; p++) registerAction({ id: 'pad:' + p, kind: 'pad', slot: p, group: 'Outrangutan · SFX pads', color: '#5a2a8a', label: 'PAD ' + p, full: 'SFX pad slot ' + p, desc: 'Fires whatever SFX pad sits in position ' + p + ' of the loaded show.' });
     for (var c = 1; c <= 8; c++) registerAction({ id: 'cue:' + c, kind: 'cue', slot: c, group: 'Outrangutan · cues', color: '#234a8a', label: 'CUE ' + c, full: 'Playout cue slot ' + c, desc: 'Fires cue number ' + c + ' of the loaded show.' });
+    // Playback volume on plain keys, for every deck without a dial (XL,
+    // MK.2, Mini). The level rides outrangutan.gain, the same lane the dial
+    // uses, so the Mac app and the web player both hear it. The key face
+    // prints the level; MUTE glows while the level is at zero.
+    registerAction({ id: 'vol:up', kind: 'volume', op: 'up', group: 'Outrangutan', color: '#1f5f4a', label: 'VOL +', full: 'Playback volume up', desc: 'Turns Outrangutan\'s playback master volume up 5%. Works on every deck; the face shows the level.' });
+    registerAction({ id: 'vol:down', kind: 'volume', op: 'down', group: 'Outrangutan', color: '#1f5f4a', label: 'VOL \u2212', full: 'Playback volume down', desc: 'Turns Outrangutan\'s playback master volume down 5%. Works on every deck; the face shows the level.' });
+    registerAction({ id: 'vol:mute', kind: 'volume', op: 'mute', toggle: true, group: 'Outrangutan', color: '#5a4a12', label: 'MUTE', full: 'Playback mute', desc: 'Mutes Outrangutan playback at once; press again to bring the level back. Glows while muted. Toggle.', lamp: function (s) { return !!(s.playout && (s.playout.fresh || s.playout.local)) && masterGain() <= 0.001; } });
     // Named cue/pad refs are bound from the live show list in the key editor.
     registerAction({ id: 'padRef', kind: 'padRef', group: 'This show', color: '#5a2a8a', label: 'PAD', full: 'SFX pad (by name)', desc: 'Fires one specific SFX pad, picked by name.' });
     registerAction({ id: 'cueRef', kind: 'cueRef', group: 'This show', color: '#234a8a', label: 'CUE', full: 'Cue (by name)', desc: 'Fires one specific cue, picked by name.' });
@@ -341,10 +348,12 @@
     // 9 × 4 (+ XL): cols 1-3 Outrangutan, 4-5 Cueola, 6-7 Flowmingo,
     // col 8 pages, col 9 OBS + next page. Dials cover volume, speed, size,
     // scrub, row, clock — so those keys are gone on purpose.
+    // Col 4, rows 3 and 4, and col 5 row 3: VOL +, VOL - and MUTE, so the XL
+    // (no dials) can run the playback level too.
     36: ['km:playout.go', 'km:playout.pause', 'km:playout.stop', 'km:rundown.next', 'golive', 'km:prompter.playpause', 'km:prompter.cue.current', 'layout.prev', 'obs.stream',
          'km:playout.fade', 'km:playout.panic', 'pad:1', 'km:rundown.back', 'clock', 'km:prompter.top', 'km:prompter.mirror', 'layout.home', 'obs.record',
-         'pad:2', 'pad:3', 'pad:4', 'none', 'none', 'km:prompter.brake', 'km:prompter.boost', 'none', 'obs.scene:1',
-         'cue:1', 'cue:2', 'cue:3', 'none', 'fx.hype', 'km:prompter.editscript', 'km:scrub.open', 'none', 'layout.next']
+         'pad:2', 'pad:3', 'pad:4', 'vol:up', 'vol:mute', 'km:prompter.brake', 'km:prompter.boost', 'none', 'obs.scene:1',
+         'cue:1', 'cue:2', 'cue:3', 'vol:down', 'fx.hype', 'km:prompter.editscript', 'km:scrub.open', 'none', 'layout.next']
   };
   // Director layouts (2026-09-03): the rundown-only page a student director
   // runs the show from. BACK / NEXT / TAKE / ABORT ride the control bus and
@@ -565,6 +574,7 @@
       case 'transport': if (phase === 'down') { var bt = bridge(); try { refused = !!bt && !!bt.playoutTransport && bt.playoutTransport(a.op) === false; } catch (e) {} } break;
       case 'pad': if (phase === 'down') refused = firePlayoutSlot('pad', a.slot) === false; break;
       case 'cue': if (phase === 'down') refused = firePlayoutSlot('cue', a.slot) === false; break;
+      case 'volume': if (phase === 'down') refused = volumeKey(a.op) === false; break;
       case 'padRef': if (phase === 'down' && slot.ref) refused = firePlayoutRef('pad', slot.ref) === false; break;
       case 'cueRef': if (phase === 'down' && slot.ref) refused = firePlayoutRef('cue', slot.ref) === false; break;
       case 'golive': if (phase === 'down') { var bb = bridge(); try { bb && bb.goLive && bb.goLive(); } catch (e) {} } break;
@@ -588,6 +598,17 @@
   function dispatchCloud() { return false; }
   function firePlayoutSlot(kind, slot) { var s = surfaceState(); var map = (kind === 'pad' ? (s.playout && s.playout.pads) : (s.playout && s.playout.cues)) || {}; var id = Object.keys(map)[slot - 1]; if (!id) { toast('No ' + (kind === 'pad' ? 'SFX pad' : 'cue') + ' in slot ' + slot + ' yet.'); return false; } return firePlayoutRef(kind, id); }
   function firePlayoutRef(kind, id) { var b = bridge(); if (!b) return false; try { return (kind === 'pad' ? b.playoutPad(id) : b.playoutCue(id)) === false ? false : true; } catch (e) { return false; } }
+  // VOL +, VOL - and MUTE keys. Strict false when the level would land
+  // nowhere (no playout linked to this window's show), so the key flashes
+  // REFUSED instead of pretending.
+  function volumeKey(op) {
+    var b = bridge(); if (!b || !b.setMasterGain) return false;
+    var s = surfaceState(), p = (s && s.playout) || {};
+    if (!(p.fresh || p.local)) { toast('No Outrangutan is linked to this show, so the volume has nowhere to go.'); return false; }
+    if (op === 'mute') { toggleMasterMute(); return true; }
+    setMaster(masterGain() + (op === 'up' ? 0.05 : -0.05));
+    return true;
+  }
 
   // ── OBS bridge accessors ────────────────────────────────────────────────────
   function OBSc() { return window.CueolaOBS; }
@@ -1516,6 +1537,8 @@
       if (id && map[id]) return (a.kind === 'cue' ? '#' + (map[id].num || a.slot) + '\n' : '') + (map[id].name || a.label);
       return a.label;
     }
+    // The volume keys print the level under their name, like the dial's readout.
+    if (a.kind === 'volume' && a.op !== 'mute') { var p = (s && s.playout) || {}; return a.label + '\n' + ((p.fresh || p.local) ? pct(masterGain()) : '--'); }
     return a.label;
   }
   function slotActive(slot, s) { var a = slotAction(slot); return !!(a.lamp && a.lamp(s, slot)); }
@@ -1531,6 +1554,11 @@
       var b = bridge(), av = 'exec';
       try { av = b && b.busAvailable ? b.busAvailable() : 'exec'; } catch (e) {}
       return av ? '' : 'off';
+    }
+    if (k === 'volume') {
+      // The level lands only on a linked playout (or this tab's own).
+      var pv = (s && s.playout) || {};
+      return (pv.fresh || pv.local) ? '' : 'off';
     }
     if (k === 'transport' || k === 'pad' || k === 'cue' || k === 'padRef' || k === 'cueRef') {
       if (k === 'transport' && a.op === 'panic') return '';
@@ -1811,6 +1839,7 @@
       case 'golive': return 'media/play.display.svg';
       case 'pad': case 'padRef': return 'media/waveform.path.svg';
       case 'cue': case 'cueRef': return 'media/movieclapper.svg';
+      case 'volume': return a.op === 'up' ? 'media/speaker.plus.svg' : a.op === 'down' ? 'media/speaker.minus.svg' : 'media/speaker.slash.svg';
       case 'layoutNext': return 'objectsandtools/repeat.svg';
       case 'layoutRef': return 'objectsandtools/square.stack.3d.up.svg';
       case 'obs': return a.op === 'toggleStream' ? 'media/waveform.circle.svg' : a.op === 'toggleRecord' ? 'objectsandtools/circle.fill.svg' : a.op === 'pauseRecord' ? 'media/pause.svg' : a.op === 'toggleVirtualCam' ? 'cameraandphotos/plus.viewfinder.svg' : a.op === 'saveReplay' ? 'editing/scissors.svg' : a.op === 'studioTransition' ? 'arrows/arrow.up.right.and.arrow.down.left.svg' : null;
