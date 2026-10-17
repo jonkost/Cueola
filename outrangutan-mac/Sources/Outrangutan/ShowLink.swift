@@ -60,6 +60,10 @@ final class ShowLink: ObservableObject {
     private var lastSfxAt: Double = 0
     private var fixSeen: [String] = []
     private var pending: [[String]: Any] = [:]
+    /// Answers waiting their turn: the show record has one cmdAck slot, so
+    /// two answers go out in two writes, oldest first, none replaced.
+    private var ackQueue: [[String: Any]] = []
+    private static let ackKey = ["outrangutan", "cmdAck"]
     private var writing = false
     private var writeTroubleShown = false
     /// When the cloud wrote the last copy the live line delivered (seconds).
@@ -138,6 +142,7 @@ final class ShowLink: ObservableObject {
         writeBackoff = 0
         joined = false
         pending = [:]
+        ackQueue = []
         code = ""
         phase = .off
         message = "Not connected to a show"
@@ -324,7 +329,7 @@ final class ShowLink: ObservableObject {
                                 panic: { [engine] in engine.allStop() },
                                 gain: { [engine] in engine.setGain($0) })
         for ack in acks {
-            queueWrite([["outrangutan", "cmdAck"]: ack.record(ts: Self.now, sender: sender)])
+            queueWrite([Self.ackKey: ack.record(ts: Self.now, sender: sender)])
         }
     }
 
@@ -447,10 +452,19 @@ final class ShowLink: ObservableObject {
         guard !code.isEmpty else { return }
         for (k, v) in updates {
             // Two answers to two commands must both go out: the second waits
-            // for the next write instead of replacing the first.
-            if k == ["outrangutan", "cmdAck"], let old = pending[k] as? [String: Any], let new = v as? [String: Any],
-               Wire.string(old["commandId"]) != Wire.string(new["commandId"]) {
-                flushWrites()
+            // in line for a later write instead of replacing the first.
+            if k == Self.ackKey, let new = v as? [String: Any] {
+                if let old = pending[k] as? [String: Any] {
+                    // The same command answered again (the rundown sent it
+                    // twice): the newer answer replaces the one waiting.
+                    if Wire.string(old["commandId"]) == Wire.string(new["commandId"]) { pending[k] = v; continue }
+                    flushWrites()
+                }
+                if pending[k] != nil || !ackQueue.isEmpty {
+                    ackQueue.append(new)
+                    if ackQueue.count > 32 { ackQueue.removeFirst() }
+                    continue
+                }
             }
             pending[k] = v
         }
@@ -474,6 +488,8 @@ final class ShowLink: ObservableObject {
         let batch = pending
         let showCode = code
         pending = [:]
+        // The next answer in line rides the write after this one.
+        if !ackQueue.isEmpty { pending[Self.ackKey] = ackQueue.removeFirst() }
         writing = true
         Task { [weak self] in
             guard let self else { return }
@@ -486,23 +502,42 @@ final class ShowLink: ObservableObject {
                 let e = error as? CloudError
                 if e?.busy == true {
                     // The cloud asked everyone to slow down. Wait a little
-                    // longer each time it says so, and keep the newest values
-                    // to send when it is ready.
+                    // longer each time it says so.
                     self.writeBackoff = min(8, max(1, self.writeBackoff * 2))
                     if Self.now - self.busyNotedAt > 120_000 {
                         self.busyNotedAt = Self.now
                         self.engine.log.add(.problem, "The cloud is busy and refused a write. Sending less often for a moment.")
                     }
-                    for (k, v) in batch where self.pending[k] == nil { self.pending[k] = v }
                 } else if !self.writeTroubleShown, let e {
                     self.writeTroubleShown = true
                     self.trouble(e.permission
                         ? "The cloud refused this Mac's answers. Sign in again, then reconnect."
                         : e.message)
                 }
+                // Whatever the reason (busy, a Wi-Fi blip, a timeout), nothing
+                // is thrown away: the batch goes out with the next write. A
+                // value with a newer copy already waiting is the one thing
+                // dropped. The clip's start time is written once per clip, so
+                // losing it would stop every countdown on the other Mac.
+                self.keep(batch)
             }
             self.writing = false
-            if !self.pending.isEmpty { self.scheduleFlush(after: failed ? max(0.04, self.writeBackoff) : 0.04) }
+            if !self.pending.isEmpty { self.scheduleFlush(after: failed ? max(1, self.writeBackoff) : 0.04) }
+        }
+    }
+
+    /// Puts a write that did not land back under whatever arrived since.
+    private func keep(_ batch: [[String]: Any]) {
+        for (k, v) in batch {
+            if k == Self.ackKey, let waiting = pending[k] as? [String: Any], let mine = v as? [String: Any],
+               Wire.string(waiting["commandId"]) != Wire.string(mine["commandId"]) {
+                // The answer that did not land goes first; the one already
+                // waiting steps back in line.
+                ackQueue.insert(waiting, at: 0)
+                pending[k] = v
+            } else if pending[k] == nil {
+                pending[k] = v
+            }
         }
     }
 
