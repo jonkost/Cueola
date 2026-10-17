@@ -78,8 +78,13 @@ final class Deck {
     /// Loads a cue and calls `ended` when it reaches its end (or trim out).
     /// With `viaLane` the sound goes to the cue sound engine instead of out
     /// of the player.
+    /// How many times any deck opened a file, for test mode: a scroll through
+    /// the list must load only the cue it lands on.
+    static var loads = 0
+
     func load(_ cue: Cue, device: String?, viaLane: Bool = false, ended: @escaping () -> Void) {
         clearWatchers()
+        Deck.loads += 1
         preloadKey = nil
         readyWatch = nil
         prerolled = false
@@ -305,7 +310,14 @@ final class Engine: ObservableObject {
     @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?(); scheduleStandbyPreload(after: 0.3) } }
     /// The standby is not in the live packet, so moving it tells the show
     /// link nothing: a dial spin would only flood the cloud with writes.
-    @Published var standbyID: UUID? { didSet { if standbyID != oldValue { scheduleStandbyPreload() } } }
+    /// Loading ahead waits a moment after each move, so a held arrow key or
+    /// a dial spin loads only the cue it lands on, not every cue it passes.
+    @Published var standbyID: UUID? {
+        didSet {
+            guard standbyID != oldValue else { return }
+            scheduleStandbyPreload(after: 0.15, restart: true)
+        }
+    }
     /// The outputs, in order. There is always at least one.
     @Published var outputs: [OutputConfig] { didSet { outputsChanged() } }
     /// Where sound goes.
@@ -1406,8 +1418,10 @@ final class Engine: ObservableObject {
     /// Readies the standby cue soon: right away for a new standby or a freed
     /// deck, a little later for a setting change (a slider drag changes a
     /// cue many times a second, and the player must not reload on each one).
-    private func scheduleStandbyPreload(after seconds: Double = 0) {
-        if let t = preloadTimer, t.fireDate.timeIntervalSinceNow <= seconds { return }
+    /// With `restart` the wait begins again on every call, so a run of quick
+    /// moves ends in one load when the moves stop.
+    private func scheduleStandbyPreload(after seconds: Double = 0, restart: Bool = false) {
+        if !restart, let t = preloadTimer, t.fireDate.timeIntervalSinceNow <= seconds { return }
         preloadTimer?.invalidate()
         let t = Timer(timeInterval: max(0.001, seconds), repeats: false) { [weak self] _ in
             self?.preloadTimer = nil
@@ -1509,6 +1523,9 @@ final class Engine: ObservableObject {
     /// The clock ticks 30 times a second, on the main run loop in common
     /// mode so it keeps counting while a menu is open or the list scrolls.
     private func startClock() {
+    /// How many files the decks have opened so far, for test mode.
+    var deckLoads: Int { Deck.loads }
+
         let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.tick() }
         RunLoop.main.add(timer, forMode: .common)
         clock = timer
