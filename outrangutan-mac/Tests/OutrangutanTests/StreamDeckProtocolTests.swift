@@ -59,10 +59,32 @@ final class StreamDeckProtocolTests: XCTestCase {
         XCTAssertEqual(Array(m[0][0..<6]), [0x02, 0x01, 0, 0, 0, 3])
         XCTAssertEqual(Array(m[1][0..<6]), [0x02, 0x01, 1, 0, 1, 3])
         XCTAssertEqual(m[1][16], 1)
+        // The 2017 deck counts keys right to left, so the app's key 0 is its key 4 (byte 5 = 4 + 1).
         let o = P.keyImageReports(model: P.model(productID: 0x0060)!, key: 0, image: [UInt8](repeating: 1, count: 15606))
         XCTAssertEqual(o.count, 2)
         XCTAssertEqual(o[0].count, 8191)
-        XCTAssertEqual(Array(o[1][0..<6]), [0x02, 0x01, 2, 0, 1, 1])
+        XCTAssertEqual(Array(o[1][0..<6]), [0x02, 0x01, 2, 0, 1, 5])
+    }
+
+    func testOriginalDeckCountsKeysRightToLeft() {
+        let original = P.model(productID: 0x0060)!
+        // Each row is mirrored: 0..4 becomes 4..0, 5..9 becomes 9..5, and so on.
+        XCTAssertEqual((0..<15).map { P.wireKey($0, model: original) }, [4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 14, 13, 12, 11, 10])
+        // Other decks are left alone.
+        XCTAssertEqual(P.wireKey(3, model: xl), 3)
+        XCTAssertEqual(P.wireKey(3, model: mini), 3)
+        // Picture for the app's key 0 goes to the deck's key 4; key 4 goes to the deck's key 0.
+        XCTAssertEqual(P.keyImageReports(model: original, key: 0, image: [1])[0][5], 5)
+        XCTAssertEqual(P.keyImageReports(model: original, key: 4, image: [1])[0][5], 1)
+        XCTAssertEqual(P.keyImageReports(model: original, key: 12, image: [1])[0][5], 13)
+        // The deck's key 4 held down (byte 1 + 4) is the app's key 0; its key 10 is the app's key 14.
+        var d = [UInt8](repeating: 0, count: 1 + 15)
+        d[0] = 0x01; d[1 + 4] = 1; d[1 + 10] = 1
+        guard case .keys(let states) = P.parseInput(d, model: original) else { return XCTFail("not keys") }
+        XCTAssertEqual(states.count, 15)
+        XCTAssertTrue(states[0]); XCTAssertTrue(states[14])
+        XCTAssertFalse(states[4]); XCTAssertFalse(states[10])
+        XCTAssertEqual(states.filter { $0 }.count, 2)
     }
 
     func testStripReportsCarryTheRegion() {

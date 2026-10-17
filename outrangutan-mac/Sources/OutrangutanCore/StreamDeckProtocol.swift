@@ -92,6 +92,16 @@ public enum StreamDeckProtocol {
 
     public static func model(productID: Int) -> Model? { models[productID] }
 
+    /// The number the deck itself uses for a key. The 2017 original counts
+    /// its keys right to left in each row (the open drivers mirror the
+    /// column the same way); every other deck counts left to right, the way
+    /// the app does. The mirror is its own undo, so it works both ways.
+    public static func wireKey(_ key: Int, model: Model) -> Int {
+        guard model.packet == .original, model.columns > 0 else { return key }
+        let col = key % model.columns
+        return key - col + (model.columns - 1 - col)
+    }
+
     // MARK: What the deck sends
 
     public enum Input: Equatable {
@@ -122,7 +132,10 @@ public enum StreamDeckProtocol {
             return .touch(zone: zone, gesture: gesture)
         }
         let off = model.stateOffset
-        return .keys((0..<model.keys).map { i in d.count > off + i && d[off + i] == 1 })
+        return .keys((0..<model.keys).map { i in
+            let at = off + wireKey(i, model: model)
+            return d.count > at && d[at] == 1
+        })
     }
 
     /// Which keys just went down and which just came up.
@@ -162,7 +175,8 @@ public enum StreamDeckProtocol {
             case .mini:
                 r[1] = 0x01; r[2] = UInt8(page & 0xff); r[3] = 0; r[4] = last ? 1 : 0; r[5] = UInt8((key + 1) & 0xff)
             case .original:
-                r[1] = 0x01; r[2] = UInt8((page + 1) & 0xff); r[3] = 0; r[4] = last ? 1 : 0; r[5] = UInt8((key + 1) & 0xff)
+                r[1] = 0x01; r[2] = UInt8((page + 1) & 0xff); r[3] = 0; r[4] = last ? 1 : 0
+                r[5] = UInt8((wireKey(key, model: model) + 1) & 0xff)
             }
             r.replaceSubrange(header..<(header + len), with: image[sent..<(sent + len)])
             reports.append(r)
