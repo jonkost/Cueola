@@ -19,11 +19,17 @@ protocol DeckTransport: AnyObject {
     var serial: String { get }
     /// Called with every report the deck sends, report id first.
     var onInput: (([UInt8]) -> Void)? { get set }
-    /// Called once when the deck is unplugged.
+    /// Called once when the deck is unplugged or stops taking reports.
     var onGone: (() -> Void)? { get set }
+    /// Why the deck stopped taking reports, if that is why it is gone.
+    var trouble: String? { get }
     func write(_ report: [UInt8])
     func writeFeature(_ report: [UInt8])
     func close()
+}
+
+extension DeckTransport {
+    var trouble: String? { nil }
 }
 
 /// What one key shows.
@@ -260,7 +266,9 @@ final class StreamDeckController: ObservableObject {
         guard finder == nil else { return }
         finder = HIDDeckFinder(io: writes,
                                onFound: { [weak self] t in self?.attach(t) },
-                               onProblem: { [weak self] text in self?.trouble(text) })
+                               onProblem: { [weak self] text in self?.trouble(text) },
+                               onNote: { [weak self] text in self?.engine.log.add(.link, text) },
+                               onUnknown: { [weak self] product in self?.unknownDevice(product) })
         enabledChanged()
     }
 
@@ -303,9 +311,13 @@ final class StreamDeckController: ObservableObject {
             self.transport = nil
             self.model = nil
             self.clockTimer?.invalidate(); self.clockTimer = nil
-            self.state = self.enabled ? .looking : .off
-            self.message = "The Stream Deck was unplugged"
-            self.engine.log.add(.link, "\(m.name) unplugged")
+            if let why = t.trouble {
+                self.trouble(why)
+            } else {
+                self.state = self.enabled ? .looking : .off
+                self.message = "The Stream Deck was unplugged"
+                self.engine.log.add(.link, "\(m.name) unplugged")
+            }
             if !self.spares.isEmpty { self.attach(self.spares.removeFirst()) }
         }
         state = .connected
@@ -366,7 +378,14 @@ final class StreamDeckController: ObservableObject {
         engine.log.add(.problem, text)
     }
 
-        private func sendBrightness() {
+    /// An Elgato device on USB that is not in the models table.
+    private func unknownDevice(_ product: Int) {
+        let text = "An Elgato device this app does not know is plugged in (product \(String(format: "0x%04x", product))). If it is a Stream Deck, tell Jon."
+        engine.log.add(.link, text)
+        if state == .looking { message = text }
+    }
+
+    private func sendBrightness() {
         guard let m = model else { return }
         writeFeature(StreamDeckProtocol.brightnessReport(model: m, percent: brightness))
     }
@@ -617,19 +636,26 @@ final class StreamDeckController: ObservableObject {
 
 // MARK: USB
 
-/// Finds Elgato decks on USB and opens them.
+/// Finds Elgato decks on USB and opens them, one program at a time: the
+/// deck is seized, so KeyWi Bird in a browser or the Elgato app cannot
+/// drive it at the same time.
 final class HIDDeckFinder {
     private var manager: IOHIDManager?
     private let io: DispatchQueue
     private let onFound: (DeckTransport) -> Void
     private let onProblem: (String) -> Void
+    private let onNote: (String) -> Void
+    private let onUnknown: (Int) -> Void
     private var open: [IOHIDDevice: HIDDeckTransport] = [:]
     private var running = false
 
-    init(io: DispatchQueue, onFound: @escaping (DeckTransport) -> Void, onProblem: @escaping (String) -> Void) {
+    init(io: DispatchQueue, onFound: @escaping (DeckTransport) -> Void, onProblem: @escaping (String) -> Void,
+         onNote: @escaping (String) -> Void, onUnknown: @escaping (Int) -> Void) {
         self.io = io
         self.onFound = onFound
         self.onProblem = onProblem
+        self.onNote = onNote
+        self.onUnknown = onUnknown
     }
 
     func start() {
@@ -647,8 +673,13 @@ final class HIDDeckFinder {
             Unmanaged<HIDDeckFinder>.fromOpaque(context).takeUnretainedValue().gone(device)
         }, context)
         IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
+        // The manager itself is never opened: opening it would open every
+        // Elgato device shared, and a device opened shared cannot be seized
+        // afterwards. The deck that is chosen is opened on its own, seized.
         manager = m
+        // Whatever is plugged in right now, in case the matching callback
+        // only reports what arrives from here on.
+        for device in (IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice>) ?? [] { found(device) }
     }
 
     func stop() {
@@ -658,7 +689,6 @@ final class HIDDeckFinder {
         // behind what it is still drawing; here they are only forgotten.
         open = [:]
         IOHIDManagerUnscheduleFromRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        IOHIDManagerClose(m, IOOptionBits(kIOHIDOptionsTypeNone))
         manager = nil
     }
 
@@ -667,20 +697,35 @@ final class HIDDeckFinder {
     }
 
     private func found(_ device: IOHIDDevice) {
+        guard running, open[device] == nil else { return }
         let product = number(device, kIOHIDProductIDKey)
-        guard StreamDeckProtocol.model(productID: product) != nil else { return }
-        // A deck can show more than one HID face; the one that talks is the
-        // one with the big reports.
-        guard number(device, kIOHIDMaxInputReportSizeKey) >= 16 else { return }
-        guard open[device] == nil else { return }
-        let result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard result == kIOReturnSuccess else {
-            onProblem("A Stream Deck is plugged in but could not be opened. Quit the Elgato Stream Deck app, then plug the deck in again.")
+        let serial = (IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String) ?? ""
+        let inputSize = number(device, kIOHIDMaxInputReportSizeKey)
+        let outputSize = number(device, kIOHIDMaxOutputReportSizeKey)
+        let model = StreamDeckProtocol.model(productID: product)
+        onNote("Elgato device on USB: \(model?.name ?? "unknown") (product \(String(format: "0x%04x", product)), usage page "
+               + "\(String(format: "0x%04x", number(device, kIOHIDPrimaryUsagePageKey))), reports in \(inputSize) bytes, out \(outputSize) bytes)"
+               + (serial.isEmpty ? "" : ", serial \(serial)"))
+        guard model != nil else { onUnknown(product); return }
+        // A deck can show more than one HID face. The one that talks takes
+        // the big picture reports (1024 bytes on every deck in the table),
+        // or sends the big key reports; the XL is known to pass the second.
+        guard outputSize >= 1000 || inputSize >= 16 else {
+            onNote("   skipped: its reports are too small to be the deck's own")
             return
         }
-        let serial = (IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String) ?? ""
-        let t = HIDDeckTransport(device: device, productID: product, serial: serial,
-                                 inputSize: max(64, number(device, kIOHIDMaxInputReportSizeKey) + 1), io: io)
+        if !serial.isEmpty, open.values.contains(where: { $0.serial == serial }) {
+            onNote("   skipped: this deck is already open")
+            return
+        }
+        let result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+        guard result == kIOReturnSuccess else {
+            onProblem("A Stream Deck is plugged in but another program holds it (error \(String(format: "0x%08x", result))). "
+                      + "Quit the Elgato Stream Deck app, or disconnect the deck in KeyWi Bird, then plug the deck in again.")
+            return
+        }
+        let t = HIDDeckTransport(device: device, productID: product, serial: serial, inputSize: max(64, inputSize + 1), io: io)
+        t.onLost = { [weak self] t in self?.open.removeValue(forKey: t.device) }
         open[device] = t
         onFound(t)
     }
@@ -694,11 +739,14 @@ final class HIDDeckFinder {
 /// One deck on USB. Reports go out on the `io` queue, in order; the handle
 /// is closed on that same queue, behind the last report.
 final class HIDDeckTransport: DeckTransport {
-    private let device: IOHIDDevice
+    let device: IOHIDDevice
     let productID: Int
     let serial: String
     var onInput: (([UInt8]) -> Void)?
     var onGone: (() -> Void)?
+    /// Tells the finder the deck stopped taking reports while still plugged in.
+    var onLost: ((HIDDeckTransport) -> Void)?
+    private(set) var trouble: String?
     private let io: DispatchQueue
     private var buffer: UnsafeMutablePointer<UInt8>
     private let bufferSize: Int
@@ -725,18 +773,24 @@ final class HIDDeckTransport: DeckTransport {
 
     deinit { buffer.deallocate() }
 
-    func write(_ report: [UInt8]) {
-        guard open, let id = report.first else { return }
-        report.withUnsafeBufferPointer { p in
-            _ = IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(id), p.baseAddress!, report.count)
-        }
-    }
+    func write(_ report: [UInt8]) { send(kIOHIDReportTypeOutput, report) }
+    func writeFeature(_ report: [UInt8]) { send(kIOHIDReportTypeFeature, report) }
 
-    func writeFeature(_ report: [UInt8]) {
-        guard open, let id = report.first else { return }
-        report.withUnsafeBufferPointer { p in
-            _ = IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, CFIndex(id), p.baseAddress!, report.count)
+    /// Sends one report, trying twice. A deck that will not take a report
+    /// has been taken by another program (or pulled): it is let go of and
+    /// the app is told, instead of a dead deck staying lit.
+    private func send(_ type: IOHIDReportType, _ report: [UInt8]) {
+        guard let id = report.first, open else { return }
+        var result = kIOReturnSuccess
+        for attempt in 0..<2 {
+            if attempt > 0 { usleep(5_000) }
+            result = report.withUnsafeBufferPointer { p in
+                IOHIDDeviceSetReport(device, type, CFIndex(id), p.baseAddress!, report.count)
+            }
+            if result == kIOReturnSuccess { return }
         }
+        lost("The Stream Deck stopped taking reports (error \(String(format: "0x%08x", result))). Another program may have taken it: "
+             + "quit the Elgato Stream Deck app, or disconnect the deck in KeyWi Bird, then plug the deck in again.")
     }
 
     private var open: Bool { lock.lock(); defer { lock.unlock() }; return isOpen }
@@ -757,6 +811,19 @@ final class HIDDeckTransport: DeckTransport {
         onGone?()
         onGone = nil
         onInput = nil
+        onLost = nil
+    }
+
+    /// The deck stopped taking reports (on the io queue).
+    private func lost(_ reason: String) {
+        guard shut() else { return }
+        DispatchQueue.main.async { [self] in
+            trouble = reason
+            unhook()
+            onLost?(self)
+            fireGone()
+        }
+        io.async { [self] in IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) }
     }
 
     /// The deck was unplugged (the finder's removal callback, main thread).
@@ -774,7 +841,8 @@ final class HIDDeckTransport: DeckTransport {
         unhook()
         onGone = nil
         onInput = nil
-        io.async { [self] in IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone)) }
+        onLost = nil
+        io.async { [self] in IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) }
     }
 }
 
