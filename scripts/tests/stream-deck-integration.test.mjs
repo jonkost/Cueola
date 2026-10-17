@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 const [app, css, html, worker, bump, contracts, identityJs, deck] = await Promise.all([
   readFile(new URL('../../outrangutan/outrangutan.js', import.meta.url), 'utf8'),
@@ -960,6 +961,44 @@ test('KeyWi 9/8 reliability: deck follows Live, honest refusals, timers and hard
   assert.doesNotMatch(dis, /electDeckOwner/);
   assert.match(deckSlice('async function openDeviceNow(dev, silent)', 'async function connectLightShow'), /if \(!\(e && e\.name === 'NotFoundError'\)\) deckHeldByOtherApp = true;/);
   assert.match(deckSlice('deckStatus: function () {', 'claimForLive: claimForLive'), /heldByOtherApp: !device && deckHeldByOtherApp/);
+});
+
+test('KeyWi: VOL +, VOL - and MUTE keys ride the gain lane, refuse with no playout, print the level, and sit on the XL starter page', () => {
+  // Catalog (10/16): three 'volume' actions with their op; MUTE is a toggle
+  // whose lamp glows only while a linked playout sits at zero.
+  const catalog = deckSlice('function buildCatalog()', 'var DEFAULT_LAYOUTS = {');
+  assert.match(catalog, /registerAction\(\{ id: 'vol:up', kind: 'volume', op: 'up'/);
+  assert.match(catalog, /registerAction\(\{ id: 'vol:down', kind: 'volume', op: 'down'/);
+  assert.match(catalog, /registerAction\(\{ id: 'vol:mute', kind: 'volume', op: 'mute', toggle: true/);
+  assert.match(catalog, /id: 'vol:mute'[^\n]*lamp: function \(s\) \{ return !!\(s\.playout && \(s\.playout\.fresh \|\| s\.playout\.local\)\) && masterGain\(\) <= 0\.001; \}/);
+  // A press goes through volumeKey, and its strict false flashes REFUSED.
+  const fire = deckSlice('function fireSlot(slot, phase, fromDeck, keyIdx)', 'function dispatchCloud');
+  assert.match(fire, /case 'volume': if \(phase === 'down'\) refused = volumeKey\(a\.op\) === false; break;/);
+  // volumeKey: strict false with a toast unless the playout is fresh or
+  // local; mute toggles, up and down step the master by 5% on the dial's lane.
+  const vol = deckSlice('function volumeKey(op)', '// ── OBS bridge accessors');
+  assert.match(vol, /if \(!b \|\| !b\.setMasterGain\) return false;/);
+  assert.match(vol, /if \(!\(p\.fresh \|\| p\.local\)\) \{ toast\('No Outrangutan is linked to this show, so the volume has nowhere to go\.'\); return false; \}/);
+  assert.match(vol, /if \(op === 'mute'\) \{ toggleMasterMute\(\); return true; \}/);
+  assert.match(vol, /setMaster\(masterGain\(\) \+ \(op === 'up' \? 0\.05 : -0\.05\)\);/);
+  // The face prints the level under VOL + and VOL - when linked, '--' when not.
+  const label = deckSlice('function slotLabel(slot, s)', 'function slotActive(slot, s)');
+  assert.match(label, /if \(a\.kind === 'volume' && a\.op !== 'mute'\) \{ var p = \(s && s\.playout\) \|\| \{\}; return a\.label \+ '\\n' \+ \(\(p\.fresh \|\| p\.local\) \? pct\(masterGain\(\)\) : '--'\); \}/);
+  // The keys dim when no playout is linked to the show.
+  const avail = deckSlice('function slotAvailability(a, s, slot)', '// ── Rich key art');
+  assert.match(avail, /if \(k === 'volume'\) \{[\s\S]{0,160}return \(pv\.fresh \|\| pv\.local\) \? '' : 'off';\n\s+\}/);
+  // Symbols: speaker plus, minus and slash, and each file exists in the runtime set.
+  const sym = deckSlice('function symbolFor(a)', 'function keyArtSpec(i, s)');
+  assert.match(sym, /case 'volume': return a\.op === 'up' \? 'media\/speaker\.plus\.svg' : a\.op === 'down' \? 'media\/speaker\.minus\.svg' : 'media\/speaker\.slash\.svg';/);
+  for (const file of ['media/speaker.plus.svg', 'media/speaker.minus.svg', 'media/speaker.slash.svg']) {
+    assert.ok(existsSync(new URL('../../design-system/apple/symbols/runtime/light-small/' + file, import.meta.url)), 'symbol file ' + file);
+  }
+  // The 36-key XL starter page carries all three (col 4 rows 3 and 4, col 5 row 3).
+  const layouts = deckSlice('var DEFAULT_LAYOUTS = {', 'var DIRECTOR_LAYOUTS = {');
+  const xl = layouts.slice(layouts.indexOf('36: ['), layouts.indexOf(']', layouts.indexOf('36: [')));
+  assert.match(xl, /'pad:4', 'vol:up', 'vol:mute', 'km:prompter\.brake'/);
+  assert.match(xl, /'cue:3', 'vol:down', 'fx\.hype'/);
+  assert.equal((xl.match(/'vol:(up|down|mute)'/g) || []).length, 3);
 });
 
 for (const { name, run } of tests) {
