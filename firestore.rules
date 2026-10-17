@@ -235,8 +235,16 @@ service cloud.firestore {
           'username', 'fullName', 'role', 'avatar', 'theme', 'sessions',
           'codeUsed', 'createdAt', 'lastSeen', 'active', 'renamedTo', 'mergedInto',
           'profileId', 'profileAliases', 'keywiLayouts',
-          'pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy', 'hiddenSessions'
+          'pinSalt', 'pinHash', 'pinSetAt', 'pinSetBy', 'hiddenSessions', 'agreement'
         ])
+        // User agreement (2026-10-16, additive): which version of the words
+        // this person agreed to and when. Written by the person themselves
+        // (a self-write) or an instructor.
+        && (!data.keys().hasAny(['agreement'])
+          || (data.agreement is map
+            && data.agreement.keys().hasOnly(['version', 'acceptedAt'])
+            && data.agreement.version is int
+            && data.agreement.acceptedAt is int))
         && data.username.lower() == username
         && shortString(data.username, 40)
         && shortString(data.fullName, 120)

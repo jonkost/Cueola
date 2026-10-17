@@ -1908,6 +1908,15 @@ button.pb-roster-row:hover{background:var(--s3)}
 .id-addcode-row .field-in{flex:1;text-transform:uppercase;font-family:var(--mono)}
 .id-portal-foot{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
 .id-portal-foot .btn-secondary{flex:1;min-width:140px}
+/* The user agreement: one scrolling page of plain words, then the tick box. */
+.agreement-text{max-height:min(46vh,420px);overflow-y:auto;font-size:13px;line-height:1.5;color:var(--text2);padding:12px 14px;border-radius:12px;background:var(--s2)}
+.agreement-text p{margin:0 0 8px}
+.agreement-text p:last-child{margin:8px 0 0;color:var(--text3)}
+.agreement-text ol{margin:0;padding-left:20px}
+.agreement-text li{margin:6px 0}
+.agreement-text b{color:var(--text)}
+.agreement-check{display:flex;align-items:center;gap:10px;margin:12px 0 10px;font-size:13px;color:var(--text);cursor:pointer}
+#agreementModal .modal-actions{margin-top:14px}
 @media(max-width:680px){.id-av-grid{grid-template-columns:repeat(3,1fr)}.id-card-actions .jis-btn{flex:1}}
 .pb-av-choice{display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border: 1.5px solid transparent;border-radius:13px;background:var(--s2);color:var(--text2);cursor:pointer;font-size:11.5px;font-weight:700}
 .pb-av-choice:hover{border-color: transparent;color:var(--text)}
@@ -6553,6 +6562,38 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="modal-sub" id="identitySub"></div>
     <div class="id-body" id="identityBody"></div>
     <button class="btn-secondary" onclick="hideModal('identityModal')">Close</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     USER AGREEMENT (2026-10-16)
+     Every new profile agrees on the create wizard's last step; everyone
+     else is asked once, the next time they sign in or come back. The words
+     live here and nowhere else; change them and bump AGREEMENT_VERSION in
+     cueola-identity.js so everyone agrees again.
+══════════════════════════════════════════ -->
+<div class="modal-wrap" id="agreementModal" role="dialog" aria-modal="true" aria-labelledby="agreementTitle">
+  <div class="modal id-modal">
+    <div class="modal-title" id="agreementTitle"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span> Cueola user agreement</div>
+    <div class="modal-sub" id="agreementSub">Read this once and agree to keep using Cueola.</div>
+    <div class="agreement-text" id="agreementText">
+      <p><b>Version 1, October 16, 2026.</b> Cueola is a classroom tool for building and running TV shows. By using it you agree to these rules.</p>
+      <ol>
+        <li><b>Your profile is yours.</b> Use your real name so the crew knows who you are. Keep your PIN to yourself. Never sign in as someone else.</li>
+        <li><b>No personal information.</b> Do not put personal phone numbers, home addresses, personal emails, birthdays or other private details into the paperwork, the notes or the rundown. Not yours, not anyone else's. The call sheet's contact line is a production number, not a personal one.</li>
+        <li><b>Shows are shared.</b> Everything you type in a show (the rundown, Planda Bear paperwork, production notes) is seen by the whole crew and your instructor, and can be exported as a PDF. Write what you would say in a control room.</li>
+        <li><b>Be a good crew member.</b> Keep notes about the show. No insults, no harassment, nothing you would not want read aloud in class.</li>
+        <li><b>Show codes stay in class.</b> Do not share show codes or class keys with anyone outside the class.</li>
+        <li><b>Your instructor can see your work.</b> Instructors can see who worked on what, open your pages, and edit or remove anything that breaks these rules. A profile that breaks them can be deactivated.</li>
+        <li><b>What Cueola keeps.</b> Your name, username, avatar, the shows you joined and what you type into them, stored in the class's cloud account so the crew can share the show. Nothing is sold.</li>
+      </ol>
+      <p>If these words change, you will be asked to agree again the next time you sign in.</p>
+    </div>
+    <div class="modal-actions" id="agreementActions">
+      <button class="btn-full btn-secondary" onclick="CueolaIdentity.declineAgreement()">Sign out</button>
+      <button class="btn-full btn-primary" onclick="CueolaIdentity.acceptAgreement()">I agree</button>
+    </div>
+    <button class="btn-secondary" id="agreementCloseBtn" onclick="hideModal('agreementModal')" hidden>Close</button>
   </div>
 </div>
 

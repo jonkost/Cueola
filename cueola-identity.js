@@ -33,6 +33,13 @@
   var cachedProfile = null;   // last loaded profile doc data for the signed-in username
   var portalRequestGeneration = 0;
 
+  // The user agreement (Jon, 2026-10-16). Every new profile agrees to it in
+  // the create wizard; everyone else is asked once, the next time they sign
+  // in or come back. The words live in index.html (#agreementText). Change
+  // them and bump this number, and everyone signs again.
+  var AGREEMENT_VERSION = 1;
+  var AGREEMENT_LOCAL_KEY = 'cueola_agreement_';   // + username: the version agreed on this device
+
   function assignmentModel() {
     return window.CueolaAssignmentModel || {};
   }
@@ -451,6 +458,7 @@
         cachedProfile = full || Object.assign({}, cachedProfile, { sessions: [], sessionsUnknown: true });
         announceIdentityChange();
         renderFrontDoor();
+        if (full) ensureAgreement(full);
       };
       fetchProfile(username).then(settleStub).catch(function () { settleStub(null); });
     }
@@ -458,6 +466,9 @@
     adoptProfileLocally(p);
     bumpLastSeen(username, p);
     renderFrontDoor();
+    // A full profile says whether this person has agreed yet; the stub from
+    // the sign-in stage does not, so settleStub above asks once it arrives.
+    if (Array.isArray(p.sessions)) ensureAgreement(p);
     return { ok: true, profile: p };
   }
 
@@ -660,6 +671,7 @@
         cachedProfile = made.profile;
         announceIdentityChange();
         adoptProfileLocally(made.profile);
+        recordAgreement(username);   // agreed on the wizard's last step
         renderFrontDoor();
         return { ok: true, profile: made.profile };
       }
@@ -750,8 +762,81 @@
     cachedProfile = doc;
     announceIdentityChange();
     adoptProfileLocally(doc);
+    recordAgreement(username);   // agreed on the wizard's last step
     renderFrontDoor();
     return { ok: true, profile: doc };
+  }
+
+  /* ── user agreement ──
+   * agreementAccepted: has this profile agreed to the current words? The
+   * profile's own stamp wins; a device copy stands in while the cloud has not
+   * accepted the stamp yet (the rules allowlist needs a deploy first).
+   * ensureAgreement: ask now if not. acceptAgreement / declineAgreement are
+   * the two buttons on the agreement sheet. */
+  var agreementPending = null;   // username the open sheet is for
+  function agreementAccepted(p) {
+    if (!p || !p.username) return false;
+    var v = p.agreement && Number(p.agreement.version);
+    if (v >= AGREEMENT_VERSION) return true;
+    try { if (Number(localStorage.getItem(AGREEMENT_LOCAL_KEY + p.username)) >= AGREEMENT_VERSION) return true; } catch (e) {}
+    return false;
+  }
+  function ensureAgreement(p) {
+    if (!p || agreementAccepted(p)) return false;
+    var modal = document.getElementById('agreementModal');
+    if (!modal) return false;
+    agreementPending = p.username;
+    var sub = document.getElementById('agreementSub');
+    if (sub) sub.textContent = p.agreement
+      ? 'The agreement changed since you last agreed. Read it once more to keep using Cueola.'
+      : 'Read this once and agree to keep using Cueola.';
+    open('agreementModal');
+    return true;
+  }
+  // Stamp the profile (and this device) as agreed. The cloud write may be
+  // refused until the rules deploy carries the new field; the device copy
+  // keeps the sheet from coming back meanwhile, and the next sign-in with a
+  // deployed ruleset writes it for real because the profile still has no stamp.
+  function recordAgreement(username) {
+    if (!username) return;
+    var stamp = { version: AGREEMENT_VERSION, acceptedAt: Date.now() };
+    try { localStorage.setItem(AGREEMENT_LOCAL_KEY + username, String(AGREEMENT_VERSION)); } catch (e) {}
+    if (cachedProfile && cachedProfile.username === username) cachedProfile.agreement = stamp;
+    var w = fb();
+    if (!w || !w._updateDoc) return;
+    w._updateDoc(w._doc(w._db, 'profiles', username), { agreement: stamp, lastSeen: Date.now() })
+      .catch(function () {});
+  }
+  function acceptAgreement() {
+    var id = identity();
+    var username = agreementPending || (id && id.username);
+    agreementPending = null;
+    close('agreementModal');
+    if (!username) return;
+    recordAgreement(username);
+    say('Thanks. You agreed to the Cueola user agreement.');
+  }
+  function declineAgreement() {
+    agreementPending = null;
+    close('agreementModal');
+    signOut();
+    say('Signed out. Agree to the user agreement to use Cueola.');
+  }
+  // Read it again any time, from the profile sheet. No buttons to agree:
+  // the person already did.
+  function openAgreement() {
+    var sub = document.getElementById('agreementSub');
+    if (sub) sub.textContent = 'You agreed to this when you signed in. Here it is again.';
+    agreementPending = null;
+    var acts = document.getElementById('agreementActions');
+    if (acts) acts.hidden = true;
+    var closeBtn = document.getElementById('agreementCloseBtn');
+    if (closeBtn) closeBtn.hidden = false;
+    open('agreementModal');
+  }
+  function agreementTextHTML() {
+    var el = document.getElementById('agreementText');
+    return el ? el.innerHTML : '';
   }
 
   async function attachSessions(codes) {
@@ -1123,10 +1208,10 @@
   // with a Firebase password, never a PIN, so their code skips it entirely.
   function wizardKeys() {
     var w = wizard;
-    if (w && w.codeRole === 'admin') return ['code', 'name', 'look', 'sessions'];
-    return ['code', 'name', 'pin', 'look', 'sessions'];
+    if (w && w.codeRole === 'admin') return ['code', 'name', 'look', 'sessions', 'agree'];
+    return ['code', 'name', 'pin', 'look', 'sessions', 'agree'];
   }
-  var WIZ_STEP_LABEL = { code: 'Login code', name: 'Name & username', pin: 'Your PIN', look: 'Look & theme', sessions: 'Your sessions' };
+  var WIZ_STEP_LABEL = { code: 'Login code', name: 'Name & username', pin: 'Your PIN', look: 'Look & theme', sessions: 'Your sessions', agree: 'Agreement' };
   function renderCreate() {
     var w = wizard; if (!w) return startCreate();
     var keys = wizardKeys();
@@ -1202,14 +1287,24 @@
         '<select class="field-in" id="id-create-theme">' + themes + '</select></div>' +
         '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
-    } else {
+    } else if (key === 'sessions') {
       setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': the show codes you have been given (optional).');
       html +=
         '<div class="field"><label class="field-lbl">Show codes</label>' +
         '<input class="field-in" id="id-create-sessions" type="text" placeholder="e.g. SHOW42, NEWS7 (optional)" autocapitalize="characters" value="' + esc(w.sessions) + '">' +
         '<div class="id-field-hint">Separate multiple codes with commas. You can always add more later.</div></div>' +
         '<div class="modal-err" id="id-create-err"></div>' +
-        '<button class="btn-primary" id="id-create-go" onclick="CueolaIdentity.wizardFinish()">Create profile</button>' +
+        '<button class="btn-primary" onclick="CueolaIdentity.wizardNext()">Continue</button>' +
+        '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
+    } else {
+      // The last step: the user agreement. Create profile stays off until
+      // the box is ticked (Jon, 2026-10-16).
+      setTitle('Create your profile', 'Step ' + stepNo + ' of ' + n + ': the Cueola user agreement.');
+      html +=
+        '<div class="agreement-text">' + agreementTextHTML() + '</div>' +
+        '<label class="agreement-check"><input type="checkbox" id="id-create-agree" onchange="document.getElementById(\'id-create-go\').disabled=!this.checked"' + (w.agreed ? ' checked' : '') + '><span>I have read the agreement and I agree to it.</span></label>' +
+        '<div class="modal-err" id="id-create-err"></div>' +
+        '<button class="btn-primary" id="id-create-go" onclick="CueolaIdentity.wizardFinish()"' + (w.agreed ? '' : ' disabled') + '>Create profile</button>' +
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     }
     body().innerHTML = html;
@@ -1266,6 +1361,8 @@
     } else if (key === 'look') {
       var sel = document.getElementById('id-create-theme');
       if (sel) w.theme = sel.value;
+    } else if (key === 'sessions') {
+      w.sessions = (document.getElementById('id-create-sessions') || {}).value || '';
     }
     w.step = Math.min(w.step + 1, wizardKeys().length - 1);
     renderCreate();
@@ -1295,7 +1392,9 @@
   }
   async function wizardFinish() {
     var w = wizard; if (!w) return;
-    w.sessions = (document.getElementById('id-create-sessions') || {}).value || '';
+    var box = document.getElementById('id-create-agree');
+    w.agreed = Boolean(box && box.checked);
+    if (!w.agreed) return wizardErr('Tick the box to agree, then create your profile.');
     var btn = document.getElementById('id-create-go');
     if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     var res = await createProfile(w);
@@ -2104,6 +2203,7 @@
       }
       cachedProfile = p;
       announceIdentityChange();  // restore-on-boot: profile is now known
+      ensureAgreement(p);        // back after the words changed? agree once more
     }
     // Hidden sessions drop out BEFORE the newest-six cut, so tucking old
     // classes away makes room for the ones that matter.
@@ -2358,6 +2458,9 @@
     frontDoorSubmitPin: frontDoorSubmitPin, frontDoorSubmitNewPin: frontDoorSubmitNewPin, frontDoorSubmitPassword: frontDoorSubmitPassword,
     submitModalPin: submitModalPin, submitModalNewPin: submitModalNewPin, submitModalPassword: submitModalPassword,
     deviceOnlyLook: deviceOnlyLook,
+    // User agreement (2026-10-16): the sheet's two buttons, the read-again link.
+    acceptAgreement: acceptAgreement, declineAgreement: declineAgreement, openAgreement: openAgreement,
+    agreementAccepted: agreementAccepted, ensureAgreement: ensureAgreement,
     _normalizeUsername: normalizeUsername, _normalizeCode: normalizeCode,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.CueolaIdentity;
