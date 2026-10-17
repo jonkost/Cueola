@@ -2,6 +2,51 @@
 
 ## Next release (not pushed yet)
 
+### Jon's October 16 list: cue words, agreement, quiet look, notes, profile
+
+- **Every department has its own two words on every cue.** Video says READY
+  and TAKE. Audio and lighting say STANDBY and GO. Playback says ROLL and
+  OUT. Graphics say STANDBY and INSERT (a graphic is keyed over the picture,
+  so the go word is the CG call, not the switcher's TAKE). Script says
+  STANDBY and CUE. The rundown table, the Live screen and the cue editor all
+  read the same words from one table, and each line in a cell now carries its
+  word as a small chip, the go word in green. The old green-play and
+  red-stop dots are gone: they read as "cue in, cue out", which the two lines
+  never meant. The demo show uses the new words.
+- **Cueola user agreement.** A new profile agrees to it on the last step of
+  the create wizard (the Create profile button stays off until the box is
+  ticked). Everyone who already has a profile sees it once, the next time they
+  sign in or come back, with I agree or Sign out. The words live in one place
+  in the page; change them, bump the version number, and everyone agrees
+  again. The profile sheet has a User agreement button to read it again. The
+  stamp is saved on the profile, which needs the additive rules in
+  docs/rules-additive-2026-10-16-agreement.rules deployed; until then the
+  device remembers the yes and the cloud copy lands on the next sign-in after
+  the deploy.
+- **Planda Bear says no personal information.** A standing reminder under
+  the hub title (no personal phone numbers, home addresses or personal
+  emails), the same words on the call sheet's contact line and crew contacts,
+  and in the notes box.
+- **A to-do can belong to several people.** Assign is a row of name chips;
+  tap everyone it belongs to. Open items lists it under each of them, and each
+  person's portal counts it. (Old single-name to-dos are unchanged.)
+- **Quiet look: Done takes you back.** Done on the yellow bar now leaves the
+  student's page and returns you to where you were (the Planda Bear page you
+  had open, the hub, or no Planda Bear at all, and the Admin Panel if it was
+  open). Any signed-in admin, whatever their level, also has a Look in quietly
+  switch in Planda Bear settings to go quiet on and off in place.
+- **The brand mark in the top-left corner goes to the front page** on Live,
+  Planda Bear and KeyWi Bird, as it already did on the rundown. Every back
+  button each screen had is still there.
+- **Clicking your profile does more.** The profile sheet opens with a card:
+  your avatar, name, username, role, when you joined, your positions, how many
+  open to-dos and unseen notes you have across your shows, and the buttons for
+  Edit look, User agreement and Sign out. Your shows follow underneath.
+- **Admin Panel tabs no longer draw over each other.** Session, People and
+  Sources are one segmented control, each the same width, icon beside the
+  word. The Script Op editor also stops showing a tall empty gap for a row
+  with no script: a row with nothing to read is just its heading line.
+
 ### The prompter link stops flashing Recover (Oct 16)
 
 **"Recover Flowmingo" kept flashing on show day.** The Live screen judged
