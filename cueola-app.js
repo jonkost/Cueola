@@ -5424,7 +5424,7 @@ function migrateOldCue(type, d) {
     case 'playback':
       migrated = { ready:[d.state,d.clipName].filter(Boolean).join(' '), take:d.clipName?`Roll ${d.clipName}`:'Roll' }; break;
     case 'gfx':
-      migrated = { ready:[d.gfxType,d.transition].filter(Boolean).join(' / '), take:'Take GFX' }; break;
+      migrated = { ready:[d.gfxType,d.transition].filter(Boolean).join(' / '), take:'Insert GFX' }; break;
     case 'lighting':
       migrated = { ready:[d.action,d.fixture].filter(Boolean).join(' '), take:d.action==='At'?`Go ${d.intensity||0}%`:'Go' }; break;
     case 'script':
@@ -8004,11 +8004,11 @@ const INFO_POPS = {
 };
 Object.assign(INFO_POPS, {
   'cue-ready-take': { title: 'The two lines', lesson: 'cueola-build', section: 'know',
-    body: 'Every cue is two beats the director says out loud, in order. The first line sets it up (READY a camera, STANDBY a mic or a look, ROLL a clip). The second line is the go (TAKE the camera, GO on the mic or the look, CUE the talent). Each department has its own words for the two beats, and the labels here use them. Pick from the buttons to fill both lines, or type them the way you would say them.' },
+    body: 'Every cue is two beats the director says out loud, in order. The first line sets it up (READY a camera, STANDBY a mic, a graphic or a look, ROLL a clip). The second line is the go (TAKE the camera, GO on the mic or the look, INSERT the graphic, CUE the talent, OUT is how a clip ends). Each department has its own words for the two beats, and the rundown, Live and this editor all use them. Pick from the buttons to fill both lines, or type them the way you would say them.' },
   'cue-cell-video': { title: 'Video cues', lesson: 'cueola-build', section: 'steps', body: 'Which source goes on air and how it is framed. Wide shows the whole space; CU (close-up) is one face. Take is a cut; Dissolve and Wipe are softer. A Media wipe covers the change with an animated clip from the switcher.' },
   'cue-cell-audio': { title: 'Audio cues', lesson: 'cueola-build', section: 'steps', body: 'STANDBY names the source that is next. GO is what happens to it: a mic opens or closes, music goes up to full or under the voices.' },
   'cue-cell-playback': { title: 'Playback cues', lesson: 'cueola-build', section: 'steps', body: 'ROLL is how the clip starts. OUT is the plan for getting out when it ends (back to a camera, roll the next clip). Open Link to playback, pick the clip and check Roll this clip on TAKE. Then it rolls by itself when the director takes the row. Pre-roll is a countdown before it is on air.' },
-  'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. Type what it reads so the graphics operator can build it.' },
+  'cue-cell-gfx': { title: 'Graphic cues', lesson: 'cueola-build', section: 'steps', body: 'Something on screen: a lower third with a name, a full-screen card, a bug in the corner, the credits. STANDBY has it built and loaded; INSERT keys it over the picture. Type what it reads so the graphics operator can build it.' },
   'cue-cell-lighting': { title: 'Lighting cues', lesson: 'cueola-build', section: 'steps', body: 'A look is one lighting state, or a cue number on the board. STANDBY has it ready on the board; GO goes to it.' },
   'cue-cell-script': { title: 'Script cues', lesson: 'cueola-build', section: 'steps', body: 'Who reads, and the words they read. STANDBY warns the talent; CUE is their go. The words show big on the prompter.' },
   'add-row': { title: 'Rows and cues', lesson: 'cueola-build', section: 'know', body: 'A row is one moment of the show, with a name. A Timed row has a set length; a Flex row runs as long as it needs. Each row can hold one cue per department (camera, audio, playback, graphic, lighting, script). A segment is a heading that groups rows. It is never taken.' },
@@ -8361,10 +8361,11 @@ function getCueCell(b, type) {
   if (isEmpty) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" data-tip="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
-  const lines = [
-    on  ? `<div class="cue-on-line"><span class="cue-on-dot">${sfIcon('marker.go')}</span>${esc(on)}</div>`  : '',
-    off ? `<div class="cue-off-line"><span class="cue-off-dot">${sfIcon('marker.stop')}</span>${esc(off)}</div>` : '',
-  ].filter(Boolean).join('');
+  // Each line carries the department's own word (READY / TAKE for video,
+  // STANDBY / GO for audio, ROLL / OUT for playback, and so on). The old
+  // green-play and red-stop dots read as "cue in / cue out", which is not
+  // what the two lines mean (Jon, 2026-10-16).
+  const lines = cueLineHTML(type, 'ready', on, 'cue-on-line') + cueLineHTML(type, 'take', off, 'cue-off-line');
   const scriptMeta = scriptText
     ? `<div class="script-present-line">${d?.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} · ${scriptLineLabel(scriptText)}</div>`
     : '';
@@ -8689,13 +8690,16 @@ const CUE_EDITOR = {
   },
   gfx: {
     title: 'Graphic',
-    lines: { ready: 'READY', readyHint: 'load it', take: 'TAKE', takeHint: 'put it on screen', readyEg: 'Ready Lower third: Jane Doe', takeEg: 'Take Lower third' },
+    // Graphics are keyed over the picture, so the go word is INSERT (the
+    // classic CG call), not the switcher's TAKE. Jon, 2026-10-16: every
+    // department gets its own two words; only video says READY and TAKE.
+    lines: { ready: 'STANDBY', readyHint: 'load it', take: 'INSERT', takeHint: 'key it over the picture', readyEg: 'Standby Lower third: Jane Doe', takeEg: 'Insert Lower third' },
     pickers: [
       { key:'name', label:'Graphic', chips: () => ['Lower third','Full screen','Bug','Credits'], custom:'Another graphic', store:'customType' },
       { key:'text', label:'On-screen text', input:'e.g. Jane Doe · Student Council', optional:true, store:'gfxContent' },
     ],
-    ready: p => p.name ? `Ready ${p.name}${p.text ? `: ${p.text}` : ''}` : '',
-    take:  p => p.name ? `Take ${p.name}` : '',
+    ready: p => p.name ? `Standby ${p.name}${p.text ? `: ${p.text}` : ''}` : '',
+    take:  p => p.name ? `Insert ${p.name}` : '',
     hint: 'Pick the kind of graphic and type what it reads.',
   },
   lighting: {
@@ -13041,39 +13045,46 @@ function liveCellForBeat(b, type, beatIdx) {
   </div>`;
 }
 
-const LIVE_CUE_OPERATION = Object.freeze({
-  ready:{ label:'READY', title:'Stand by this cue before taking it' },
-  take:{ label:'TAKE', title:'Execute this programmed cue' },
-});
+// ── The department's two words ──────────────────────────────────────────
+// One source for every surface (cue editor, rundown table, Live, exports):
+// the words in CUE_EDITOR. Video says READY and TAKE; audio and lighting say
+// STANDBY and GO; playback says ROLL and OUT; graphics say STANDBY and
+// INSERT; script says STANDBY and CUE. The tables that used to live here
+// (LIVE_CUE_OPERATION and its overrides) drifted from the editor's words, so
+// liveCueOperationLine now reads the same words everyone else does.
+function cueWords(type) {
+  const L = CUE_EDITOR[type]?.lines;
+  return L
+    ? { ready: L.ready, take: L.take, readyHint: L.readyHint, takeHint: L.takeHint }
+    : { ready: 'READY', take: 'TAKE', readyHint: 'set it up', takeHint: 'go' };
+}
 
-// Playback cells speak the guided-row vocabulary: ROLL starts the clip, OUT is
-// the plan for getting out. Every other cue type keeps READY/TAKE.
-const LIVE_CUE_OPERATION_OVERRIDES = Object.freeze({
-  playback: Object.freeze({
-    ready:{ label:'ROLL', title:'Roll cue: how the playback starts' },
-    take:{ label:'OUT', title:'Out cue: the plan for getting out' },
-  }),
-  audio: Object.freeze({
-    ready:{ label:'STANDBY', title:'Standby: the source that is next' },
-    take:{ label:'GO', title:'Go: what happens to it' },
-  }),
-  lighting: Object.freeze({
-    ready:{ label:'STANDBY', title:'Standby: the next look' },
-    take:{ label:'GO', title:'Go: go to the look' },
-  }),
-  script: Object.freeze({
-    ready:{ label:'STANDBY', title:'Standby: who reads next' },
-    take:{ label:'CUE', title:'Cue: the talent starts' },
-  }),
-});
+// "Ready CAM 1" under a READY chip would say the word twice, so the line
+// shows "READY · CAM 1". Text that starts some other way is left alone.
+function cueLineBody(text, word) {
+  const t = String(text || '').trim();
+  const w = String(word || '').trim();
+  if (!w) return t;
+  const re = new RegExp('^' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z])[\\s:·,-]*', 'i');
+  const rest = t.replace(re, '').trim();
+  return rest || t;
+}
+
+// One cue line: the department's word as a small chip, then the text.
+// `beat` is 'ready' (the first line) or 'take' (the second, the go).
+function cueLineHTML(type, beat, text, className = '') {
+  if (!text) return '';
+  const words = cueWords(type);
+  const go = beat === 'take';
+  const word = go ? words.take : words.ready;
+  const hint = go ? words.takeHint : words.readyHint;
+  return `<div class="${className} cue-line cue-line-${go ? 'take' : 'ready'}" data-tip="${esc(word)}: ${esc(hint)}" aria-label="${esc(word)}: ${esc(text)}"><span class="cue-word">${esc(word)}</span><span class="cue-line-text">${esc(cueLineBody(text, word))}</span></div>`;
+}
 
 function liveCueOperationLine(operation, text, className='', style='', cueType='') {
   if (!text) return '';
-  const meta = LIVE_CUE_OPERATION_OVERRIDES[cueType]?.[operation]
-    || LIVE_CUE_OPERATION[operation] || LIVE_CUE_OPERATION.ready;
-  // Quiet marker icons (the original cue-line look) carry the READY/TAKE
-  // vocabulary in the title/aria label instead of a boxed verb chip.
-  return `<div class="${className}"${style ? ` style="${style}"` : ''} data-tip="${meta.title}" aria-label="${meta.label}: ${esc(text)}">${sfIcon(operation === 'take' ? 'marker.go' : 'marker.ready')} <span>${esc(text)}</span></div>`;
+  const html = cueLineHTML(cueType, operation === 'take' ? 'take' : 'ready', text, className);
+  return style ? html.replace('<div ', `<div style="${style}" `) : html;
 }
 
 // Clean cue chips for the Focus view — only the row's programmed departments.
@@ -31505,49 +31516,49 @@ function esc(s) {
 // cut is Ready → Take, a soft mix is Set → Dissolve.
 const DEMO_BEATS = [
   { id:1, style:'timed', info:'Countdown Slate', notes:'Roll to air', min:0, sec:30, done:false, cues:{
-    gfx:   { on:'Ready Countdown',  off:'Take Countdown' },
-    audio: { on:'Ready Theme Bed',  off:'Play Theme Bed' },
+    gfx:   { on:'Standby Countdown', off:'Insert Countdown' },
+    audio: { on:'Standby Theme Bed', off:'Play Theme Bed' },
   }},
   { id:2, style:'timed', info:'Show Open', notes:'Theme up full, under at open', min:0, sec:15, done:false, cues:{
     video: { on:'Set OPEN',        off:'Dissolve OPEN' },
-    audio: { on:'Ready Theme Full',off:'Play Theme Full' },
-    gfx:   { on:'Ready Title',     off:'Take Title' },
+    audio: { on:'Standby Theme Full', off:'Play Theme Full' },
+    gfx:   { on:'Standby Title',   off:'Insert Title' },
   }},
   { id:3, style:'timed', info:'Anchor Wide: Welcome', notes:'', min:0, sec:20, done:false, cues:{
     video:  { on:'Ready CAM 1',     off:'Take CAM 1' },
-    audio:  { on:'Ready Anchor Mics', off:'Open Mics 1+2' },
+    audio:  { on:'Standby Anchor Mics', off:'Open Mics 1+2' },
     script: { on:'Standby Host', off:'Cue Host', text:"Good evening and welcome to Campus News. I'm your anchor. Tonight, three big stories from around campus." },
   }},
   { id:4, style:'timed', info:'Anchor Lower Third', notes:'Name / Title', min:0, sec:5, done:false, cues:{
-    gfx: { on:'Set Lower Third', off:'Dissolve L3' },
+    gfx: { on:'Standby Lower Third: Name / Title', off:'Insert Lower Third' },
   }},
   { id:5, style:'timed', info:'PKG: Student Council', notes:'Nat sound up full', min:2, sec:15, done:false, cues:{
     video:    { on:'Set FULL SCREEN', off:'Dissolve to PKG' },
     playback: { on:'Roll SC_042',     off:'Back to CAM 2', clip:'SC_042' },
-    audio:    { on:'Ready PKG Audio', off:'Take PKG SOT' },
+    audio:    { on:'Standby PKG Audio', off:'Up PKG SOT' },
   }},
   { id:6, style:'timed', info:'Back to Anchor', notes:'', min:0, sec:10, done:false, cues:{
     video: { on:'Ready CAM 2',      off:'Take CAM 2' },
-    audio: { on:'Ready Anchor Mics',off:'Open Mic Host' },
+    audio: { on:'Standby Anchor Mics', off:'Open Mic Host' },
   }},
   { id:7, style:'flex', info:'Guest Conversation', notes:'"What surprised you most?"', min:5, sec:0, done:false, cues:{
     video:  { on:'Set 2-SHOT',    off:'Dissolve 2-SHOT' },
-    audio:  { on:'Ready Guest Mic', off:'Open Guest Mic' },
+    audio:  { on:'Standby Guest Mic', off:'Open Guest Mic' },
     script: { on:'Standby Host', off:'Cue Host', text:'Guest conversation. Ad-lib topic: the student budget vote and what it means for clubs.' },
   }},
   { id:8, style:'timed', info:'Sports Highlight', notes:'', min:1, sec:30, done:false, cues:{
     playback: { on:'Roll SPT_HL', off:'Back to CAM 1', clip:'SPT_HL' },
-    gfx:      { on:'Ready Scorebug', off:'Take Scorebug' },
+    gfx:      { on:'Standby Scorebug', off:'Insert Scorebug' },
   }},
   { id:9, style:'timed', info:'Weather Look-Live', notes:'Chroma key', min:1, sec:0, done:false, cues:{
     video: { on:'Ready CHROMA',    off:'Take CHROMA' },
-    gfx:   { on:'Set Weather Map', off:'Dissolve Weather Map' },
-    audio: { on:'Ready Talent Mic',off:'Open Talent Mic' },
+    gfx:   { on:'Standby Weather Map', off:'Insert Weather Map' },
+    audio: { on:'Standby Talent Mic', off:'Open Talent Mic' },
   }},
   { id:10, style:'timed', info:'Outro & Signoff', notes:'', min:0, sec:45, done:false, cues:{
     video: { on:'Set WIDE',      off:'Dissolve WIDE' },
-    gfx:   { on:'Ready Credits', off:'Take Credits' },
-    audio: { on:'Ready Theme Out', off:'Play Theme Out' },
+    gfx:   { on:'Standby Credits', off:'Insert Credits' },
+    audio: { on:'Standby Theme Out', off:'Play Theme Out' },
   }},
 ];
 

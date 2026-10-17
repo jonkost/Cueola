@@ -71,18 +71,27 @@ test('row selection is keyboard-operable and never aliases GO', () => {
   assert.match(app, /event\?\.stopPropagation\?\.\(\)/);
 });
 
-test('Live cue renderers share READY and TAKE vocabulary', () => {
-  assert.match(app, /ready:\{ label:'READY'/);
-  assert.match(app, /take:\{ label:'TAKE'/);
-  assert.match(app, /function liveCueOperationLine/);
+test('every surface reads the department words from one table (2026-10-16)', () => {
+  // Video says READY / TAKE; the other departments have their own two words.
+  // The rundown table, Live and the cue editor all read CUE_EDITOR's lines.
+  assert.match(app, /video: \{[\s\S]{0,200}lines: \{ ready: 'READY'[^\n]*take: 'TAKE'/);
+  assert.match(app, /audio: \{[\s\S]{0,200}lines: \{ ready: 'STANDBY'[^\n]*take: 'GO'/);
+  assert.match(app, /playback: \{[\s\S]{0,200}lines: \{ ready: 'ROLL'[^\n]*take: 'OUT'/);
+  assert.match(app, /gfx: \{[\s\S]{0,400}lines: \{ ready: 'STANDBY'[^\n]*take: 'INSERT'/);
+  assert.match(app, /lighting: \{[\s\S]{0,200}lines: \{ ready: 'STANDBY'[^\n]*take: 'GO'/);
+  assert.match(app, /script: \{[\s\S]{0,200}lines: \{ ready: 'STANDBY'[^\n]*take: 'CUE'/);
+  assert.match(app, /function cueWords\(type\) \{\n  const L = CUE_EDITOR\[type\]\?\.lines;/);
+  assert.match(app, /function liveCueOperationLine[\s\S]{0,200}cueLineHTML\(cueType/);
+  assert.match(app, /const lines = cueLineHTML\(type, 'ready', on, 'cue-on-line'\) \+ cueLineHTML\(type, 'take', off, 'cue-off-line'\);/);
+  assert.doesNotMatch(app, /LIVE_CUE_OPERATION_OVERRIDES|cue-on-dot|cue-off-dot/);
   assert.doesNotMatch(app.slice(app.indexOf('function renderLiveCurrent'), app.indexOf('function liveRowPreview')), />[▶■○]\s*\$\{esc/);
+  // The chip never repeats the word the text already starts with.
+  assert.match(app, /function cueLineBody\(text, word\)/);
+  assert.match(html, /\.cue-word\{/);
+  assert.match(html, /\.cue-line-take \.cue-word\{color:var\(--green\)/);
 });
 
-test('playback rows speak ROLL and OUT; old helper rows still render, none are generated (3.0)', () => {
-  // Playback-only chip overrides; every other cue type keeps READY/TAKE above.
-  assert.match(app, /ready:\{ label:'ROLL'/);
-  assert.match(app, /take:\{ label:'OUT'/);
-  assert.match(app, /LIVE_CUE_OPERATION_OVERRIDES\[cueType\]/);
+test('old helper rows still render, none are generated (3.0)', () => {
   // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
   // silently drops every beat field it does not list.
   assert.match(app, /\['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'\]/);

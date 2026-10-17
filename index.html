@@ -954,8 +954,14 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 /* Cue cell on/off display */
 .cue-on-line{font-size:13px;line-height:1.4;color:var(--text);display:flex;align-items:baseline;gap:6px;font-weight:600;letter-spacing:0}
 .cue-off-line{font-size:12px;line-height:1.4;color:var(--text2);display:flex;align-items:baseline;gap:6px;font-weight:500;letter-spacing:0}
-.cue-on-dot{color:var(--green);font-size:10px;font-weight:700;flex-shrink:0;line-height:1}
-.cue-off-dot{color:var(--red);font-size:10px;font-weight:700;flex-shrink:0;line-height:1}
+/* The department's word on each cue line (READY / TAKE, STANDBY / GO, ROLL /
+   OUT, STANDBY / INSERT, STANDBY / CUE): a small chip, the go word in green.
+   Sized from the line's own text so it fits the rundown cell and the big
+   Live focus line alike. */
+.cue-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;min-width:0}
+.cue-word{flex:none;font-family:var(--mono);font-size:max(9px,.44em);font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:1.6;padding:0 5px;border-radius:5px;color:var(--text3);background:color-mix(in srgb,var(--text3) 16%,transparent)}
+.cue-line-take .cue-word{color:var(--green);background:color-mix(in srgb,var(--green) 16%,transparent)}
+.cue-line-text{min-width:0;word-break:break-word}
 
 /* Wizard nav */
 .ar-nav{display:flex;gap:8px;margin-top:4px;padding-top:12px;border-top: 1px solid transparent}
