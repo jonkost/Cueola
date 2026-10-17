@@ -1608,10 +1608,16 @@ final class Engine: ObservableObject {
     private var envelopeReads: Set<String> = []
     private func readEnvelope(_ cue: Cue) {
         let path = cue.path, url = cue.url
-        guard cue.kind == .video || cue.kind == .audio, envelopes[path] == nil, !envelopeReads.contains(path) else { return }
+        // Only the part that can play is read (a trimmed hour-long file is
+        // not scanned end to end while another clip plays from the same
+        // disk), quietly in the background. A map that already covers the
+        // trim is kept.
+        let from = cue.trimIn, to = cue.trimOut
+        guard cue.kind == .video || cue.kind == .audio, !envelopeReads.contains(path),
+              envelopes[path]?.covers(from: from, to: to) != true else { return }
         envelopeReads.insert(path)
-        Task.detached(priority: .utility) { [weak self] in
-            let map = await SoundEnvelope.read(url)
+        Task.detached(priority: .background) { [weak self] in
+            let map = await SoundEnvelope.read(url, from: from, to: to)
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.envelopeReads.remove(path)
