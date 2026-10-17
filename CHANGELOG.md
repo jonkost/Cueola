@@ -2,6 +2,59 @@
 
 ## Next release (not pushed yet)
 
+### Outrangutan for Mac: what the Oct 16 show asked for
+
+- **Faster GO.** The cue standing by is loaded ahead, like a pro deck: the
+  file is open, the first frames are decoded and the picture path is warm
+  before GO. The first frame shows about a tenth of a second after GO,
+  down from a third, and the first seconds play clean. A still standing by
+  is read from disk ahead too.
+- **No stutter at the top of a clip.** The cue meter used to listen in on
+  the player's own sound path, and that listener made every clip start
+  late and rough (and dropped frames for half a second when it went on
+  after the start). The meter now reads a level map of the clip, made in
+  the background, at the playhead. The cue sound engine's channel pairs
+  still use the listener, because they need the sound itself.
+- **A live line to the cloud.** The cloud now sends the show to the Mac
+  the moment it changes, instead of the Mac reading it four times a
+  second. A fire from the rundown or a deck on another Mac lands as fast
+  as the cloud can carry it. Reading carries on every two seconds as the
+  safety net, and five times a second if the live line is down.
+- **Far fewer writes.** The show record is one document the rundown, the
+  deck and the Mac all write to, and in the Oct 16 show the cloud refused
+  writes ("exceeded their maximum bandwidth for writes"). The Mac now
+  writes what is on air at most every two seconds while playing (not
+  every 0.7), bundles everything one GO produces into one write, and when
+  the cloud says it is busy it waits a little longer each time and sends
+  the newest values when it can.
+- **Calm about Wi-Fi blips.** One failed read is no longer a Problem in
+  the log and the window's subtitle. Reads must fail for five seconds, or
+  three in a row, before the Mac says so.
+- **A see-through still over a color.** A still (a PNG lower third) gets
+  the Alpha key: in the Inspector's Picture tab, Key: Alpha, then pick
+  Chroma green or Chroma blue from the Background menu. The color fills the
+  screen behind the picture, for a key downstream. Videos' Key section has
+  the same Background menu.
+- **Dropping media.** Files dropped between two rows of the cue list land
+  there. The window's drop zone is now the top of the window (the clock,
+  the transport, the preview) and the list itself, not a zone over the
+  whole window: a list under a drop zone can no longer drag its own rows.
+  Media dropped on the Dock icon joins the cue list. A drop while editing
+  is locked says so under the clock instead of doing nothing.
+- **Rearranging cues.** The cue rows had a tap gesture on them, and a
+  gesture on a row takes the mouse-down the row needs to start a drag;
+  it is gone. Right-click a cue (or several) for Move Up and Move Down,
+  and Edit, Move Cue Up and Down (Option-Command-Up and Down) move the cue
+  standing by.
+- **Fade's button** shows a bank of faders being pulled down (the same
+  symbol as KeyWi Bird's FADE key), not a stock chart.
+- **KeyWi Bird: VOL +, VOL - and MUTE keys**, for every deck without a
+  dial (XL, MK.2, Mini). They ride the same lane as the dial, so the Mac
+  app and the web player both hear them; the faces show the level, MUTE
+  glows while muted, and the keys dim when no playout is linked. The XL's
+  starter layout carries them in column 4.
+
+
 ### Jon's October 16 list: cue words, agreement, quiet look, notes, profile
 
 - **Every department has its own two words on every cue.** Video says READY
@@ -55,6 +108,43 @@
   Cancel on the left and the default on the right, as the kit's sheets have
   them. Chips, tags and counters keep their capsules. The design guidelines
   record the rule.
+
+### Prompter screens tidied: a real Settings sheet, one segmented control, plain words (Oct 16)
+
+**The gear opens Settings now.** On the talent screen the gear used to hide
+the whole bar and panel, which read as "the gear does nothing". Now it opens
+a Settings sheet: theme, align, text width, read line, the row chips, the
+clock and question size, the panel size, Hide controls, and the keys list.
+The panel itself is one row of show-time buttons (Play, Top, Reverse, Speed,
+Size, Mirror, Fullscreen, Settings), all the same size. Hidden controls come
+back when the mouse moves or the screen is tapped.
+
+- **Script Op tabs are one segmented control** (Jon asked): Playback, On air,
+  Clocks and Display sit in one rounded group with the icon beside the word,
+  the same as the Admin Panel. The Flowmingo Op and the pop-out match, and
+  the Flowmingo Op's Screen tab folded into Playback like the other two.
+- **Status that shows.** The talent bar's pill is green for READY, amber
+  while linking or unlinked, red when not connected; it never had colors
+  for the first two. The connect card's warnings and check marks read on the
+  Polar Bear theme too.
+- **One name for things.** Flowmingo, Script Op and Flowmingo Op in the copy
+  became "the prompter" and "the prompter controls"; Connect, Link and Load
+  became Link; Reset became Top; To Time became Count to; Tech Difficulty
+  became Tech difficulties; "No talent ack" became "Talent did not answer".
+  The pop-out window calls itself Script Op, like the panel it mirrors.
+- **The Flowmingo Op preview follows the talent**: the copy moves so the
+  talent's spot sits on the read line, the read line and width follow the
+  talent's settings, and Cue Now, Cue Next, speed and size numbers arrived.
+- **Pop-out:** Read line and Width controls, hover help that shows, the same
+  theme swatches as the app, a Clear gate that asks for the word CLEAR, and
+  the editor keys in the shortcut sheet.
+- **Touch and keys:** 44 pt buttons and sliders on touch screens, pinch to
+  size the text, a tap brings hidden controls back, Space after a mouse
+  click plays instead of pressing that button again, Esc never leaves the
+  screen, and leaving the screen leaves fullscreen.
+- **Screen readers:** the sheets are real dialogs that take focus and give
+  it back, every slider and code box has a name, pressed buttons say so,
+  hidden controls leave the Tab order, and the time readout stays quiet.
 
 ### The prompter link stops flashing Recover (Oct 16)
 
