@@ -3653,6 +3653,12 @@ function updateAdminUI() {
   const gearTools = document.getElementById('pbGearAdminTools');
   if (gearLabel) gearLabel.hidden = Boolean(adminSession);
   if (gearTools) gearTools.hidden = Boolean(adminSession);
+  // The quiet-look switch is for every signed-in admin, whatever their level.
+  const quietLabel = document.getElementById('pbGearQuietLabel');
+  const quietRow = document.getElementById('pbGearQuietRow');
+  if (quietLabel) quietLabel.hidden = !adminSession;
+  if (quietRow) quietRow.hidden = !adminSession;
+  if (!adminSession && pbQuietLook) pbEndQuietLook(true);
   // The Build caller chip is admin-only: repaint whenever the admin session
   // resolves or ends (enterRundown calls this too).
   try { renderShowCallerBadge(); renderCallerBanner(); } catch (error) { containError('Caller chip', error); }
@@ -21769,8 +21775,15 @@ function pbOpenPageId() {
 // the "Who worked on what" log. It ends with the Done button on the yellow
 // bar, or when Planda Bear closes.
 let pbQuietLook = false;
+let pbQuietReturn = null;   // where the admin was when the look began, so Done takes them back
 function pbQuietLookAt(pageId) {
   if (!adminSession) { toast('Log in as admin to look in quietly.'); return; }
+  // Remember where you were (the Planda Bear page, or none, and whether the
+  // Admin Panel was open). Done on the yellow bar brings you back there
+  // (Jon, 2026-10-16: "the done button did nothing").
+  const adminPanelOpen = Boolean(document.getElementById('adminPanel')?.classList.contains('on'));
+  pbQuietReturn = { pbPage: pbOpenPageId(), adminPanelOpen };
+  if (adminPanelOpen) hideOverlay('adminPanel');
   pbQuietLook = true;
   pbRenderQuietBar();
   // Clear any marker this device left earlier, then open the page with the
@@ -21785,17 +21798,61 @@ function pbQuietLookAt(pageId) {
   }
   toast('Quiet look: nobody sees you here, and nothing is logged.');
 }
-function pbEndQuietLook(silent) {
+// Ends the quiet look. With goBack (the Done button) it also leaves the
+// student's page and returns you to where you were when the look began:
+// the Planda Bear page you had open, the hub, or no Planda Bear at all, and
+// the Admin Panel if it was open. The settings switch ends it in place.
+function pbEndQuietLook(silent, opts = {}) {
   if (!pbQuietLook) return;
   pbQuietLook = false;
   pbRenderQuietBar();
+  const back = opts.goBack ? pbQuietReturn : null;
+  pbQuietReturn = null;
+  if (back) {
+    const open = pbOpenPageId();
+    if (open && open !== 'hub') { pbSaveOnLeave(() => saveOpenPaperworkSection(false)); hidePaperworkEditors(); }
+    if (!back.pbPage) {
+      hideModal('paperworkHubModal');
+      pbSetPresencePage(null);
+    } else if (back.pbPage === open) {
+      pbSetPresencePage(open);   // same page you were on: just show up again
+    } else if (back.pbPage === 'hub') {
+      returnToPaperworkHub();    // opening the student's page had closed the hub
+      pbSetPresencePage('hub');
+    } else if (back.pbPage === 'assignments') {
+      openPbAssignEditor();
+    } else {
+      openPaperworkItem(back.pbPage);
+    }
+    if (back.adminPanelOpen) openAdminPanel();
+    if (!silent) toast('Quiet look ended. You are back where you were.');
+    return;
+  }
   const page = pbOpenPageId();
   if (page) pbSetPresencePage(page);   // show up again where you are
   if (!silent) toast('Quiet look ended. Others can see you again.');
 }
+// The switch in Planda Bear settings (any admin level): on mutes your page
+// and field markers and the "Who worked on what" log until you switch it off
+// or close Planda Bear. No trip back on Done, you never left.
+function pbSetQuietLook(on) {
+  if (on) {
+    if (!adminSession) { toast('Log in as admin to look in quietly.'); pbRenderQuietBar(); return; }
+    if (pbQuietLook) return;
+    pbQuietLook = true;
+    pbQuietReturn = null;
+    pbWritePresence({ pbPage: null, pbField: null });
+    pbRenderQuietBar();
+    toast('Quiet look on: nobody sees you in Planda Bear, and nothing is logged.');
+  } else {
+    pbEndQuietLook(false);
+  }
+}
 function pbRenderQuietBar() {
   const bar = document.getElementById('pbQuietBar');
   if (bar) bar.hidden = !pbQuietLook;
+  const sw = document.getElementById('pbQuietSwitch');
+  if (sw) sw.checked = pbQuietLook;
 }
 
 function pbWritePresence(patch) {
@@ -22544,7 +22601,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
 // Leave the Planda Bear workspace and clear my page presence so collaborators
 // stop seeing me "here".
 function closePlandaBear() {
-  if (pbQuietLook) { pbQuietLook = false; pbRenderQuietBar(); }
+  if (pbQuietLook) { pbQuietLook = false; pbQuietReturn = null; pbRenderQuietBar(); }
   pbAssignFlush();   // a position change still on its timer saves now
   pbSaveOnLeave(() => saveOpenPaperworkSection(false));
   hidePaperworkEditors();
