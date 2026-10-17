@@ -350,6 +350,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .segmented-row, .stepper-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--text2); font-size: 11px; font-weight: 700; }
 .segmented-control { flex: 1; max-width: 330px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .segmented-control button { min-height: var(--ui-control-height-compact); font-size: 11px; }
+.segmented-control.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .segmented-control button.is-active,
 .segmented-control button.is-active:hover { color: var(--accent); border-color: transparent; background: color-mix(in srgb, var(--accent) 20%, transparent); }
 
@@ -378,15 +379,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   border: 1px solid transparent;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
 }
-.preview-cool { background: #0a0d18; }
-.preview-warm { background: #ffc400; }
-.preview-white { background: #fafaf7; }
-.preview-green { background: #041208; }
-.preview-koala { background: #1c1c1b; }
-.preview-panda { background: #000000; }
-.preview-flamingo { background: #0e0410; }
-.preview-outrangutan { background: #ff6a00; }
-.preview-prepbear { background: #080a14; }
+.preview-cool { background: linear-gradient(135deg, #0a0d18 60%, #5b8df8 60%); }
+.preview-warm { background: linear-gradient(135deg, #0c0a03 60%, #ffc400 60%); }
+.preview-white { background: linear-gradient(135deg, #fafaf7 60%, #e50000 60%); }
+.preview-green { background: linear-gradient(135deg, #041208 60%, #6cd234 60%); }
+.preview-koala { background: linear-gradient(135deg, #1c1c1b 60%, #d4d4d4 60%); }
+.preview-panda { background: linear-gradient(135deg, #000000 60%, #ffffff 60%); }
+.preview-flamingo { background: linear-gradient(135deg, #0e0410 60%, #a560ff 60%); }
+.preview-outrangutan { background: linear-gradient(135deg, #1a1817 60%, #ff6a00 60%); }
+.preview-prepbear { background: linear-gradient(135deg, #080a14 60%, #eeca57 60%); }
 
 .cue-slider-row { display: grid; grid-template-columns: 36px minmax(90px, 1fr) 36px 36px; align-items: center; gap: 7px; }
 .punch-button { color: var(--red); }
@@ -584,4 +585,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .sop-arrange [data-sop-starred="1"]::after{content:'★';color:var(--yellow,#f5b731)}
 
 /* 2026-09-03: the header chip now carries the talent truth line (row, transport, last seen). */
-#connectionStatusText { max-width:min(46vw, 420px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#connectionStatusText { max-width:min(56vw, 420px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Hover help chip (same as the app's .ui-float-tip). */
+.ui-float-tip { position: fixed; z-index: 4000; max-width: min(320px, 80vw); padding: 5px 10px; border-radius: var(--ui-radius-control, 12px); border: 1px solid transparent; background: color-mix(in srgb, var(--s1) 94%, transparent); backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 155%)); -webkit-backdrop-filter: blur(var(--liquid-blur, 26px)) saturate(var(--liquid-saturation, 155%)); color: var(--text); font: 600 12px/1.45 var(--sans); white-space: normal; text-align: left; opacity: 0; transform: translateY(3px); pointer-events: none; transition: opacity .12s var(--ease), transform .12s var(--ease); }
+.ui-float-tip.on { opacity: 1; transform: translateY(0); }
+/* The inspector tabs: one segmented control, like the app's Script Op panel and the Admin Panel. */
+.inspector-tabs { justify-content: stretch; gap: 4px; padding: 4px; border-radius: 12px; background: color-mix(in srgb, var(--s2) 64%, transparent); border: 1px solid transparent; }
+.inspector-tab { flex: 1 1 0; min-width: 0; width: auto; height: 36px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 9px; background: transparent; box-shadow: none; font: 600 12px var(--sans); color: var(--text2); white-space: nowrap; }
+.inspector-tab .sf-symbol { font-size: 15px; flex: none; }
+.inspector-tab .inspector-tab-label { display: inline; overflow: hidden; text-overflow: ellipsis; }
+.inspector-tab:hover:not(:disabled) { transform: none; color: var(--text); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.inspector-tab.is-active, .inspector-tab.is-active:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 20%, var(--s2)); box-shadow: none; }
