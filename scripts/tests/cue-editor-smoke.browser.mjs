@@ -25,10 +25,12 @@ await page.waitForTimeout(1200);
 await page.evaluate(() => loadDemo());
 await page.waitForTimeout(500);
 
-// The table is untouched: department columns, cells with READY and TAKE lines.
-const table = await page.evaluate(() => ({ cols: [...document.querySelectorAll('.rd-head th')].map(t => t.textContent.trim()).filter(Boolean).join('|'), rows: document.querySelectorAll('#rdBody tr.cue-row').length, cell: (() => { const c = document.querySelector('.cue-cell-filled .cue-cell-info'); return c ? [c.querySelector('.cue-on-line')?.textContent.trim(), c.querySelector('.cue-off-line')?.textContent.trim()].join(' / ') : ''; })() }));
+// The table is untouched: department columns, cells with two lines. Each line
+// carries the department's own word as a chip (2026-10-16): the first filled
+// cell in the demo is audio, so STANDBY then GO, never a bare READY/TAKE.
+const table = await page.evaluate(() => ({ cols: [...document.querySelectorAll('.rd-head th')].map(t => t.textContent.trim()).filter(Boolean).join('|'), rows: document.querySelectorAll('#rdBody tr.cue-row').length, cell: (() => { const c = document.querySelector('.cue-cell-filled .cue-cell-info'); if (!c) return ''; const line = sel => { const l = c.querySelector(sel); return l ? [l.querySelector('.cue-word')?.textContent.trim(), l.querySelector('.cue-line-text')?.textContent.trim()].join(' ') : ''; }; return line('.cue-on-line') + ' / ' + line('.cue-off-line'); })() }));
 check('rundown table is 2.2.1: # Name Start/Dur + 6 departments', table.cols === '#|Name|Start / Dur|Video|Audio|Playback|GFX|Lighting|Script' && table.rows === 10, table.cols);
-check('cells still show READY and TAKE lines', /^Ready .+ \/ .+/.test(table.cell || ''), table.cell);
+check('cells show the department word on each line (audio: STANDBY, then GO)', /^STANDBY .+ \/ GO .+/.test(table.cell || ''), table.cell);
 
 // Open an empty video cell: READY/TAKE on top, camera pickers below, no tabs.
 await page.evaluate(() => openCueConfig(beats[3].id, 'video'));
