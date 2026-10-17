@@ -208,8 +208,10 @@ final class ShowLink: ObservableObject {
                         self.streamAliveAt = 0
                         return
                     }
-                    if self.streamNoted && failures == 1 {
-                        self.engine.log.add(.link, "The live line dropped (\(e?.message ?? "lost")). Opening it again; reading five times a second meanwhile.")
+                    if failures == 1 {
+                        self.engine.log.add(.link, self.streamNoted
+                            ? "The live line dropped (\(e?.message ?? "lost")). Opening it again; reading five times a second meanwhile."
+                            : "The live line did not open (\(e?.message ?? "lost")). Trying again; reading five times a second meanwhile.")
                     }
                 }
                 self.streamAliveAt = 0

@@ -36,6 +36,30 @@ final class ListenStreamTests: XCTestCase {
         XCTAssertNil(ListenRequest.problem(in: ["targetChange": ["targetChangeType": "NO_CHANGE"]]))
     }
 
+    func testARefusalInsideAnOpenLineIsARefusal() {
+        // The cloud can say no after the headers are out: HTTP 200, then
+        // one error element. That must read as "do not ask again this way",
+        // not as a dropped line to open again every ten seconds.
+        let text = "[{\"error\":{\"code\":400,\"status\":\"INVALID_ARGUMENT\",\"message\":\"x\"}}]"
+        var parser = ListenStreamParser()
+        let messages = parser.feed(Array(text.utf8))
+        XCTAssertEqual(messages.count, 1)
+        let f = ListenRequest.failure(in: messages[0])
+        XCTAssertEqual(f?.kind, .refused)
+        XCTAssertEqual(f?.message, "x")
+        XCTAssertEqual(ListenRequest.failure(in: ["error": ["code": 401, "message": "Sign in"]])?.kind, .permission)
+        XCTAssertEqual(ListenRequest.failure(in: ["error": ["code": 429, "status": "RESOURCE_EXHAUSTED"]])?.kind, .busy)
+        XCTAssertEqual(ListenRequest.failure(in: ["error": ["code": 503, "status": "UNAVAILABLE", "message": "later"]])?.kind, .other)
+        XCTAssertEqual(ListenRequest.failure(in: ["targetChange": ["targetChangeType": "REMOVE", "cause": ["code": 3, "message": "bad query"]]])?.kind, .refused)
+        XCTAssertEqual(ListenRequest.failure(in: ["targetChange": ["targetChangeType": "REMOVE", "cause": ["code": 14, "message": "gone"]]])?.kind, .other)
+        XCTAssertNil(ListenRequest.failure(in: ["targetChange": ["targetChangeType": "CURRENT"]]))
+        // The same table serves the status line.
+        XCTAssertEqual(ListenRequest.failure(code: 405, status: nil), .refused)
+        XCTAssertEqual(ListenRequest.failure(code: 403, status: nil), .permission)
+        XCTAssertEqual(ListenRequest.failure(code: 404, status: nil), .notFound)
+        XCTAssertEqual(ListenRequest.failure(code: 500, status: nil), .other)
+    }
+
     func testRequestAsksForOneShowAndOnlyItsPlaybackParts() {
         let body = ListenRequest.body(project: "cueola", code: "ABC", fields: ["outrangutan", "fixRequests"])
         let target = body["addTarget"] as? [String: Any]

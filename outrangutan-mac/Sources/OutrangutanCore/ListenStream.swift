@@ -118,6 +118,55 @@ public enum ListenRequest {
         return nil
     }
 
+    /// What kind of failure the cloud reported, so the link knows whether
+    /// another try the same way can help.
+    public enum Failure: Equatable {
+        /// The cloud does not take this request at all. Asking again the
+        /// same way will not help.
+        case refused
+        /// This sign-in may not open the show.
+        case permission
+        /// There is no show with this code.
+        case notFound
+        /// The cloud asked everyone to slow down for a moment.
+        case busy
+        /// Anything else: a dropped line, a server hiccup. Worth another try.
+        case other
+    }
+
+    /// The failure an HTTP status and (when the reply names one) a status
+    /// word like "INVALID_ARGUMENT" mean.
+    public static func failure(code: Int, status: String?) -> Failure {
+        switch (code, status ?? "") {
+        case (401, _), (403, _), (_, "UNAUTHENTICATED"), (_, "PERMISSION_DENIED"): return .permission
+        case (404, _), (_, "NOT_FOUND"): return .notFound
+        case (429, _), (_, "RESOURCE_EXHAUSTED"): return .busy
+        case (400, _), (405, _), (501, _), (_, "INVALID_ARGUMENT"), (_, "UNIMPLEMENTED"): return .refused
+        default: return .other
+        }
+    }
+
+    /// The failure a stream message reports, with the cloud's words. The
+    /// cloud can refuse a request after the line is already open (HTTP 200
+    /// and then one `{"error": {"code": 400, "status": "INVALID_ARGUMENT"}}`
+    /// element), and that refusal counts the same as one in the status
+    /// line. nil when the message is not a failure.
+    public static func failure(in message: [String: Any]) -> (kind: Failure, message: String)? {
+        guard let words = problem(in: message) else { return nil }
+        if let e = message["error"] as? [String: Any] {
+            return (failure(code: (e["code"] as? NSNumber)?.intValue ?? 0, status: e["status"] as? String), words)
+        }
+        // A target the cloud removed carries a gRPC status code, not an HTTP one.
+        let cause = (message["targetChange"] as? [String: Any])?["cause"] as? [String: Any]
+        switch (cause?["code"] as? NSNumber)?.intValue ?? 0 {
+        case 3, 12: return (.refused, words)      // INVALID_ARGUMENT, UNIMPLEMENTED
+        case 5: return (.notFound, words)         // NOT_FOUND
+        case 7, 16: return (.permission, words)   // PERMISSION_DENIED, UNAUTHENTICATED
+        case 8: return (.busy, words)             // RESOURCE_EXHAUSTED
+        default: return (.other, words)
+        }
+    }
+
     /// Firestore's write times ("2026-10-16T18:24:19.123456Z") as a number
     /// of seconds, so two copies of the show can be put in order. nil when
     /// the text is not a time.

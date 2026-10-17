@@ -161,17 +161,24 @@ final class CloudClient: ShowRecordStore {
             for try await b in bytes {
                 if let m = parser.feed(b) { problem = ListenRequest.problem(in: m) ?? problem; break }
             }
-            switch status {
-            case 401, 403: throw CloudError(message: "This sign-in can't open show \(code).", permission: true)
-            case 404: throw CloudError(message: "There is no show with code \(code).", notFound: true)
-            case 429: throw CloudError(message: "The cloud is busy.", busy: true)
-            default: throw CloudError(message: "The cloud said: \(problem)", refused: status == 400 || status == 405 || status == 501)
-            }
+            throw Self.listenError(ListenRequest.failure(code: status, status: nil), problem, code: code)
         }
         for try await b in bytes {
             guard let message = parser.feed(b) else { continue }
-            if let problem = ListenRequest.problem(in: message) { throw CloudError(message: "The cloud said: \(problem)") }
+            // The cloud can say no after the line is open: HTTP 200, then one
+            // error element. That no counts the same as one in the status line.
+            if let f = ListenRequest.failure(in: message) { throw Self.listenError(f.kind, f.message, code: code) }
             onMessage(message)
+        }
+    }
+
+    private static func listenError(_ kind: ListenRequest.Failure, _ problem: String, code: String) -> CloudError {
+        switch kind {
+        case .permission: return CloudError(message: "This sign-in can't open show \(code).", permission: true)
+        case .notFound: return CloudError(message: "There is no show with code \(code).", notFound: true)
+        case .busy: return CloudError(message: "The cloud is busy.", busy: true)
+        case .refused: return CloudError(message: "The cloud said: \(problem)", refused: true)
+        case .other: return CloudError(message: "The cloud said: \(problem)")
         }
     }
 
