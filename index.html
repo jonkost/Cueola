@@ -40,7 +40,7 @@
   --ui-label:var(--text);--ui-label-secondary:var(--text2);--ui-label-tertiary:var(--text3);
   --ui-fill:var(--s1);--ui-fill-secondary:var(--s2);--ui-separator:var(--border);
   --ui-control-height:40px;--ui-control-height-compact:34px;--ui-hit-target:44px;
-  --ui-radius-control:12px;--ui-radius-group:16px;--ui-radius-panel:22px;
+  --ui-radius-control:12px;--ui-radius-control-compact:9px;--ui-radius-group:16px;--ui-radius-panel:22px;
   /* framecheck layered glass: diagonal body gradient + horizontal sheen (theme-tinted via color-mix) */
   --liquid-fill:linear-gradient(145deg,color-mix(in srgb,var(--s2) 60%,transparent),color-mix(in srgb,var(--s1) 42%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 7%,transparent),color-mix(in srgb,#fff 2%,transparent));
   --liquid-fill-strong:linear-gradient(145deg,color-mix(in srgb,var(--s2) 88%,transparent),color-mix(in srgb,var(--s1) 64%,transparent)),linear-gradient(90deg,color-mix(in srgb,#fff 10%,transparent),color-mix(in srgb,#fff 3%,transparent));
@@ -174,7 +174,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
    never wraps, so it reads as a tidy single-line label, HIG-style. */
 .ec-pill{align-self:flex-start;display:inline-flex;align-items:center;width:auto;max-width:100%;white-space:nowrap;font-size:11.5px;font-family:var(--sans);font-weight:700;letter-spacing:.05em;padding:4px 10px;border-radius:999px;margin-top:4px;text-transform:uppercase;line-height:1}
 .ec-actions{align-self:flex-start;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
-.ec-mini-btn{border:1px solid transparent;background:color-mix(in srgb,var(--oc,var(--accent)) 14%,transparent);color:var(--oc,var(--accent));border-radius:999px;padding:3px 10px;font-size:12px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
+.ec-mini-btn{border:1px solid transparent;background:color-mix(in srgb,var(--oc,var(--accent)) 14%,transparent);color:var(--oc,var(--accent));border-radius:7px;padding:3px 10px;font-size:12px;font-family:var(--sans);font-weight:700;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
 .ec-mini-btn:hover{background:color-mix(in srgb,var(--oc,var(--accent)) 24%,transparent);color:var(--text);transform:translateY(-1px)}
 .inst .ec-pill{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}.stud .ec-pill{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
 .demo .ec-pill{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}.exp .ec-pill{background:color-mix(in srgb,var(--text3) 20%,transparent);color:var(--text3)}
@@ -206,7 +206,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(max-width:900px){.tb-right{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}}
 .tb-right::-webkit-scrollbar{display:none}
 .tb-divider{width:1px;height:24px;background:var(--bord2);flex-shrink:0;opacity:.6;margin:0 2px}
-.tbtn{padding:7px 14px;border-radius:var(--ui-radius-control);font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.tbtn{padding:7px 14px;border-radius:var(--ui-radius-control-compact);font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:transform .12s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease);white-space:nowrap;letter-spacing:0;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
 .tbtn:active{transform:scale(.96)}
 .tbtn:focus:not(:focus-visible){outline:none}
 .tbtn-ghost{background:var(--btn-fill);color:var(--btn-ink);border:var(--btn-hairline)}.tbtn-ghost:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
@@ -439,7 +439,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .empty-rundown{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;color:var(--text2)}
 .empty-rundown-title{font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text)}
 .empty-rundown-sub{font-size:13px;line-height:1.6;max-width:420px;color:var(--text2);text-align:center}
-.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer}
+.empty-rundown-btn{border:none;background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border-radius:var(--ui-radius-control);padding:11px 18px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer}
 .empty-rundown-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 
 /* ── BOT BAR ── */
@@ -687,7 +687,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ui-seg-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:34px;min-width:0;padding:5px 9px;border:none;border-radius:9px;background:transparent;color:var(--text2);font-size:13.5px;font-weight:650;cursor:pointer;white-space:nowrap}
 .ui-seg-btn:hover{color:var(--text)}
 .ui-seg-btn.on{background:var(--accent);color:#fff}
-.ui-stepper{display:inline-flex;align-items:center;background:var(--btn-fill);border:var(--btn-hairline);border-radius:999px;overflow:hidden;flex:none}
+.ui-stepper{display:inline-flex;align-items:center;background:var(--btn-fill);border:var(--btn-hairline);border-radius:var(--ui-radius-control-compact);overflow:hidden;flex:none}
 .ui-step-btn{width:34px;min-height:32px;border:none;background:transparent;color:var(--text);font-size:18px;font-weight:700;cursor:pointer;line-height:1}
 .ui-step-btn:hover{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
 .ui-step-val{min-width:48px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;padding:0 4px}
@@ -974,7 +974,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 /* ── EDIT SHEET ── */
 .edit-sheet{max-height:85vh;overflow-y:auto;padding-bottom:16px}
 .edit-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:14px}
-.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:999px;color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease)}
+.save-btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;border-radius:var(--ui-radius-control);color:#fff;font-size:16px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease)}
 .save-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .save-btn:active{transform:translateY(0) scale(.99);filter:brightness(.96)}
 .del-btn{width:100%;padding:9px;background:color-mix(in srgb,var(--red) 11%,transparent);border:1px solid transparent;border-radius:var(--r);color:var(--red);font-size:14px;font-family:var(--sans);cursor:pointer;transition:all .15s;margin-top:6px}
@@ -1057,9 +1057,17 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .info-pop-learn:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
 .info-pop-learn .sf-symbol{font-size:10px}
 .modal-actions{display:flex;gap:10px;margin-top:6px}
-.modal-actions .btn-secondary{flex:0 0 auto;width:auto;padding:12px 20px}
-.modal-actions .btn-primary{flex:1}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;padding:12px 18px;border-radius:999px;font-size:16px;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease);width:100%}
+/* Buttons that belong together are the same size (Jon's rule): both halves
+   of an action row share the width, Cancel on the left, the default on the right. */
+.modal-actions .btn-secondary{flex:1 1 0;width:auto;min-width:0}
+.modal-actions .btn-primary{flex:1 1 0;width:auto;min-width:0}
+/* Push buttons follow Apple's macOS 27 kit (Jon, 2026-10-16: the kit decides
+   the look): a rounded rectangle whose corner is about a quarter of its
+   height, never a capsule at regular size; the default action filled with the
+   accent, the other gray; both the same height, and the same width when they
+   share a row (Cancel left, default right). Capsules stay for chips, tags and
+   counters only. */
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--acg));color:#fff;border:none;min-height:var(--ui-control-height);padding:10px 18px;border-radius:var(--ui-radius-control);font-size:15px;line-height:1.25;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),filter .15s var(--ease);width:100%}
 .btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .btn-primary:active{transform:translateY(0) scale(.99);filter:brightness(.96)}
 [data-theme="white"] .btn-primary{background:linear-gradient(135deg,#e50000,#b50000);color:#fff}
@@ -1079,7 +1087,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 [data-theme="panda"] :is(.btn-primary,.save-btn,.empty-rundown-btn,.admin-add-btn,.ls-push-btn,.ar-next,.guide-mini-btn.primary,.lrp-cue-btn):hover{filter:brightness(1.2)}
 [data-theme="koala"] .p-avatar.inst,[data-theme="panda"] .p-avatar.inst{background:#4c4c4c;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 [data-theme="koala"] .p-avatar.stud,[data-theme="panda"] .p-avatar.stud{background:#7a7a7a;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.3) inset}
-.btn-secondary{background:var(--btn-fill);border:var(--btn-hairline);color:var(--btn-ink);padding:11px 16px;border-radius:999px;font-size:15px;font-weight:500;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);width:100%}
+.btn-secondary{background:var(--btn-fill);border:var(--btn-hairline);color:var(--btn-ink);min-height:var(--ui-control-height);padding:10px 18px;border-radius:var(--ui-radius-control);font-size:15px;line-height:1.25;font-weight:500;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),border-color .15s var(--ease),color .15s var(--ease),background .15s var(--ease);width:100%}
 .btn-secondary:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .btn-secondary:active{transform:scale(.99)}
 .btn-danger{background:color-mix(in srgb,var(--red) 12%,transparent);border:1px solid transparent;color:var(--red);padding:11px 16px;border-radius:11px;font-size:15px;font-weight:600;letter-spacing:0;font-family:var(--sans);cursor:pointer;transition:transform .12s var(--ease),background .15s var(--ease);width:100%}
@@ -1209,7 +1217,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 
 .admin-in{background:var(--s3);border: 1.5px solid transparent;border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:10px 12px;outline:none;width:100%;transition:border .15s}
 .admin-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}.admin-in::placeholder{color:var(--text3)}
-.admin-add-btn{padding:9px;border-radius:999px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
+.admin-add-btn{padding:9px;border-radius:var(--ui-radius-control-compact);font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
 .admin-add-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .admin-sources-grid{display:flex;flex-direction:column;gap:8px}
 .admin-src-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1796,9 +1804,9 @@ button.pb-roster-row:hover{background:var(--s3)}
    wearing the card surface. Phones already worked this way; every panel
    height gets it now. */
 .pb-compose-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;bottom:-18px;z-index:1;margin:0 -18px -18px;padding:8px 18px 18px;background:color-mix(in srgb,var(--s1) 90%,var(--bg))}
-.pb-attach-add{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
+.pb-attach-add{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:var(--ui-radius-control-compact);padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-attach-add:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
-.pb-post-btn{border:0;background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-radius:999px;padding:8px 20px;font-size:13.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:filter .15s var(--ease);margin-left:auto}
+.pb-post-btn{border:0;background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-radius:var(--ui-radius-control-compact);padding:8px 20px;font-size:13.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:filter .15s var(--ease);margin-left:auto}
 .pb-post-btn:hover{filter:brightness(1.12)}
 .pb-post-btn:disabled{opacity:.55;cursor:default}
 .pb-post-btn.small{padding:7px 13px;font-size:11px;margin-left:0}
@@ -2127,7 +2135,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-editbtns{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .pb-mini-btn{border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);border-radius:7px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
 .pb-mini-btn:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-hover)}
-.pb-mini-btn.save{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-color:transparent;border-radius:999px}
+.pb-mini-btn.save{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg);border-color:transparent;border-radius:var(--ui-radius-control-compact)}
 .pb-edit-hint{font-size:10px;font-family:var(--mono);color:var(--text3)}
 .pb-note-empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--text3);font-size:12.5px;line-height:1.55;max-width:380px;padding:28px 20px}
 .pb-note-empty-ico{font-size:30px}
@@ -3348,7 +3356,7 @@ input.pt-range::-moz-range-thumb{width:20px;height:20px;border-radius:50%;backgr
 /* Post stays a filled accent action (the liquid-glass chip treatment above made
    it read as disabled), and it is the sheet's confirming action, so it wears the
    house capsule like every other primary. */
-.pb-post-btn{border-radius:999px}
+.pb-post-btn{border-radius:var(--ui-radius-control-compact)}
 .tbtn-live{
   background:#e9433a;
   color:#fff;
@@ -4148,7 +4156,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 .plot-flow-btn,.plot-bank-manage-btn,.plot-seg-btn{border:1px solid transparent;background:color-mix(in srgb,var(--s2) 72%,transparent);color:var(--text2);font-weight:700;cursor:pointer;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
 .plot-flow-btn:hover,.plot-bank-manage-btn:hover,.plot-seg-btn:hover{background:color-mix(in srgb,var(--s3) 82%,transparent);color:var(--text)}
 .plot-flow-btn.on,.plot-bank-manage-btn.on,.plot-seg-btn.on{background:linear-gradient(135deg,var(--accent),var(--acg));color:var(--bg)}
-.plot-flow-btn{display:flex;align-items:center;gap:7px;margin-left:auto;padding:7px 14px;border-radius:999px;font-size:12.5px}
+.plot-flow-btn{display:flex;align-items:center;gap:7px;margin-left:auto;padding:7px 14px;border-radius:var(--ui-radius-control-compact);font-size:12.5px}
 .plot-flow-btn.plot-layerset-btn{margin-left:0}
 .plot-flow-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .plot-flow-btn .sf-symbol{font-size:15px}
@@ -4166,7 +4174,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 .plot-flow-ends{font-size:12.5px;color:var(--text);padding:2px 0}
 .plot-flow-ends span{display:inline-block;min-width:44px;font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .plot-layer-seg{display:flex;gap:6px;flex-wrap:wrap;padding-top:2px}
-.plot-seg-btn{padding:5px 10px;border-radius:999px;font-size:11.5px}
+.plot-seg-btn{padding:5px 10px;border-radius:8px;font-size:11.5px}
 /* House rule 8: new controls honor the 44px touch rule via pointer:coarse. */
 @media (pointer:coarse){
   .plot-layer-name{min-height:44px}
@@ -4325,7 +4333,9 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn){transition:transform .15s var(--ease),background .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease),filter .15s var(--ease)}
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn):hover{transform:translateY(-1px)}
 :is(.tbtn,.ls-exit-btn,.fmt-btn,.marker-chip,.ls-pact-btn,.pt-btn,.ls-popout-btn,.ec-mini-btn,.follow-chip,.chip,.cc-chip,.pb-chat-tool,.pb-attach-add,.pb-post-btn):active{transform:scale(.98)}
-.chip,.cc-chip,.admin-act-btn,.admin-src-add,.precheck-jump,.pn-tag-chip,.pn-act-btn,.row-ea-btn{border-radius:999px}
+.chip,.cc-chip,.pn-tag-chip{border-radius:999px}
+/* Push buttons are rounded rectangles (the kit), chips stay capsules. */
+.admin-act-btn,.admin-src-add,.precheck-jump,.pn-act-btn,.row-ea-btn{border-radius:var(--ui-radius-control-compact)}
 
 /* Scale pass: 4-across quick-control grids read cleaner without icons — labels carry them. */
 .ls-sidebar .flow-clock-modes .pt-btn .sf-symbol,
@@ -4334,7 +4344,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 /* 2026-07 UI cohesion pass: less nested chrome, larger circular icon targets,
    and the same action/color language across Cueola, Planda Bear, and Flowmingo. */
 .entry-actions{padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;gap:10px}
-.entry-admin-link{min-height:40px;padding:9px 18px;border-radius:999px;background:color-mix(in srgb,var(--s2) 62%,transparent)}
+.entry-admin-link{min-height:40px;padding:9px 18px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--s2) 62%,transparent)}
 .entry-admin-link .sf-symbol{font-size:18px}
 .tbtn.icon-only,.entry-theme-center .tbtn.icon-only,.entry-notif .tbtn.icon-only{width:42px;height:42px;border-radius:50%;font-size:21px}
 .tbtn.icon-only .sf-symbol,.entry-theme-center .tbtn.icon-only .sf-symbol,.entry-notif .tbtn.icon-only .sf-symbol{font-size:21px}

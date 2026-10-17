@@ -284,7 +284,7 @@ const versionSignature = SHELL_ASSETS
 // on index.html, dashboard.html and script-operator.html; every window reloads.
 // 53->54: the who-is-here pills (Planda Bear and the rundown bar), a
 // page-only change; every window reloads.
-const WORKER_SCHEMA = '54';
+const WORKER_SCHEMA = '55';
 const CACHE_NAME = `cueola-shell-${WORKER_SCHEMA}-${versionSignature || 'dev'}`;
 const CACHE_PREFIX = 'cueola-shell-';
 

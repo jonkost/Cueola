@@ -137,12 +137,16 @@ These make the principles enforceable in this codebase.
 6. **Quiet by default, loud on purpose.** Reserve high-contrast color and motion
    for state that matters live (now/next, warnings, running clock). Loud state
    is sharp: solid fill, rim, opacity pulse. It is never a soft glow or shadow.
-7. **Capsule primaries.** The confirming action in a modal or sheet is a capsule
-   (`border-radius:999px`): `.btn-primary`, `.btn-secondary`, `.save-btn`,
-   dashboard `.btn-full`, and the toolbar's one prominent action (`.tbtn-live`)
-   all follow it, as the entry dock always has. Toolbar utility buttons stay at
-   `--ui-radius-control` (12px); panels use `--ui-radius-group`/`--ui-radius-panel`
-   (16/22px).
+7. **Push buttons follow Apple's macOS 27 kit (Jon, Oct 16 2026).** A push
+   button is a rounded rectangle whose corner is about a quarter of its height:
+   `--ui-radius-control` (12px) at the 40 to 44px size, `--ui-radius-control-compact`
+   (9px) at the 30 to 36px size. Never a capsule at regular size. The default
+   action is filled with the accent, the others are the gray fill, a destructive
+   one is red text on a red tint. Buttons that belong together are the same
+   height, and the same width when they share a row. Capsules are for chips,
+   tags, badges and counters only (`.chip`, `.pb-tag-chip`, `.tbtn-badge`).
+   Panels use `--ui-radius-group`/`--ui-radius-panel` (16/22px). (This replaced
+   the older "capsule primaries" rule.)
 8. **44px is a touch rule, honored via `pointer:coarse`.** Desktop keeps its
    compact menu/toolbar density on purpose (a mac-app idiom: 34 to 40px rows and
    toolbar buttons); the `@media(pointer:coarse)` blocks in index.html and
@@ -159,7 +163,8 @@ These make the principles enforceable in this codebase.
    new page.
 10. **Sheet & alert anatomy.** Cueola's "sheet" is the centered glass `.modal`
     (desktop idiom, no grabber/detents): title, body, then `.modal-actions`
-    with secondary/Cancel leading and ONE capsule primary trailing. At most
+    with secondary/Cancel leading and ONE accent-filled default trailing, the
+    two the same width (the kit's sheet: Cancel left of the default). At most
     three actions, labeled with verbs (Save, Restore, Done, never "OK").
     A casual dismissal (Esc, click-outside) must never destroy unsaved work
     (`data-esc-hold` exists for exactly that). Outrangutan sheets follow the
@@ -285,7 +290,7 @@ That is the owner's standing direction for 2.1+.
 - [ ] No decoration competing with the cues/clock?
 - [ ] Controls carry `data-tip` (plain, sentence case, verb-first), not `title`?
 - [ ] Copy passes the professional checklist (no emoji, no exclamation marks)?
-- [ ] Primary action is a capsule; actions are verb-labeled, ≤3 per alert?
+- [ ] Primary action is the accent-filled rounded rectangle (no capsule), the same size as its partner; actions are verb-labeled, ≤3 per alert?
 - [ ] 44px target on `pointer:coarse` (in or inheriting the coarse block)?
 - [ ] Animations die under `prefers-reduced-motion`?
 - [ ] New spacing/durations use `--sp-*` / `--dur-*` tokens?

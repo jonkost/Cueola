@@ -46,6 +46,15 @@
   Sources are one segmented control, each the same width, icon beside the
   word. The Script Op editor also stops showing a tall empty gap for a row
   with no script: a row with nothing to read is just its heading line.
+- **Push buttons follow Apple's macOS 27 kit.** Every push button is a
+  rounded rectangle now, its corner about a quarter of its height, never a
+  capsule: the Sign in button, every Save, Continue, Cancel and Back in a
+  sheet, the toolbar buttons, the Admin Panel's actions, the dashboard's
+  buttons. The default action is filled with the accent, the others gray, a
+  destructive one red text on red. Two buttons in a row are the same width,
+  Cancel on the left and the default on the right, as the kit's sheets have
+  them. Chips, tags and counters keep their capsules. The design guidelines
+  record the rule.
 
 ### The prompter link stops flashing Recover (Oct 16)
 
