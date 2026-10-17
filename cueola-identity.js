@@ -1509,7 +1509,11 @@
       if (item && item[idFields[i]]) { presentId = String(item[idFields[i]]); break; }
     }
     if (presentId) return Boolean(ids[presentId]);
-    return Boolean(item && item[nameField] && sameName(item[nameField], profile.fullName));
+    if (!item || !item[nameField]) return false;
+    // A to-do can name several people in one field ("Sam Lee, Jo Park").
+    var names = String(item[nameField]).split(',');
+    for (var k = 0; k < names.length; k++) { if (sameName(names[k], profile.fullName)) return true; }
+    return false;
   }
 
   function summarizeSession(code, doc, profile, notesOverride, assignmentSummary) {

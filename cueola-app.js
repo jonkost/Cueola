@@ -7191,7 +7191,7 @@ async function openPersonInfo(name) {
       posts: mine.filter(n => !n.replyTo).length,
       replies: mine.filter(n => n.replyTo).length,
       todosDone: plandaBearNotes.filter(n => n.tag === 'todo' && n.done && n.doneBy && sameParticipantName(n.doneBy, name)).length,
-      todosOpen: plandaBearNotes.filter(n => n.tag === 'todo' && !n.done && n.assignee && sameParticipantName(n.assignee, name)).length,
+      todosOpen: plandaBearNotes.filter(n => n.tag === 'todo' && !n.done && pbAssignedTo(n.assignee, name)).length,
       lastAt: mine.reduce((m, n) => Math.max(m, n.editedAt || n.at || 0), 0),
     };
   } catch {}
@@ -24205,7 +24205,25 @@ function pbRenderNoteFilters(threads) {
 }
 
 /* ── Composer tag picker ── */
-let pbComposerAssignee = '';   // who a new To-Do is assigned to
+let pbComposerAssignees = [];  // who a new To-Do is assigned to: one name or several (Jon, 2026-10-16)
+
+// A To-Do's `assignee` is one string on the note (the rules allow nothing
+// else without a deploy), so several people ride it as "Sam Lee, Jo Park".
+// These three helpers are the only places that know that.
+function pbNoteAssignees(value) {
+  return String(value || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+function pbAssigneesToString(list) {
+  const names = [];
+  (list || []).forEach(n => { const t = String(n || '').trim(); if (t && !names.some(x => sameParticipantName(x, t))) names.push(t); });
+  let out = names.join(', ');
+  // The note field holds 120 characters; keep whole names, drop the rest.
+  while (out.length > 120 && names.length > 1) { names.pop(); out = names.join(', '); }
+  return out;
+}
+function pbAssignedTo(value, name) {
+  return Boolean(name) && pbNoteAssignees(value).some(a => sameParticipantName(a, name));
+}
 let pbComposerChecklist = [];  // [{id,text,done:false}] checklist items staged for a new post
 let pbChecklistOpen = false;   // is the composer's checklist builder revealed
 
@@ -24364,24 +24382,28 @@ function pbRenderComposerTags() {
   if (!slot) return;
   const chips = Object.entries(PB_NOTE_TAGS).map(([k, v]) =>
     `<button type="button" class="pb-tag-chip t-${k}${pbComposerTag === k ? ' on' : ''}" onclick="pbSelectComposerTag('${k}')" data-tip="${k === 'todo' ? 'Post as an action item with a checkbox' : `Tag this note ${v.label}`}">${sfIcon(v.symbol)} ${v.label}</button>`).join('');
+  // Assign: tap one name or several. Nobody picked means Anyone.
   const assign = pbComposerTag === 'todo'
-    ? `<label class="pb-assign-pick" data-tip="Assign this to someone on the show">Assign:
-        <select onchange="pbSetComposerAssignee(this.value)">
-          <option value="">Anyone</option>
-          ${pbAssigneeOptions().map(n => `<option value="${esc(n)}"${pbComposerAssignee === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}
-        </select>
-      </label>`
+    ? `<div class="pb-assign-pick" role="group" aria-label="Assign this to-do" data-tip="Tap everyone this to-do belongs to">
+        <span class="pb-assign-lbl">Assign:</span>
+        ${pbAssigneeOptions().map(n => { const on = pbComposerAssignees.some(a => sameParticipantName(a, n)); return `<button type="button" class="pb-assign-chip${on ? ' on' : ''}" aria-pressed="${on}" onclick="pbToggleComposerAssignee(${esc(JSON.stringify(n))})">${esc(n)}</button>`; }).join('')}
+        <span class="pb-assign-any">${pbComposerAssignees.length ? '' : 'Anyone'}</span>
+      </div>`
     : '';
   slot.innerHTML = chips + assign;
 }
 
-function pbSetComposerAssignee(v) {
-  pbComposerAssignee = v || '';
+function pbToggleComposerAssignee(name) {
+  const n = String(name || '').trim();
+  if (!n) return;
+  const i = pbComposerAssignees.findIndex(a => sameParticipantName(a, n));
+  if (i >= 0) pbComposerAssignees.splice(i, 1); else pbComposerAssignees.push(n);
+  pbRenderComposerTags();
 }
 
 function pbSelectComposerTag(tag) {
   pbComposerTag = PB_NOTE_TAGS[tag] ? tag : 'general';
-  if (pbComposerTag !== 'todo') pbComposerAssignee = '';
+  if (pbComposerTag !== 'todo') pbComposerAssignees = [];
   // Picking To-Do reveals the multi-item checklist builder with a first row ready.
   if (pbComposerTag === 'todo' && !pbChecklistOpen && !pbComposerChecklist.length) {
     pbChecklistOpen = true;
@@ -24585,13 +24607,13 @@ async function publishPlandaBearNote() {
       by: preProActor(),
       role: pbNoteActorRole(),
       tag: pbComposerTag,
-      assignee: pbComposerTag === 'todo' ? pbComposerAssignee : '',
+      assignee: pbComposerTag === 'todo' ? pbAssigneesToString(pbComposerAssignees) : '',
       at: Date.now(),
       clientId: CLIENT_ID,
       avatar: pbMyAvatar(),
       mentions: pbExtractMentions(text),
       // A To-Do's Assign pick fills any checklist item left on Anyone.
-      checklist: pbComposerChecklist.map(it => ({ ...it, assignee: it.assignee || (pbComposerTag === 'todo' ? pbComposerAssignee : '') })),
+      checklist: pbComposerChecklist.map(it => ({ ...it, assignee: it.assignee || (pbComposerTag === 'todo' ? pbAssigneesToString(pbComposerAssignees) : '') })),
       attachments: atts.map(({ fileId, name, type, size, isImage, w, h }) => ({ fileId, name, type, size, isImage, w, h })),
     });
     await pbApplyNoteMutation([...plandaBearNotes, note], { set: note }, pbComposerTag === 'todo' ? 'To-Do Posted' : 'Production Note');
@@ -24599,7 +24621,7 @@ async function publishPlandaBearNote() {
     pbPendingAttachments = [];
     pbRenderAttachTray('main');
     pbComposerTag = 'general';
-    pbComposerAssignee = '';
+    pbComposerAssignees = [];
     pbResetComposerChecklist();
     pbRenderComposerTags();
     try { localStorage.removeItem(productionNoteDraftKey()); } catch {}
@@ -24829,7 +24851,7 @@ function pbChecklistHTML(note) {
     const box = canManage
       ? `<button type="button" class="pb-clitem-check${it.done ? ' done' : ''}" onclick="pbToggleChecklistItem('${note.id}','${it.id}')" data-tip="${it.done ? 'Reopen' : 'Mark done'}" aria-pressed="${it.done}">${it.done ? '✓' : ''}</button>`
       : `<span class="pb-clitem-check static${it.done ? ' done' : ''}">${it.done ? '✓' : ''}</span>`;
-    const mine = !it.done && it.assignee && me && sameParticipantName(it.assignee, me);
+    const mine = !it.done && pbAssignedTo(it.assignee, me);
     const owner = !it.done && it.assignee
       ? `<span class="pb-clitem-assign${mine ? ' mine' : ''}" data-tip="Assigned to">→ ${esc(it.assignee)}</span>` : '';
     const meta = it.done && it.doneBy ? `<span class="pb-clitem-by">${esc(it.doneBy)}</span>` : '';
@@ -24878,10 +24900,16 @@ function pbCollectOpenItems() {
     if (!buckets.has(key)) buckets.set(key, { name: name || 'Unassigned', items: [] });
     buckets.get(key).items.push({ noteId, itemId: itemId || '', text: String(text || '').trim() || 'To-do' });
   };
+  // A to-do assigned to several people lands in each of their buckets.
+  const addEach = (value, noteId, text, itemId) => {
+    const names = pbNoteAssignees(value);
+    if (!names.length) add('', noteId, text, itemId);
+    names.forEach(name => add(name, noteId, text, itemId));
+  };
   for (const n of plandaBearNotes) {
     // A todo-tagged note that carries a checklist delegates to its items.
-    if (n.tag === 'todo' && !n.done && !(n.checklist || []).length) add(n.assignee, n.id, n.text);
-    (n.checklist || []).forEach(it => { if (!it.done) add(it.assignee, n.id, it.text, it.id); });
+    if (n.tag === 'todo' && !n.done && !(n.checklist || []).length) addEach(n.assignee, n.id, n.text);
+    (n.checklist || []).forEach(it => { if (!it.done) addEach(it.assignee, n.id, it.text, it.id); });
   }
   return [...buckets.values()].sort((a, b) => {
     if (a.name === 'Unassigned') return 1;
