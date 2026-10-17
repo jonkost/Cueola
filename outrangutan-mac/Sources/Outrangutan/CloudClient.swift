@@ -56,6 +56,8 @@ final class CloudClient: ShowRecordStore {
     private var idToken: String?
     private var refreshToken: String?
     private var expiresAt = Date.distantPast
+    /// The renewal on its way, while one is.
+    private var renewing: Task<String, Error>?
     /// Sign-ins and writes: eight seconds is plenty for one small request.
     private let http: URLSession
     /// Reads: a read that hangs must not hold the next one up for long.
@@ -196,32 +198,61 @@ final class CloudClient: ShowRecordStore {
         guard let id = reply["idToken"] as? String, let refresh = reply["refreshToken"] as? String else {
             throw CloudError(message: "Sign-in did not finish. Try again.")
         }
-        keep(id: id, refresh: refresh, expiresIn: reply["expiresIn"])
+        keep(id: id, refresh: refresh, seconds: Double(Wire.string(reply["expiresIn"]) ?? "") ?? 3600)
     }
 
     /// Sign-ins last an hour. This renews one a few minutes before it runs out.
+    /// A read, a write and the live line can all ask at the same moment:
+    /// they share one renewal instead of each sending its own.
     private func freshToken() async throws -> String {
         if let idToken, expiresAt.timeIntervalSinceNow > 300 { return idToken }
+        guard refreshToken != nil else { throw CloudError(message: "Sign in first.", permission: true) }
+        if let renewing { return try await renewing.value }
+        let task = Task { try await self.renew() }
+        renewing = task
+        defer { renewing = nil }
+        return try await task.value
+    }
+
+    /// Only a sign-in the server says is finished (it ran out, the account
+    /// is off) ends here. A server hiccup, a 503, or a Wi-Fi sign-on page in
+    /// place of the reply is not the end of the sign-in: the old pass is
+    /// used while it has time left, and the next request tries again.
+    private func renew() async throws -> String {
         guard let refreshToken else { throw CloudError(message: "Sign in first.", permission: true) }
         var request = URLRequest(url: URL(string: "https://securetoken.googleapis.com/v1/token?key=\(CloudConfig.apiKey)")!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         let token = refreshToken.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? refreshToken
         request.httpBody = "grant_type=refresh_token&refresh_token=\(token)".data(using: .utf8)
-        let (data, _) = try await http.data(for: request)
-        let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        guard let id = reply["id_token"] as? String, let refresh = reply["refresh_token"] as? String else {
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await http.data(for: request)
+        } catch {
+            return try stillGood(or: "Can't reach the internet. Check the Wi-Fi.")
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        switch SignInRefresh.verdict(status: status, body: data) {
+        case .renewed(let id, let refresh, let seconds):
+            keep(id: id, refresh: refresh, seconds: seconds)
+            return id
+        case .over:
             signOut()
             throw CloudError(message: "The sign-in ran out. Sign in again.", permission: true)
+        case .hiccup(let why):
+            return try stillGood(or: "The sign-in could not be renewed (\(why)). Trying again.")
         }
-        keep(id: id, refresh: refresh, expiresIn: reply["expires_in"])
-        return id
     }
 
-    private func keep(id: String, refresh: String, expiresIn: Any?) {
+    /// The pass still in hand while it has time left; otherwise the problem.
+    private func stillGood(or problem: String) throws -> String {
+        if let idToken, expiresAt.timeIntervalSinceNow > 0 { return idToken }
+        throw CloudError(message: problem)
+    }
+
+    private func keep(id: String, refresh: String, seconds: Double) {
         idToken = id
         refreshToken = refresh
-        let seconds = Double(Wire.string(expiresIn) ?? "") ?? 3600
         expiresAt = Date().addingTimeInterval(seconds)
     }
 
