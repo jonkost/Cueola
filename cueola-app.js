@@ -5976,9 +5976,13 @@ function maybeStageTestShowDeckLayouts(docData) {
   } catch {}
 }
 
-function goHome() {
+// The brand mark in the top-left corner of every screen (the rundown, Live,
+// Planda Bear, KeyWi Bird) goes to the front page; the back buttons each
+// screen already has stay as they are (Jon, 2026-10-16).
+function goHome(opts = {}) {
   if (!confirmSaveUnsavedPaperwork()) return;
   if (!confirm(session.code && !session.isDemo && !session.isExpert && !session.local ? 'Go back to the home screen? You can join this show again with its code.' : 'Go back to the home screen?')) return;
+  if (opts.closePlandaBear) closePlandaBear();
   leaveSessionForFrontPage();
 }
 

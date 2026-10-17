@@ -3967,7 +3967,8 @@ input.pt-range::-moz-range-thumb,
    lockup gap (text landed 2px INSIDE the icon) and hanging the art into the
    header's bottom edge. Box == art keeps the 16px gap honest. */
 .pb-brand-lockup{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px;min-width:0}
-.pb-brand-mark{width:64px;height:64px;display:grid;place-items:center;color:var(--text);flex:none}
+.pb-brand-mark{width:64px;height:64px;padding:0;display:grid;place-items:center;color:var(--text);flex:none;border-radius:16px}
+.pb-brand-mark:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .pb-brand-mark .brand-ico{width:64px;height:64px}
 .pb-brand-copy{min-width:0}
 .pb-brand-copy .modal-title{display:block}
@@ -4334,7 +4335,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 #entryProfileBtn .pb-note-avatar.pb-av-sm{width:100%;height:100%;font-size:14px}
 .topbar .brand{gap:8px;padding:5px 4px!important}
 .topbar .brand .brand-ico,.ls-brand .brand-ico{width:42px;height:42px;vertical-align:-.42em}
-.ls-brand{display:inline-flex;align-items:center;gap:8px}
+.ls-brand{display:inline-flex;align-items:center;gap:8px;padding:4px 8px 4px 4px;border-radius:10px;font-family:var(--syne);font-size:14px;font-weight:700;color:var(--text)}
+.ls-brand:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 #rundown .topbar #adminBtn,#rundown .topbar .rundown-fullscreen-btn{display:none}
 /* A full rundown bar (instructor rig: Admin, DIRECTOR, crew, OBS/TALK/DECK) must never push
    Go Live off the edge. Above 900px the plain buttons give up label width first; icons stay. */
@@ -5452,7 +5454,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 ══════════════════════════════════════════ -->
 <div class="screen" id="liveshow">
   <div class="ls-bar">
-    <div class="ls-brand"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></div>
+    <button type="button" class="ls-brand u-btn-bare" onclick="goHome()" data-tip="Go to the front page" aria-label="Go to the front page"><svg class="brand-ico" aria-hidden="true"><use href="#ic-cueola"/></svg><span>Cue<span class="brand-hi">ola</span></span> <span class="ls-live">● LIVE</span></button>
     <!-- D12.1 connection truth: persistent per-link status, rendered ONLY from
          the shared link-state model (never from raw heartbeat events). -->
     <div class="ls-links" id="lsLinkStrip" aria-label="Director" role="group">
@@ -7121,6 +7123,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 .sd-rotate-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:12px; border-bottom: 1px solid transparent; }
 .sd-tune-lbl { font-weight:700; font-size:13px; }
 .sd-brand-ico { width:46px; height:46px; border-radius:22.5%; flex:0 0 auto; display:block; }
+.sd-brand-btn { padding:0; display:flex; flex:0 0 auto; }
 .ec-icon img.brand-ico { width:1em; height:1em; object-fit:contain; }
 
 /* ── Shared back-to-Cueola button: the one navigation idiom every app uses ── */
@@ -7505,7 +7508,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <div class="screen" id="streamdeck">
   <div class="sd-head">
     <button class="app-back" onclick="CueolaStreamDeck && CueolaStreamDeck.close()" data-tip="Go back to the front page" aria-label="Back to the front page"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cue<span class="brand-hi">ola</span></span></button>
-    <img class="sd-brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true">
+    <button type="button" class="sd-brand-btn u-btn-bare" onclick="CueolaStreamDeck && CueolaStreamDeck.close()" data-tip="Go to the front page" aria-label="Go to the front page"><img class="sd-brand-ico" src="assets/Brand/KeyWi_icon.svg" alt="" aria-hidden="true"></button>
     <div><h2 class="sd-wordmark">Key<span>Wi Bird</span></h2><div class="sd-sub">Playback &middot; rundown &middot; prompter &middot; OBS &middot; pages</div></div>
     <div class="sd-spacer"></div>
     <span class="sd-livebadge" id="sd-livebadge"></span>
