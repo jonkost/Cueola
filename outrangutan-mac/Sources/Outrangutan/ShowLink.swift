@@ -62,8 +62,13 @@ final class ShowLink: ObservableObject {
     private var pending: [[String]: Any] = [:]
     private var writing = false
     private var writeTroubleShown = false
+    /// When the cloud wrote the last copy the live line delivered (seconds).
+    /// 0 until the line has delivered one.
+    private var streamDeliveredAt: Double = 0
     /// The forced "what is on air" write waiting its turn, while one is.
     private var liveTimer: Timer?
+    /// When the live line was last opened again because a read beat it.
+    private var streamReopenedAt: Double = 0
 
     init(engine: Engine, store: ShowRecordStore? = nil) {
         self.engine = engine
@@ -110,6 +115,7 @@ final class ShowLink: ObservableObject {
         lastApplied = 0
         failingSince = 0
         streamAliveAt = 0
+        streamDeliveredAt = 0
         streamNoted = false
         startPolling()
         startStream()
@@ -151,7 +157,7 @@ final class ShowLink: ObservableObject {
                     guard !Task.isCancelled, self.code == showCode else { return }
                     failures = 0
                     self.failingSince = 0
-                    self.onRecord(doc)
+                    self.onRecord(doc, fromLine: false)
                 } catch {
                     guard !Task.isCancelled else { return }
                     failures += 1
@@ -233,8 +239,24 @@ final class ShowLink: ObservableObject {
         }
         guard let doc = ListenRequest.document(in: message) else { return }
         var fields = FirestoreValue.decodeFields(doc.fields)
-        if let when = doc.updateTime { fields[ShowRecordKeys.updateTime] = when }
-        onRecord(fields)
+        if let when = doc.updateTime {
+            fields[ShowRecordKeys.updateTime] = when
+            if let seconds = ListenRequest.seconds(when) { streamDeliveredAt = max(streamDeliveredAt, seconds) }
+        }
+        onRecord(fields, fromLine: true)
+    }
+
+    /// A read brought a change the live line never did. The line is dead
+    /// without saying so (the Mac moved to another access point, say, and
+    /// the old socket just sits there). Read five times a second again and
+    /// open a new line now, instead of after the old one's long silence.
+    private func reopenStream() {
+        guard streamIsAlive, Self.now - streamReopenedAt > 5000 else { return }
+        streamReopenedAt = Self.now
+        streamAliveAt = 0
+        engine.log.add(.link, "A read brought a change the live line missed. Opening the line again; reading five times a second meanwhile.")
+        streamTask?.cancel()
+        startStream()
     }
 
     private func startHeartbeat() {
@@ -272,7 +294,7 @@ final class ShowLink: ObservableObject {
 
     // MARK: Reading
 
-    private func onRecord(_ doc: [String: Any]) {
+    private func onRecord(_ doc: [String: Any], fromLine: Bool) {
         // Two copies can cross on the way here: a read that started before a
         // change, arriving after the live line already brought the change.
         // An older copy is dropped, or it would run the volume and the
@@ -280,6 +302,9 @@ final class ShowLink: ObservableObject {
         if let when = ListenRequest.seconds(doc[ShowRecordKeys.updateTime] as? String) {
             if when < lastApplied { return }
             lastApplied = when
+            // A read newer than anything the line has delivered means the
+            // line is no longer carrying changes.
+            if !fromLine, streamDeliveredAt > 0, when > streamDeliveredAt { reopenStream() }
         }
         if !joined {
             joined = true
