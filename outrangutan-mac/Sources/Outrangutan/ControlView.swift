@@ -17,6 +17,34 @@ private struct WindowDrop: ViewModifier {
     }
 }
 
+/// Tells when the mouse goes down anywhere over a view, without taking the
+/// click. A SwiftUI gesture on the cue list would stop the list dragging
+/// its rows; an event monitor only watches, and hands every event on.
+private struct ClickWatch: NSViewRepresentable {
+    let onClick: () -> Void
+    func makeNSView(context: Context) -> WatchView { WatchView(onClick: onClick) }
+    func updateNSView(_ view: WatchView, context: Context) { view.onClick = onClick }
+
+    final class WatchView: NSView {
+        var onClick: () -> Void
+        private var monitor: Any?
+        init(onClick: @escaping () -> Void) {
+            self.onClick = onClick
+            super.init(frame: .zero)
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard let self, let window = self.window, event.window === window else { return event }
+                let point = self.convert(event.locationInWindow, from: nil)
+                if self.bounds.contains(point) { self.onClick() }
+                return event
+            }
+        }
+        required init?(coder: NSCoder) { nil }
+        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
+        // The view is only a listener: clicks go through it to the list.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}
+
 /// Files from one drop, gathered as each one loads, in the order dropped.
 private final class DroppedFiles {
     var urls: [URL?]
@@ -414,6 +442,10 @@ struct ControlView: View {
                     .onInsert(of: [.fileURL]) { index, providers in insertFiles(providers, at: index) }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
+                // Any click in the list brings the Inspector back to the
+                // cues, even on the row already picked. (Picking again does
+                // not change the selection, so the binding above stays quiet.)
+                .background(ClickWatch { touchedPads = false })
                 .padding(.horizontal, 10)
                 .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
