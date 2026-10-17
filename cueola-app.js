@@ -1020,6 +1020,7 @@ function takeCue(index, reason, opts = {}) {
 // The one write that moves the room. Carries the legacy activeIdx mirror for
 // windows that have not reloaded onto 3.0 yet.
 function publishLiveTake(patch) {
+  try { gradeNoteTake(patch.idx); } catch {}
   if (!window._firebaseReady || !session.code || session.isDemo || session.isExpert) {
     liveShared.settle(true);
     return Promise.resolve(false);
@@ -3884,7 +3885,7 @@ function renderAdminPanePeople() {
         </div>
         <div class="u-spacer"></div>
         ${isMe ? '<span class="admin-item-you">YOU</span>'
-               : `<div class="admin-item-acts"><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
+               : `<div class="admin-item-acts"><button class="admin-act-btn" onclick="openGradingView(${esc(JSON.stringify(p.name))})" data-tip="Time active and everything they entered, for grading">Grading</button><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
       </div>`;
     }).join('') + `</div>`
     : `<div class="u-note">No one has joined this session yet.</div>`}
@@ -4597,10 +4598,11 @@ function pbAssignRosterTableHTML(groups, opts={}) {
       <span class="pb-roster-name">${esc(g.person)}</span>
       <span class="pb-roster-pos">${g.positions.length ? g.positions.map(p => `<span class="pb-roster-chip pb-roster-assigned">${esc(p)}</span>`).join('') : '<span class="pb-roster-none">No position yet</span>'}</span>
       <span class="pb-roster-paper">${g.paperwork.length ? esc(g.paperwork.join(', ')) : '<span class="pb-roster-none">No paperwork</span>'}</span>
+      ${opts.grade && !pickable ? `<span class="pb-roster-act"><button type="button" class="admin-act-btn pb-roster-grade" onclick="openGradingView(${esc(JSON.stringify(g.person))})" data-tip="Time active and everything they entered, for grading">Grading</button></span>` : ''}
     </${tag}>`;
   };
-  return `<div class="pb-roster-table">
-    <div class="pb-roster-row pb-roster-headrow" aria-hidden="true"><span>Student</span><span>Positions</span><span>Paperwork</span></div>
+  return `<div class="pb-roster-table${opts.grade ? ' has-grade' : ''}">
+    <div class="pb-roster-row pb-roster-headrow" aria-hidden="true"><span>Student</span><span>Positions</span><span>Paperwork</span>${opts.grade ? '<span></span>' : ''}</div>
     ${groups.map(row).join('')}
   </div>`;
 }
@@ -6033,6 +6035,7 @@ function enterRundown() {
 
   renderRundown();
   joinPresence();
+  gradeStartRecording();
   // A .cueola double-clicked before the entry gate imports now that a session
   // exists (small delay so the build screen paints before any replace-confirm).
   if (_pendingLaunchFile) setTimeout(consumePendingLaunchFile, 400);
@@ -6939,6 +6942,7 @@ function syncToFirestore() {
   const currentShow = { name:show.name, start:normalizeTimeValue(show.start), freeMode:freeTextMode };
   const batch = buildRundownBatch(rundownShadowBeats, beats, rundownShadowShow, currentShow);
   if (!rundownBatchHasChanges(batch)) return;
+  try { gradeNoteRundown(batch, rundownShadowBeats); } catch {}
   if (!rundownHistoryReplay) {
     const inverse = buildRundownBatch(beats, rundownShadowBeats, currentShow, rundownShadowShow);
     rememberRundownHistory(batch, inverse);
@@ -6967,6 +6971,7 @@ function syncToFirestore() {
 async function joinPresence() {
   if (!session.code||session.isDemo||session.isExpert||!window._firebaseReady) return;
   pbStartNotesListener();   // hub/notes-only joins never run setupFirestore — this is their live push
+  gradeStartRecording();
   const name = session.role==='instructor' ? session.userName : (session.userName||'?');
   const identity = session.profileId ? {
     profileId: session.profileId,
@@ -7028,6 +7033,7 @@ async function joinPresence() {
 }
 
 async function leavePresence() {
+  gradeStopRecording(true);
   _stopPresenceBeat();
   if (!session.code||!window._firebaseReady) return;
   try { await window._updateDoc(window._doc(window._db,'sessions',session.code),{[`presence.${presenceId}`]:window._deleteField()}); } catch {}
@@ -7225,7 +7231,7 @@ async function openPersonInfo(name) {
   const lastTouch = Math.max(stats.lastAt, lastSave);
 
   body.innerHTML = head + `
-    <div class="pi-sec">Session work</div>
+    <div class="pi-sec pi-sec-row"><span>Session work</span><button type="button" class="admin-act-btn" onclick="hideModal('personInfoModal');openGradingView(${esc(JSON.stringify(name))})" data-tip="Time active and everything they entered, for grading">Grading view</button></div>
     <div class="pi-stats">
       <div class="pi-stat"><b>${stats.posts}</b><span>Notes</span></div>
       <div class="pi-stat"><b>${stats.replies}</b><span>Replies</span></div>
@@ -7236,6 +7242,649 @@ async function openPersonInfo(name) {
     ${sectionLine ? `<div class="pi-sec">Paperwork edited</div><div class="pi-card">${sectionLine}</div>` : ''}
     ${lastTouch ? `<div class="pi-sec">Last contribution</div><div class="pi-card">${esc(pbAgo(lastTouch))}</div>` : (paperworkSaves.length || stats.posts ? '' : `<div class="pi-card u-mt7">No paperwork saves or notes from ${esc(name)} in this session yet.</div>`)}`;
 }
+
+// ─────────────────────────────────────────────────────────────
+// GRADING RECORD + THE ONE-STUDENT GRADING VIEW (Jon, 2026-10-17)
+// ─────────────────────────────────────────────────────────────
+// Every device keeps a light record of its own person's work in the show:
+// one tick per minute they were looking at the app and had typed, clicked or
+// scrolled in the last two minutes, and one entry per thing they entered
+// (which paperwork fields, which rundown cells, which notes and to-dos),
+// buffered so typing across a page makes one entry. The record lives at
+// sessions/{code}/grading/{profileId} (students never read it; an admin
+// reads it in the grading view) and in a copy on this device, which is what
+// the demo shows and what a show whose cloud rules do not carry the record
+// yet falls back to. The "Who worked on what" log stays as it is; its
+// entries now also carry the words for the fields a visit touched.
+// The pure parts (minute math, field words, the merged timeline) live in
+// cueola-grading-model.js.
+const GRADE_TICK_MS = 60000;
+const GRADE_IDLE_MS = 120000;     // no input for this long = not active
+const GRADE_FLUSH_MS = 45000;     // a page's touches become one entry after this quiet spell
+const GRADE_RECORD_SINCE = new Date(2026, 9, 17).getTime();   // the day the app began keeping the record
+let _gradeState = null;           // { code, id, person, record, cloud, tickTimer, pending, flushTimer }
+let _gradeLastInputAt = 0;
+let _gradeInputListening = false;
+const _gradeVisitFields = new Map();   // section -> Set of field words touched this visit (for the activity log)
+let _gradeView = null;            // what the open grading sheet shows (the export reads it)
+
+function gradeModel() { return window.CueolaGradingModel || null; }
+function gradeStorageKey(code, id) { return `cueola_grading_${code || 'LOCAL'}_${id}`; }
+
+function gradeLoadLocalRecord(code, id) {
+  const G = gradeModel();
+  try {
+    const raw = JSON.parse(localStorage.getItem(gradeStorageKey(code, id)) || 'null');
+    return raw && G ? G.normalizeRecord(raw) : null;
+  } catch { return null; }
+}
+
+function gradeSaveLocalRecord() {
+  if (!_gradeState?.record) return;
+  try { localStorage.setItem(gradeStorageKey(_gradeState.code, _gradeState.id), JSON.stringify(_gradeState.record)); } catch {}
+}
+
+function gradeCloudPossible() {
+  return Boolean(window._firebaseReady && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert);
+}
+
+function gradeCloudOn() {
+  return Boolean(_gradeState && _gradeState.cloud !== 'off' && _gradeState.cloud !== 'denied' && gradeCloudPossible());
+}
+
+function gradeDocRef(code, id) {
+  return window._doc(window._db, 'sessions', code, 'grading', id);
+}
+
+function gradeNoteInput() { _gradeLastInputAt = Date.now(); }
+
+// Where this window is right now, as a record key (Call Sheet, Live, ...).
+function gradeWhereNow() {
+  const G = gradeModel();
+  const page = pbOpenPageId();
+  if (page) return 'pb_' + (G ? G.safeKey(page) : page);
+  try { if (typeof isFlowmingoTalentActive === 'function' && isFlowmingoTalentActive()) return 'prompter'; } catch {}
+  if (document.getElementById('liveshow')?.classList.contains('on')) return 'live';
+  if (document.getElementById('rundown')?.classList.contains('on')) return 'rundown';
+  return 'home';
+}
+
+// Starts (or keeps) the record for the person on this device. Safe to call
+// more than once: the same show and person keep the running record.
+function gradeStartRecording() {
+  const G = gradeModel();
+  if (!G) return;
+  const code = session.code || 'LOCAL';
+  const person = {
+    profileId: String(session.profileId || ''),
+    name: String(session.userName || '').trim(),
+    role: session.role === 'instructor' ? 'instructor' : 'student',
+    username: String(session.username || ''),
+  };
+  if (!person.name) return;
+  const id = G.docId(person);
+  if (_gradeState && _gradeState.code === code && _gradeState.id === id) return;
+  gradeStopRecording(true);
+  const record = gradeLoadLocalRecord(code, id) || G.emptyRecord(person);
+  record.name = person.name;
+  record.profileId = person.profileId;
+  record.role = person.role;
+  record.username = person.username;
+  _gradeState = {
+    code, id, person, record,
+    cloud: (session.isDemo || session.isExpert || code === 'LOCAL') ? 'off' : 'unknown',
+    tickTimer: null, pending: new Map(), flushTimer: null,
+  };
+  _gradeLastInputAt = Date.now();
+  if (!_gradeInputListening) {
+    _gradeInputListening = true;
+    ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart'].forEach(type =>
+      document.addEventListener(type, gradeNoteInput, { capture: true, passive: true }));
+  }
+  const P = window.CueolaScriptOperatorProtocol;
+  _gradeState.tickTimer = P?.createSteadyInterval
+    ? P.createSteadyInterval(gradeTick, GRADE_TICK_MS)
+    : { cancel: clearInterval.bind(null, setInterval(gradeTick, GRADE_TICK_MS)) };
+}
+
+function gradeStopRecording(flush = true) {
+  if (!_gradeState) return;
+  if (flush) { try { gradeFlushPending(true); } catch {} }
+  try { _gradeState.tickTimer?.cancel?.(); } catch {}
+  clearTimeout(_gradeState.flushTimer);
+  _gradeState = null;
+  _gradeVisitFields.clear();
+}
+
+// One minute of activity: the window is visible and the person did something
+// in the last two minutes. The ticks list holds each minute once, so two
+// windows of the same person in the same minute count once.
+function gradeTick() {
+  const G = gradeModel();
+  if (!_gradeState || !G) return;
+  if (document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if (now - _gradeLastInputAt > GRADE_IDLE_MS) return;
+  const day = G.dayKey(now);
+  const minute = G.minuteOfDay(now);
+  const where = gradeWhereNow();
+  const rec = _gradeState.record;
+  if (!rec.days[day]) rec.days[day] = { ticks: [], where: {} };
+  const d = rec.days[day];
+  if (d.ticks.includes(minute)) return;   // already counted this minute (another window did)
+  d.ticks.push(minute);
+  d.ticks.sort((a, b) => a - b);
+  d.where[where] = (d.where[where] || 0) + 1;
+  rec.updatedAt = now;
+  gradeSaveLocalRecord();
+  if (!gradeCloudOn()) return;
+  gradeCloudWrite({
+    ...gradeIdentityPatch(now),
+    days: { [day]: { ticks: window._arrayUnion(minute), where: { [where]: window._increment(1) } } },
+  });
+}
+
+// The identity fields every write carries. Empty strings stay off the doc
+// (the rules want a short non-empty string when the key is present).
+function gradeIdentityPatch(now) {
+  const G = gradeModel();
+  const p = _gradeState.person;
+  const patch = { schema: G.SCHEMA, name: p.name, role: p.role, updatedAt: now };
+  if (p.profileId) patch.profileId = p.profileId;
+  if (p.username) patch.username = p.username;
+  return patch;
+}
+
+function gradeCloudWrite(patch) {
+  if (!gradeCloudOn()) return Promise.resolve(false);
+  const state = _gradeState;
+  return window._setDoc(gradeDocRef(state.code, state.id), patch, { merge: true })
+    .then(() => { if (_gradeState === state) state.cloud = 'ok'; return true; })
+    .catch(err => {
+      // Before the rules deploy the write is refused: keep the copy on this
+      // device and stop asking the cloud for this visit.
+      if (_gradeState === state && (err?.code === 'permission-denied' || err?.code === 'invalid-argument')) state.cloud = 'denied';
+      return false;
+    });
+}
+
+// ── Entries: what the person entered ──────────────────────────────────
+// Touches merge into one pending entry per kind + section (+ note id) and
+// become an entry after a quiet spell, or at once for notes and to-dos.
+function gradeNote(kind, section, fields, opts = {}) {
+  const G = gradeModel();
+  if (!_gradeState || !G || pbQuietLook) return;
+  const touch = {
+    kind, section: section || '', page: opts.page || '', ref: opts.ref || '',
+    fields: Array.isArray(fields) ? fields : (fields ? [fields] : []),
+    text: opts.text || '', at: Date.now(),
+  };
+  const key = `${kind}|${touch.section}|${touch.ref}`;
+  _gradeState.pending.set(key, G.mergePending(_gradeState.pending.get(key) || null, touch));
+  if (opts.now) { gradeFlushPending(true); return; }
+  clearTimeout(_gradeState.flushTimer);
+  _gradeState.flushTimer = setTimeout(() => gradeFlushPending(true), GRADE_FLUSH_MS);
+}
+
+function gradeFlushPending(all = false) {
+  const G = gradeModel();
+  if (!_gradeState || !G || !_gradeState.pending.size) return;
+  clearTimeout(_gradeState.flushTimer);
+  _gradeState.flushTimer = null;
+  const now = Date.now();
+  const entries = [];
+  for (const [key, p] of [..._gradeState.pending]) {
+    if (!all && now - p.at < GRADE_FLUSH_MS) continue;
+    const entry = G.entryFromPending(p);
+    if (entry) entries.push(entry);
+    _gradeState.pending.delete(key);
+  }
+  if (!entries.length) return;
+  const rec = _gradeState.record;
+  rec.entries = G.trimEntries(rec.entries.concat(entries)).entries;
+  rec.updatedAt = now;
+  gradeSaveLocalRecord();
+  if (!gradeCloudOn()) return;
+  gradeCloudWrite({ ...gradeIdentityPatch(now), entries: window._arrayUnion(...entries) });
+}
+
+// The words for the input a student typed in, read off the page.
+function gradeFieldWords(el) {
+  const G = gradeModel();
+  if (!G || !el || typeof el.closest !== 'function') return '';
+  const ds = el.dataset || {};
+  let rowIndex = -1;
+  if (ds.callField) { const row = el.closest('.call-person-row'); rowIndex = row ? Number(row.dataset.idx) : -1; }
+  else if (ds.patchField) rowIndex = Number(ds.patchRow);
+  else if (ds.psField) rowIndex = Number(ds.psRow);
+  let label = '';
+  const field = el.closest('.field');
+  const lbl = field?.querySelector('.field-lbl');
+  if (lbl) label = lbl.textContent || '';
+  else if (el.id) { try { label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.textContent || ''; } catch {} }
+  return G.describeField({
+    id: el.id || '',
+    label,
+    ariaLabel: el.getAttribute('aria-label') || '',
+    placeholder: el.getAttribute('placeholder') || '',
+    callField: ds.callField || '',
+    patchField: ds.patchField || '',
+    patchKind: ds.patchKind || '',
+    psField: ds.psField || '',
+    spPpe: ds.spPpe !== undefined ? Number(ds.spPpe) : undefined,
+    rowIndex: Number.isFinite(rowIndex) ? rowIndex : -1,
+  });
+}
+
+function gradeRememberVisitField(section, label) {
+  if (!section || !label) return;
+  if (!_gradeVisitFields.has(section)) _gradeVisitFields.set(section, new Set());
+  _gradeVisitFields.get(section).add(label);
+}
+
+// The field words for the "Who worked on what" entry a page visit writes.
+function gradeTakeVisitFields(section) {
+  const G = gradeModel();
+  const set = _gradeVisitFields.get(section);
+  if (!set || !set.size) return [];
+  const out = [...set].slice(0, G ? G.LOG_FIELDS_CAP : 12);
+  _gradeVisitFields.delete(section);
+  return out;
+}
+
+// Which paperwork page an input belongs to (the editor it sits in), so a
+// change that lands as that page closes is still filed under it.
+const GRADE_EDITOR_PAGES = { preProModal: 'call-sheet', productionScheduleModal: 'production-scheduler', safetyPlanModal: 'safety-plan', patchSheetModal: 'patch', stagePlotModal: 'stage-plot' };
+function gradePageForElement(el) {
+  const modal = el?.closest?.('.modal-wrap');
+  const page = modal ? GRADE_EDITOR_PAGES[modal.id] : '';
+  if (page === 'patch') return (typeof activePatchKind !== 'undefined' && activePatchKind === 'video') ? 'video-patch' : 'audio-comms-patch';
+  return page || '';
+}
+function gradeIsEditorPage(page) {
+  return ['call-sheet', 'production-scheduler', 'safety-plan', 'video-patch', 'audio-comms-patch', 'stage-plot'].includes(page);
+}
+
+// A paperwork input changed (the autosave listeners call this).
+function gradeTouchField(el) {
+  if (!_gradeState) return;
+  const page = gradePageForElement(el) || pbOpenPageId();
+  if (!gradeIsEditorPage(page)) return;
+  const label = gradeFieldWords(el);
+  if (!label) return;
+  const section = PB_PAGE_LABELS[page] || page;
+  gradeRememberVisitField(section, label);
+  gradeNote('paperwork', section, [label], { page });
+}
+
+// A click-only edit on the open page (a venue pick, an N/A, a plot drag).
+function gradeNotePaperworkPage(label) {
+  if (!_gradeState) return;
+  const page = pbOpenPageId();
+  if (!gradeIsEditorPage(page)) return;
+  const section = PB_PAGE_LABELS[page] || page;
+  if (label) gradeRememberVisitField(section, label);
+  gradeNote('paperwork', section, label ? [label] : [], { page });
+}
+
+// A saved rundown batch: which rows and cells changed.
+function gradeNoteRundown(batch, before) {
+  const G = gradeModel();
+  if (!_gradeState || !G) return;
+  const labels = G.rundownChangeLabels(batch, beats, before);
+  if (labels.length) gradeNote('rundown', 'Rundown', labels, { page: 'rundown' });
+}
+
+// A TAKE this window called as the director.
+function gradeNoteTake(idx) {
+  if (!_gradeState || !Number.isFinite(idx) || idx < 0) return;
+  const beat = beats[idx];
+  const name = String(beat?.info || '').trim();
+  gradeNote('live', 'Live', [`TAKE row ${idx + 1}${name ? ` "${name.slice(0, 40)}"` : ''}`], { page: 'live' });
+}
+
+// A production-notes board change, before it is applied (so the previous
+// state of a checklist is still in plandaBearNotes).
+function gradeNoteFromMutation(change, intended, section) {
+  if (!_gradeState || !change) return;
+  const snippet = t => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (change.set) {
+    const n = change.set;
+    if (n.replyTo) gradeNote('reply', 'Production Notes', [], { text: snippet(n.text), ref: n.id, now: true });
+    else gradeNote(n.tag === 'todo' ? 'todo' : 'note', 'Production Notes', [], { text: snippet(n.text), ref: n.id, now: true });
+    return;
+  }
+  if (change.patch) {
+    const f = change.patch.fields || {};
+    const id = change.patch.id;
+    const after = (intended || []).find(n => n.id === id);
+    if ('done' in f) {
+      if (f.done) gradeNote('todo-done', 'Production Notes', [], { text: snippet(after?.text), ref: id, now: true });
+      return;
+    }
+    if (Array.isArray(f.checklist)) {
+      const before = (plandaBearNotes || []).find(n => n.id === id);
+      const was = new Map((before?.checklist || []).map(it => [it.id, Boolean(it.done)]));
+      const me = preProActor();
+      f.checklist.forEach(it => {
+        if (it?.done && !was.get(it.id) && sameParticipantName(it.doneBy, me)) {
+          gradeNote('checklist', 'Production Notes', after?.text ? [`On: ${snippet(after.text).slice(0, 60)}`] : [], { text: snippet(it.text), ref: `${id}:${it.id}`, now: true });
+        }
+      });
+      return;
+    }
+    if ('text' in f && section === 'Production Note Edited') {
+      gradeNote('note-edit', 'Production Notes', [], { text: snippet(f.text), ref: id, now: true });
+    }
+    return;
+  }
+  if (change.remove && change.remove.length) {
+    const first = (plandaBearNotes || []).find(n => n.id === change.remove[0]);
+    gradeNote('note-removed', 'Production Notes', [], { text: snippet(first?.text), ref: change.remove[0], now: true });
+  }
+}
+
+// ── The grading view: one student at a time ─────────────────────────────
+// Everyone the show knows about, students first.
+function gradeRoster() {
+  const now = Date.now();
+  const map = new Map();
+  const add = (name, extra = {}) => {
+    const key = participantNameKey(name);
+    if (!key) return;
+    const cur = map.get(key) || { name: String(name).trim(), role: 'student', profileId: '', username: '', online: false, positions: [] };
+    if (extra.role === 'instructor') cur.role = 'instructor';
+    if (extra.profileId && !cur.profileId) cur.profileId = extra.profileId;
+    if (extra.username && !cur.username) cur.username = extra.username;
+    if (extra.online) cur.online = true;
+    if (extra.avatar && !cur.avatar) cur.avatar = extra.avatar;
+    if (extra.position && !cur.positions.includes(extra.position)) cur.positions.push(extra.position);
+    map.set(key, cur);
+  };
+  Object.values(currentPresence || {}).forEach(p => {
+    if (p?.name) add(p.name, { role: p.role, profileId: p.profileId, username: p.username, avatar: p.avatar, online: now - (p.lastSeen || 0) < 90000 });
+  });
+  (sessionParticipantRecords || []).forEach(p => {
+    const name = typeof p === 'string' ? p : p?.name;
+    if (name) add(name, { role: p?.role, profileId: p?.profileId, username: p?.username, avatar: p?.avatar });
+  });
+  try { getRoleAssignments().forEach(r => { if (r?.person) add(r.person, { profileId: r.profileId, position: r.position }); }); } catch {}
+  (Array.isArray(plandaBearNotes) ? plandaBearNotes : []).forEach(n => { if (n?.by) add(n.by, { role: n.role }); });
+  (Array.isArray(sessionSnapshotLatestDoc?.preProActivity) ? sessionSnapshotLatestDoc.preProActivity : []).forEach(e => { if (e?.by) add(e.by); });
+  if (session.userName) add(session.userName, { role: session.role, profileId: session.profileId, username: session.username });
+  return [...map.values()].sort((a, b) => (a.role === 'instructor') - (b.role === 'instructor') || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function gradeMergeRecords(a, b) {
+  const G = gradeModel();
+  const out = G.normalizeRecord(a);
+  const other = G.normalizeRecord(b);
+  Object.entries(other.days).forEach(([key, day]) => {
+    if (!out.days[key]) { out.days[key] = { ticks: day.ticks.slice(), where: { ...day.where } }; return; }
+    const ticks = new Set(out.days[key].ticks);
+    day.ticks.forEach(t => ticks.add(t));
+    out.days[key].ticks = [...ticks].sort((x, y) => x - y);
+    Object.entries(day.where).forEach(([w, n]) => { out.days[key].where[w] = Math.max(out.days[key].where[w] || 0, n); });
+  });
+  const seen = new Set(out.entries.map(e => `${e.at}|${e.kind}|${e.section}`));
+  other.entries.forEach(e => { const k = `${e.at}|${e.kind}|${e.section}`; if (!seen.has(k)) { seen.add(k); out.entries.push(e); } });
+  out.entries.sort((x, y) => x.at - y.at);
+  out.updatedAt = Math.max(out.updatedAt, other.updatedAt);
+  return out;
+}
+
+async function gradeCollect(person) {
+  const G = gradeModel();
+  const id = G.docId(person);
+  const code = session.code || 'LOCAL';
+  const cloud = gradeCloudPossible();
+  const out = { id, record: null, recordSource: 'none', cloudState: cloud ? 'ok' : 'off', log: [], notes: [] };
+  if (cloud) {
+    try {
+      const snap = await window._getDoc(gradeDocRef(code, id));
+      if (snap.exists()) { out.record = G.normalizeRecord(snap.data()); out.recordSource = 'cloud'; }
+    } catch (err) {
+      out.cloudState = err?.code === 'permission-denied' ? 'denied' : 'error';
+    }
+  }
+  // The copy on this device: the demo, or the person on this very device.
+  const local = gradeLoadLocalRecord(code, id);
+  if (local && (!cloud || _gradeState?.id === id || !out.record)) {
+    if (out.record) { out.record = gradeMergeRecords(out.record, local); out.recordSource = 'cloud'; }
+    else { out.record = local; out.recordSource = 'device'; }
+  }
+  // A full record is trimmed by the admin who reads it (students never read
+  // their own, so they cannot trim).
+  if (cloud && out.recordSource === 'cloud' && out.record && out.record.entries.length > G.ENTRY_CAP) {
+    const t = G.trimEntries(out.record.entries);
+    out.record.entries = t.entries;
+    window._setDoc(gradeDocRef(code, id), { entries: t.entries, trimmedAt: Date.now() }, { merge: true }).catch(() => {});
+  }
+  if (cloud) {
+    try {
+      let doc = sessionSnapshotLatestDoc && Array.isArray(sessionSnapshotLatestDoc.preProActivity) ? sessionSnapshotLatestDoc : null;
+      if (!doc) { const snap = await window._getDoc(window._doc(window._db, 'sessions', code)); doc = snap.exists() ? snap.data() : null; }
+      let log = Array.isArray(doc?.preProActivity) ? doc.preProActivity.slice() : [];
+      if (groupActive()) {
+        const groupSnap = await window._getDoc(preProDocRef());
+        const groupLog = groupSnap.exists() && Array.isArray(groupSnap.data().preProActivity) ? groupSnap.data().preProActivity : [];
+        const entryKey = e => `${e?.at}|${e?.section}|${e?.by}|${e?.clientId}`;
+        const seen = new Set(log.map(entryKey));
+        log = log.concat(groupLog.filter(e => !seen.has(entryKey(e))));
+      }
+      out.log = log;
+    } catch {}
+  }
+  try { await loadPlandaBearNotes(); out.notes = Array.isArray(plandaBearNotes) ? plandaBearNotes : []; } catch { out.notes = []; }
+  let rows = [];
+  try { rows = getRoleAssignments().filter(r => sameParticipantName(r.person, person.name)); } catch {}
+  out.positions = cleanUniqueStrings(rows.map(r => r.position));
+  out.paperwork = cleanUniqueStrings(rows.flatMap(r => r.paperwork || []));
+  const recordEntries = out.record ? out.record.entries : [];
+  out.timeline = G.mergeTimeline(recordEntries, G.entriesFromActivityLog(out.log, person.name), G.entriesFromNotes(out.notes, person.name));
+  out.summary = G.summary(out.timeline, out.record ? out.record.days : {});
+  out.byDay = G.groupByDay(out.timeline);
+  return out;
+}
+
+function gradeFmtDay(date) {
+  if (!date) return '';
+  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+function gradeFmtTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function gradeFmtDateTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} ${gradeFmtTime(ts)}`;
+}
+
+// Words for where the record came from and what it cannot show.
+function gradeRecordNote(view) {
+  const since = new Date(GRADE_RECORD_SINCE).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+  const bits = [];
+  if (view.cloudState === 'off') bits.push(session.isDemo ? 'Demo show: the record is kept on this device only.' : 'No show code: the record is kept on this device only.');
+  else if (view.cloudState === 'denied') bits.push('The show\'s cloud settings do not include the activity record yet, so only this device\'s copy can show. Ask Jon to deploy the grading rules.');
+  else if (view.cloudState === 'error') bits.push('The cloud record could not be read just now. Try again in a moment.');
+  if (!view.record) bits.push(`No activity record for ${view.person.name} yet. The app began keeping this record on ${since}; nothing before that date is recorded.`);
+  else if (view.recordSource === 'device') bits.push('Minutes and entries come from this device\'s copy of the record.');
+  else bits.push(`Minutes and entries come from ${view.person.name}'s own devices. The app began keeping this record on ${since}; nothing before that date is recorded.`);
+  if (view.log.length || view.notes.length) bits.push('Paperwork visits from the show\'s "Who worked on what" log and the production notes board are included too.');
+  return bits.join(' ');
+}
+
+function gradingHeadHTML(person, roster) {
+  const av = pbNormalizeAvatar(person.avatar);
+  const art = av && av.type !== 'initials';
+  const isInst = person.role === 'instructor';
+  const options = roster.map(p => `<option value="${esc(p.name)}"${sameParticipantName(p.name, person.name) ? ' selected' : ''}>${esc(p.name)}${p.role === 'instructor' ? ' (instructor)' : ''}</option>`).join('');
+  return `
+    <div class="pi-head gv-head">
+      <div class="pi-ava ${isInst ? 'inst' : 'stud'}${art ? ' has-art' : ''}"${art ? ` style="background:${pbAvatarBg({ by: person.name, clientId: person.profileId || person.name, avatar: av })}"` : ''}>${art ? pbAvatarInner({ by: person.name, avatar: av }) : esc(pbInitials(person.name))}</div>
+      <div>
+        <div class="pi-name">${esc(person.name)}</div>
+        <div class="pi-sub">
+          <span class="pi-role ${isInst ? 'inst' : 'stud'}">${isInst ? 'INSTRUCTOR' : 'STUDENT'}</span>
+          <span class="pi-live ${person.online ? 'on' : ''}"><span class="dot"></span>${person.online ? 'Online now' : 'Not connected'}</span>
+          ${person.username ? `<span>@${esc(person.username)}</span>` : ''}
+        </div>
+      </div>
+      <label class="gv-pick"><span class="field-lbl">Student</span><select class="field-in" id="gradingStudent" onchange="gradingPick(this.value)" aria-label="Pick a student">${options}</select></label>
+    </div>`;
+}
+
+function gradingBodyHTML(view) {
+  const G = gradeModel();
+  const s = view.summary;
+  const posLine = view.positions.length ? view.positions.map(p => `<span class="admin-src-chip">${esc(p)}</span>`).join('') : '<span class="gv-dim">No position yet</span>';
+  const paperLine = view.paperwork.length ? `<div class="gv-dim u-mt4">Paperwork: ${esc(view.paperwork.join(', '))}</div>` : '';
+  const tiles = `
+    <div class="pi-stats gv-stats">
+      <div class="pi-stat"><b>${esc(G.formatMinutes(s.minutes))}</b><span>Active</span></div>
+      <div class="pi-stat"><b>${s.daysActive}</b><span>Days</span></div>
+      <div class="pi-stat"><b>${s.fieldsTouched}</b><span>Fields</span></div>
+      <div class="pi-stat"><b>${s.rundownChanges}</b><span>Rundown edits</span></div>
+      <div class="pi-stat"><b>${s.notes + s.replies}</b><span>Notes</span></div>
+      <div class="pi-stat"><b>${s.todosDone + s.checklistDone}</b><span>To-dos done</span></div>
+    </div>`;
+  const days = s.days.filter(d => d.minutes > 0);
+  const timeRows = days.length ? `<div class="gv-scroll">
+    <table class="gv-table">
+      <thead><tr><th>Day</th><th>First</th><th>Last</th><th>Active</th><th>Sittings</th><th>Where</th></tr></thead>
+      <tbody>${days.map(d => `<tr>
+        <td>${esc(gradeFmtDay(d.date))}</td>
+        <td>${esc(gradeFmtTime(d.first))}</td>
+        <td>${esc(gradeFmtTime(d.last))}</td>
+        <td><b>${esc(G.formatMinutes(d.minutes))}</b></td>
+        <td>${d.sittings.map(x => `${esc(gradeFmtTime(x.from))} to ${esc(gradeFmtTime(x.to))}`).join('<br>')}</td>
+        <td>${d.where.map(w => `${esc(w.label)} ${w.minutes}`).join('<br>')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : `<div class="pi-card">No minutes recorded yet.</div>`;
+  const entryRow = e => {
+    const what = e.fields.length ? e.fields.map(f => esc(f)).join(', ') : (e.text ? '' : (e.kind === 'paperwork' ? 'Edited the page' : ''));
+    return `<div class="gv-row">
+      <span class="gv-time">${esc(gradeFmtTime(e.at))}</span>
+      <span class="gv-kind k-${esc(e.kind)}">${esc(G.kindLabel(e.kind))}</span>
+      <span class="gv-what"><b>${esc(e.section || '')}</b>${what ? `<span class="gv-fields">${what}</span>` : ''}${e.text ? `<span class="gv-text">${esc(e.text)}</span>` : ''}</span>
+    </div>`;
+  };
+  const entries = view.byDay.length
+    ? view.byDay.map(g => `<div class="gv-day">${esc(gradeFmtDay(g.date))} · ${g.entries.length} ${g.entries.length === 1 ? 'entry' : 'entries'}</div>${g.entries.map(entryRow).join('')}`).join('')
+    : `<div class="pi-card">Nothing entered yet.</div>`;
+  return `
+    <div class="pi-sec">Summary</div>
+    ${tiles}
+    <div class="pi-card u-mt7"><div class="pi-chips gv-chips">${posLine}</div>${paperLine}</div>
+    <div class="gv-note u-mt7">${esc(gradeRecordNote(view))}</div>
+    <div class="pi-sec">Time active</div>
+    ${timeRows}
+    <div class="pi-sec">What they entered</div>
+    ${entries}`;
+}
+
+async function openGradingView(name) {
+  if (!adminSession) { toast('Log in as admin to open the grading view.'); return; }
+  const G = gradeModel();
+  const body = document.getElementById('gradingBody');
+  const actions = document.getElementById('gradingActions');
+  if (!body || !actions || !G) return;
+  // Count the admin's own record in too, up to this moment.
+  try { gradeFlushPending(true); } catch {}
+  const roster = gradeRoster();
+  const person = roster.find(p => sameParticipantName(p.name, name))
+    || (name ? { name: String(name).trim(), role: 'student', profileId: '', username: '', online: false, positions: [] } : roster[0]);
+  if (!person) { toast('No one has joined this show yet.'); return; }
+  const closeBtn = `<button class="btn-primary" onclick="hideModal('gradingModal')">Close</button>`;
+  _gradeView = { person, roster, loading: true };
+  body.innerHTML = gradingHeadHTML(person, roster) + `<div class="pi-card u-mt7">Loading ${esc(person.name)}'s record…</div>`;
+  actions.innerHTML = `<button class="btn-secondary" disabled>Print or PDF</button>${closeBtn}`;
+  if (!document.getElementById('gradingModal')?.classList.contains('on')) showModal('gradingModal');
+  let data;
+  try { data = await gradeCollect(person); }
+  catch (err) {
+    containError('Grading view', err);
+    body.innerHTML = gradingHeadHTML(person, roster) + `<div class="pi-card u-mt7">The record could not be read. Try again in a moment.</div>`;
+    return;
+  }
+  if (_gradeView?.person !== person) return;   // the admin picked someone else meanwhile
+  _gradeView = { person, roster, ...data };
+  body.innerHTML = gradingHeadHTML(person, roster) + gradingBodyHTML(_gradeView);
+  actions.innerHTML = `<button class="btn-secondary" onclick="gradingExportPDF()" data-tip="One printable page per student, for grading">Print or PDF</button>${closeBtn}`;
+}
+
+function gradingPick(name) { openGradingView(name); }
+
+// The printable one-student page: the same summary, days and entries.
+function gradingPrintHTML(view) {
+  const G = gradeModel();
+  const s = view.summary;
+  const days = s.days.filter(d => d.minutes > 0);
+  const cell = v => `<td>${esc(v == null ? '' : String(v))}</td>`;
+  const summaryRows = [
+    ['Student', view.person.name + (view.person.username ? ` (@${view.person.username})` : '')],
+    ['Positions', view.positions.length ? view.positions.join(', ') : 'No position yet'],
+    ['Paperwork assigned', view.paperwork.length ? view.paperwork.join(', ') : 'None'],
+    ['Time active', `${G.formatMinutes(s.minutes)} over ${s.daysActive} ${s.daysActive === 1 ? 'day' : 'days'}`],
+    ['Fields touched', String(s.fieldsTouched)],
+    ['Rundown edits', String(s.rundownChanges)],
+    ['Takes called', String(s.takes)],
+    ['Notes posted', `${s.notes} notes, ${s.replies} replies`],
+    ['To-dos', `${s.todosPosted} posted, ${s.todosDone} done, ${s.checklistDone} checklist items done`],
+  ].map(([k, v]) => `<tr><th>${esc(k)}</th>${cell(v)}</tr>`).join('');
+  const dayRows = days.length ? days.map(d => `<tr>${cell(gradeFmtDay(d.date))}${cell(gradeFmtTime(d.first))}${cell(gradeFmtTime(d.last))}${cell(G.formatMinutes(d.minutes))}${cell(d.sittings.map(x => `${gradeFmtTime(x.from)} to ${gradeFmtTime(x.to)}`).join('; '))}${cell(d.where.map(w => `${w.label} ${w.minutes}`).join('; '))}</tr>`).join('')
+    : '<tr><td colspan="6">No minutes recorded.</td></tr>';
+  const entryRows = view.timeline.length ? view.timeline.map(e => {
+    const detail = [e.fields.join(', '), e.text].filter(Boolean).join(' · ') || (e.kind === 'paperwork' ? 'Edited the page' : '');
+    return `<tr>${cell(gradeFmtDateTime(e.at))}${cell(G.kindLabel(e.kind))}${cell(e.section)}${cell(detail)}</tr>`;
+  }).join('') : '<tr><td colspan="4">Nothing entered.</td></tr>';
+  return `<section data-paper-section-label="${esc('Student work: ' + view.person.name)}">
+    <h1 class="psec-h">Student work: ${esc(view.person.name)}</h1>
+    <table><tbody>${summaryRows}</tbody></table>
+    <p class="cue-muted">${esc(gradeRecordNote(view))}</p>
+    <h2>Time active</h2>
+    <table><thead><tr><th>Day</th><th>First</th><th>Last</th><th>Active</th><th>Sittings</th><th>Where</th></tr></thead><tbody>${dayRows}</tbody></table>
+    <h2>What they entered</h2>
+    <table><thead><tr><th>When</th><th>What</th><th>Section</th><th>Details</th></tr></thead><tbody>${entryRows}</tbody></table>
+  </section>`;
+}
+
+async function gradingExportPDF() {
+  const view = _gradeView;
+  if (!view || view.loading || !view.summary) { toast('The record is still loading.'); return; }
+  const html = gradingPrintHTML(view);
+  const name = String(view.person.name || 'student');
+  const clean = `${(show.name || 'cueola').replace(/[^\w\-]+/g, '-')}-${name.replace(/[^\w\-]+/g, '-')}`.replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'cueola-student';
+  const stamp = new Date();
+  const options = {
+    orientation: 'portrait',
+    allowMixedOrientation: false,
+    exportMeta: {
+      productionName: show.name || 'Cueola',
+      productionCode: session.code || (session.isDemo ? 'DEMO' : 'LOCAL'),
+      documentTitle: `Student work · ${name}`,
+      exportedAt: stamp.toISOString(),
+      sourceLabel: 'Activity record from the show',
+      revisionLabel: stamp.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+      draftLabel: '',
+    },
+  };
+  try {
+    const result = await exportPaperHTMLAsPDF(html, `${clean}-student-work.pdf`, options);
+    toast(`Student work PDF downloaded · ${result.pageCount} page${result.pageCount === 1 ? '' : 's'}.`);
+  } catch (error) {
+    if (error?.code === 'export-cancelled') { toast('Export canceled.'); return; }
+    try {
+      const result = await printPaperHTML(html, options);
+      toast(`Could not make the PDF here, so the print window opened (${result.pageCount} page${result.pageCount === 1 ? '' : 's'}).`, 4200);
+    } catch (printError) {
+      toast(`Could not build the page: ${printError?.message || 'unknown error'}`);
+    }
+  }
+}
+
+window.addEventListener('pagehide', () => { try { gradeFlushPending(true); } catch {} });
 
 window.addEventListener('beforeunload', leavePresence);
 window.addEventListener('pagehide', () => {
@@ -21703,7 +22352,7 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps
     });
   }
   if (section && !_pbSuppressActivity && !pbQuietLook && window._arrayUnion) {
-    const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+    const entry = gradeActivityEntry(section);
     // A group trims against its own log, never the whole-class one.
     window._updateDoc(ref, { preProActivity: preProActivityValue(entry, grouped ? (_pbGroupActivityLog || []) : undefined) })
       .catch(err => (grouped && err?.code === 'not-found')
@@ -21711,6 +22360,15 @@ function syncPreProToFirestore(changed={}, section, updatedAt=Date.now(), stamps
         : Promise.reject(err))
       .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
   }
+}
+
+// One "Who worked on what" entry, with the words for the fields this visit
+// touched (the grading view lists them; older entries have none).
+function gradeActivityEntry(section) {
+  const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+  const fields = gradeTakeVisitFields(section);
+  if (fields.length) entry.fields = fields;
+  return entry;
 }
 
 function pbLeafPathSafe(dotted) {
@@ -21765,7 +22423,7 @@ function syncPreProLeavesToFirestore(diff, section, now = Date.now()) {
     });
   }
   if (section && !_pbSuppressActivity && !pbQuietLook && window._arrayUnion) {
-    const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+    const entry = gradeActivityEntry(section);
     const grouped = groupActive();
     // A group trims against its own log, and a group's first save may come
     // before its doc exists (same fallback as the older writer).
@@ -22489,6 +23147,7 @@ function pbInitCollabListeners() {
     });
     const queuePaperworkAutosave = e => {
       if (!pbIsAutosaveField(e.target)) return;
+      if (!['pp-call-sheet-select', 'pp-plot-select', 'plot-snap-toggle'].includes(e.target.id)) { try { gradeTouchField(e.target); } catch {} }
       const guardKey = pbAutosaveGuardKey(e.target);
       if (guardKey) pbNoteLocalEdit(guardKey);
       const wasEdited = _pbEditedThisVisit;
@@ -22510,6 +23169,7 @@ function pbInitCollabListeners() {
 function pbQueuePaperworkAutosave() {
   paperworkDirty = true;
   _pbEditedThisVisit = true;
+  try { gradeNotePaperworkPage(); } catch {}
   clearTimeout(_pbFieldSaveTimer);
   _pbFieldSaveTimer = setTimeout(() => {
     _pbFieldSaveTimer = null;
@@ -22799,7 +23459,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   // Presence heartbeats repaint this card on every session snapshot; when
   // nothing it renders from actually changed, skip the innerHTML teardown.
   let fp;
-  try { fp = stableStringify(['roster', session.code, canEdit, noCode, pbRosterView, groups, rows.map(r => [r.profileId, r.person, r.paperworkIds])]); } catch (e) { fp = 'x' + Date.now(); }
+  try { fp = stableStringify(['roster', session.code, canEdit, noCode, Boolean(adminSession), pbRosterView, groups, rows.map(r => [r.profileId, r.person, r.paperworkIds])]); } catch (e) { fp = 'x' + Date.now(); }
   if (!opts.force && fp === _pbAssignCardFp && wrap.firstChild) return;
   _pbAssignCardFp = fp;
   const editBtn = canEdit
@@ -22813,7 +23473,7 @@ function renderPlandaBearAssignmentsCard(opts={}) {
   const body = noCode
     ? `<div class="u-note">No show code. Open Planda Bear with a show code to see and assign positions.</div>`
     : byPaperwork ? (pbAssignCoverageHTML(rows, { title:false }) || '<div class="u-note">No paperwork on this show yet.</div>')
-    : pbAssignRosterTableHTML(groups);
+    : pbAssignRosterTableHTML(groups, { grade: Boolean(adminSession) });
   wrap.innerHTML = `<div class="pb-assign-card pb-roster-card">
     <div class="pb-assign-title">${sfIcon('content.checklist')} ${byPaperwork ? 'Paperwork and who has it' : 'Students and positions'}${views}${editBtn}</div>
     ${body}
@@ -23436,7 +24096,7 @@ async function writePlandaBearNotes(notes, activitySection='Production Note') {
 
 function pbNotesActivity(section) {
   if (!section || pbQuietLook || !window._arrayUnion || !pbNotesCloudSession()) return;
-  const entry = { section, by: preProActor(), clientId: CLIENT_ID, at: Date.now() };
+  const entry = gradeActivityEntry(section);
   window._updateDoc(window._doc(window._db, 'sessions', session.code), { preProActivity: preProActivityValue(entry) })
     .catch(err => reportCloudWriteFailure('Planda Bear activity save', err));
 }
@@ -23452,6 +24112,7 @@ function pbNotesActivity(section) {
  * through the old transaction, so the operator's action never gets lost. */
 async function pbApplyNoteMutation(next, change, activitySection) {
   const intended = next.map(normalizePlandaBearNote).filter(pbNoteHasContent);
+  try { gradeNoteFromMutation(change, intended, activitySection); } catch {}
   if (pbNotesMode !== 'sub' || !pbNotesCloudSession()) {
     return writePlandaBearNotes(intended, activitySection);
   }
@@ -26251,6 +26912,7 @@ async function renderPlandaBearHubActivity() {
         <span class="s">${esc(e.section||'Planda Bear')}</span>
         <span class="b" data-tip="${esc(e.by||'Unknown')}">by ${esc(e.by||'Unknown')}</span>
         <span class="w">${pbAgo(e.at)}</span>
+        ${Array.isArray(e.fields) && e.fields.length ? `<span class="f">${esc(e.fields.join(', '))}</span>` : ''}
       </div>`).join('')}
     </div>
   </div>`;
@@ -26265,6 +26927,7 @@ function openPaperworkItem(id) {
   }
   activePaperworkItemId = id;
   _pbEditedThisVisit = false;   // a fresh visit: nothing edited yet
+  _gradeVisitFields.delete(PB_PAGE_LABELS[id] || id);
   pbSetPresencePage(id);   // tell the room which page I'm on
   if (id === 'call-sheet') return openPrePro();
   if (id === 'production-scheduler') return openProductionSchedule();
@@ -27602,6 +28265,7 @@ function queueStagePlotAutosave() {
   _plotPendingSave = true;
   if (activeStagePlotId) _plotDirtyIds.add(activeStagePlotId);
   pbNoteLocalEdit('pp-plot-canvas');
+  try { gradeNotePaperworkPage('Stage plot drawing'); } catch {}
   clearTimeout(_pbFieldSaveTimer);
   _pbFieldSaveTimer = setTimeout(() => {
     _pbFieldSaveTimer = null;

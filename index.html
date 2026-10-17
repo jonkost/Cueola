@@ -1697,6 +1697,50 @@ button.pb-roster-row:hover{background:var(--s3)}
 .pi-stat b{display:block;font-size:19px;color:var(--text);font-variant-numeric:tabular-nums}
 .pi-stat span{font-size:9px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
 .pi-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.pi-sec-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pi-sec-row .admin-act-btn{text-transform:none;letter-spacing:0;font-family:var(--sans)}
+/* Grading view: one student at a time (admins only) */
+.grading-modal{max-width:860px;max-height:min(92vh,1000px)}
+.gv-body{overflow:auto;min-height:0;padding-right:2px;overscroll-behavior:contain}
+.gv-head{flex-wrap:wrap}
+.gv-pick{margin-left:auto;display:flex;flex-direction:column;gap:4px;min-width:200px}
+.gv-pick .field-lbl{margin:0}
+.gv-pick .field-in{min-height:34px;padding:6px 10px}
+.gv-stats{grid-template-columns:repeat(6,1fr)}
+.gv-stats .pi-stat b{font-size:17px}
+.gv-chips{margin-top:0}
+.gv-dim{color:var(--text3);font-size:12px}
+.gv-note{font-size:11.5px;color:var(--text3);line-height:1.5}
+.gv-scroll{overflow-x:auto;border-radius:10px;overscroll-behavior-x:contain}
+.gv-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;color:var(--text2);background:color-mix(in srgb,var(--s2) 80%,transparent);border-radius:10px;overflow:hidden}
+.gv-table th{text-align:left;font-size:10px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3);font-weight:600;padding:8px 10px 4px}
+.gv-table td{padding:7px 10px;vertical-align:top;border-top:1px solid color-mix(in srgb,var(--text) 6%,transparent);line-height:1.45}
+.gv-table td b{color:var(--text);font-variant-numeric:tabular-nums}
+.gv-day{font-size:10.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin:12px 0 5px}
+.gv-row{display:grid;grid-template-columns:64px 118px minmax(0,1fr);gap:10px;align-items:start;padding:7px 10px;border-radius:9px;background:color-mix(in srgb,var(--s2) 80%,transparent);margin-bottom:4px}
+.gv-time{font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap;padding-top:3px;font-variant-numeric:tabular-nums}
+.gv-kind{display:inline-block;padding:3px 8px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);max-width:118px;overflow:hidden;text-overflow:ellipsis}
+.gv-kind.k-rundown{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.gv-kind.k-live{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.gv-kind.k-note,.gv-kind.k-reply,.gv-kind.k-note-edit,.gv-kind.k-note-removed,.gv-kind.k-todo{background:color-mix(in srgb,var(--cyan) 14%,transparent);color:var(--cyan)}
+.gv-kind.k-todo-done,.gv-kind.k-checklist{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.gv-kind.k-assignment{background:color-mix(in srgb,var(--purple) 14%,transparent);color:var(--purple)}
+.gv-what{min-width:0;font-size:12.5px;line-height:1.45;color:var(--text2)}
+.gv-what b{color:var(--text);display:block}
+.gv-fields{display:block;color:var(--text2)}
+.gv-text{display:block;color:var(--text2);font-style:italic}
+.pb-roster-table.has-grade .pb-roster-row{grid-template-columns:minmax(120px,.9fr) minmax(0,1fr) minmax(0,1.3fr) auto}
+.pb-roster-act{display:flex;justify-content:flex-end}
+.pb-roster-grade{padding:5px 10px;font-size:11.5px}
+.pb-hub-row .f{grid-column:1/-1;font-size:11px;color:var(--text3);line-height:1.4}
+@media (max-width:640px){
+  .gv-stats{grid-template-columns:repeat(3,1fr)}
+  .gv-row{grid-template-columns:56px minmax(0,1fr)}
+  .gv-what{grid-column:1/-1}
+  .gv-pick{margin-left:0;min-width:0;width:100%}
+  .pb-roster-table.has-grade .pb-roster-row{grid-template-columns:1fr}
+  .pb-roster-act{justify-content:flex-start}
+}
 /* ── Production Notes — shared discussion board ── */
 #productionNotesModal .modal{height:92vh;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;gap:14px}
 .pb-board{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;border: 1px solid transparent;border-radius:14px;background:color-mix(in srgb,var(--s1) 72%,transparent);overflow:hidden}
@@ -6649,6 +6693,13 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="modal-actions" id="personInfoActions"></div>
   </div>
 </div>
+<!-- Grading view: an admin looks at one student's time and work in the show. -->
+<div class="modal-wrap" id="gradingModal">
+  <div class="modal grading-modal" aria-label="Grading view">
+    <div id="gradingBody" class="gv-body"></div>
+    <div class="modal-actions" id="gradingActions"></div>
+  </div>
+</div>
 <div class="pb-lightbox" id="pbLightbox" onclick="pbCloseLightbox()">
   <button type="button" class="pb-lightbox-close" onclick="event.stopPropagation();pbCloseLightbox()" data-tip="Close (Esc)" aria-label="Close image preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
   <img id="pbLightboxImg" alt="Attachment preview">
@@ -7646,6 +7697,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="break-room-show.js?v=0d8b8b324b"></script>
 <script src="cueola-export-model.js?v=bf11137a90"></script>
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
+<script src="cueola-grading-model.js?v=200ac91a4e"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=930ad6c900"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
@@ -7660,7 +7712,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=018c16fb80"></script>
+<script src="cueola-app.js?v=32428222bd"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=48990ed663"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

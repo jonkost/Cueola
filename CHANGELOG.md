@@ -2,6 +2,39 @@
 
 ## Next release (not pushed yet)
 
+### Grading view: one student at a time
+
+- **One student, one sheet.** An admin opens a student's grading view from
+  the person card (click their badge, then Grading view), from the Admin
+  Panel's People tab (Grading beside Remove), or from the Students and
+  positions card on the Planda Bear hub (a Grading button on each row). A
+  Student menu at the top switches to another student without closing.
+- **How long they were active.** The app now keeps a light activity record
+  per person: one tick for every minute they were looking at the app and had
+  typed, clicked or scrolled in the last two minutes. The view shows the
+  total and, for each day, first seen, last seen, minutes active, the
+  sittings (gaps of ten minutes or more split them), and where the minutes
+  went (Call Sheet, Rundown, Live, and so on). Two windows of the same person
+  in the same minute count once. The record began on Oct 17, 2026; the view
+  says so, and never guesses at earlier shows.
+- **Exactly what they entered, with times.** Every paperwork field a student
+  types in is named in the words on the page ("Call Sheet: Production, Shoot
+  Date, Crew row 3: Name"), every rundown save names its rows and cells
+  ("Row 2 "Weather": Video cue, Audio cue"), every TAKE a student director
+  calls is listed, and notes, replies, to-dos they posted or finished and
+  checklist items they checked off come from the notes board. Typing across
+  a page makes one entry, not one per keystroke.
+- **A summary at the top:** minutes active, days, fields touched, rundown
+  edits, notes, to-dos done, and the student's positions and paperwork.
+- **Print or PDF** makes a one-student page in the same style as the other
+  paperwork exports.
+- **The "Who worked on what" log stays**, and its entries now also carry
+  the words for the fields that visit touched, under the row.
+- **Only admins can open the view.** Students never see each other's
+  record. The cloud record needs a rules deploy
+  (docs/rules-additive-2026-10-17-grading.rules); until then each device
+  keeps its own copy and the view says so.
+
 ### Outrangutan for Mac: what the Oct 16 show asked for
 
 - **Faster GO.** The cue standing by is loaded ahead, like a pro deck: the
