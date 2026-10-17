@@ -162,7 +162,9 @@ final class Deck {
     }
 
     private func prime(_ item: AVPlayerItem, from: Double) {
-        guard player.currentItem === item, readyWatch != nil else { return }
+        // Only while the cue still stands by: a "ready" that lands after GO
+        // must not seek a cue that is already rolling on air.
+        guard player.currentItem === item, readyWatch != nil, isPreloaded else { return }
         readyWatch = nil
         let roll: () -> Void = { [weak self] in
             guard let self, self.player.currentItem === item, self.isPreloaded else { return }
@@ -203,14 +205,23 @@ final class Deck {
     /// show left off.
     func start(at offset: Double? = nil) {
         guard let cue else { return }
-        guard listening else { startWhenListening = { [weak self] in self?.start(at: offset) }; return }
         let from = max(cue.trimIn, offset ?? 0)
-        lane.ring.flush()
         // A preloaded deck already sits on its in point: seeking again would
         // throw away the frames it decoded ahead.
         let here = player.currentTime().seconds
         let positioned = isPreloaded && here.isFinite && abs(here - from) < 0.002
+        // Fired: the load-ahead is over, ready or not. Settled before any
+        // wait for the listener, so a "ready" that lands late cannot seek a
+        // rolling cue back to its in point, and a deck waiting for its
+        // listener counts as on air, not as free for the next standby.
         preloadKey = nil
+        readyWatch = nil
+        guard listening else { startWhenListening = { [weak self] in self?.roll(from: from, positioned: positioned) }; return }
+        roll(from: from, positioned: positioned)
+    }
+
+    private func roll(from: Double, positioned: Bool) {
+        lane.ring.flush()
         if from > 0 && !positioned {
             player.seek(to: CMTime(seconds: from, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
@@ -222,6 +233,8 @@ final class Deck {
     }
 
     func rewindAndPlay() {
+        preloadKey = nil
+        readyWatch = nil
         guard listening else { startWhenListening = { [weak self] in self?.rewindAndPlay() }; return }
         lane.ring.flush()
         let from = cue?.trimIn ?? 0
@@ -1454,7 +1467,7 @@ final class Engine: ObservableObject {
             let key = preloadKey(cue, device: device, viaLane: viaLane)
             readEnvelope(cue)
             // The other lane's loaded cue, if any, no longer stands by.
-            (picture ? soundDecks : videoDecks).forEach { if $0.isPreloaded { unprepare($0); $0.clear() } }
+            (picture ? soundDecks : videoDecks).forEach { if $0.isPreloaded && !onAir($0) { unprepare($0); $0.clear() } }
             stillReady = nil
             if decks.contains(where: { $0.preloadKey == key }) { return }
             // A free deck: not on air, and empty or holding an older load.
@@ -1486,7 +1499,10 @@ final class Engine: ObservableObject {
         }
     }
 
-    private func dropDeckPreloads() { (videoDecks + soundDecks).forEach { if $0.isPreloaded { unprepare($0); $0.clear() } } }
+    /// Drops every load-ahead. A deck on air is never one, whatever its key
+    /// says (it was fired and may still be waiting for its listener).
+    private func dropDeckPreloads() { (videoDecks + soundDecks).forEach { if $0.isPreloaded && !onAir($0) { unprepare($0); $0.clear() } } }
+    private func onAir(_ d: Deck) -> Bool { d === pictureDeck || d === soundDeck }
 
     /// Takes a preloaded deck's player back off the layers it was handed to.
     private func unprepare(_ d: Deck) {

@@ -119,6 +119,24 @@ extension TestSnapshot {
                 engine.allStop()
             }),
             (0.3, {
+                // GO on a video the moment it is loaded ahead, before its
+                // listener is on, then a still standing by: the load-ahead
+                // for the still must not clear the deck that is on air.
+                engine.audio.cueFirstChannel = 2
+                engine.openOutput()
+                engine.standbyID = engine.cues[2].id
+                engine.preloadStandby()
+                engine.go()
+                note("j GO on a video before its listener is on: \(engine.soundRoutes)")
+                engine.standbyID = engine.cues[3].id
+                engine.preloadStandby()
+                note("j2 a still standing by at once: loaded ahead: \(engine.preloadState)")
+            }),
+            (1.0, {
+                note("j3 a second on: status=\(engine.status.rawValue) showing \(engine.outputsShowing()); \(engine.soundRoutes)")
+                engine.allStop()
+            }),
+            (0.3, {
                 // The Sound settings, with channels 3 and 4 picked on a Mac
                 // whose speakers only have 1 and 2.
                 engine.audio.cueFirstChannel = 2

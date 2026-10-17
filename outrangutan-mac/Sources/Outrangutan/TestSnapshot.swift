@@ -542,8 +542,49 @@ enum TestSnapshot {
                 }),
             ]
         }
+        // A scroll through the list (a held arrow key, a dial spin): twenty
+        // standby moves, as fast as the app takes them, must open one file,
+        // the cue the scroll lands on.
+        var loadsBefore = 0
+        var scrollBegan: CFTimeInterval = 0
+        var scrollEnded: CFTimeInterval = 0
+        var offsets: [Double] = []
+        var sampler: Timer?
         steps += [
-            (0.5, { engine.standbyID = engine.cues[1].id }),
+            (0.5, {
+                loadsBefore = engine.deckLoads
+                scrollBegan = CACurrentMediaTime()
+                for i in 0..<20 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.02) {
+                        engine.standbyID = engine.cues[i % 2 == 0 ? 0 : 2].id   // ends on C
+                        scrollEnded = CACurrentMediaTime()
+                    }
+                }
+            }),
+            (1.5, {
+                note("c4 twenty standby moves over \(Int((scrollEnded - scrollBegan) * 1000)) ms: files opened \(engine.deckLoads - loadsBefore) (must be 1); standing by \(engine.standbyCue?.name ?? "-"); loaded ahead: \(engine.preloadState)")
+                // GO the moment after a trimmed cue starts loading ahead,
+                // before its file is ready: the clip must start at its in
+                // point and never jump back to it once it is rolling.
+                engine.standbyID = engine.cues[0].id
+                engine.preloadStandby()
+                offsets = []
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                    note("c5 GO 20 ms into the load-ahead: \(engine.preloadState)")
+                    engine.go()
+                    sampler = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+                        if let off = engine.liveState().offset { offsets.append(off) }
+                    }
+                }
+            }),
+            (1.2, {
+                sampler?.invalidate()
+                let moved = offsets.filter { $0 > 29.9 }
+                let backwards = zip(moved, moved.dropFirst()).filter { $0.1 < $0.0 - 0.001 }.count
+                note("c6 a second on: \(moved.count) samples past the in point, went backwards \(backwards) times (must be 0), from \(String(format: "%.2f", moved.first ?? -1)) to \(String(format: "%.2f", moved.last ?? -1)) s")
+                engine.allStop()
+                engine.standbyID = engine.cues[1].id
+            }),
             (0.8, {
                 note("d a still standing by is read ahead: \(engine.preloadState)")
                 engine.standbyID = engine.cues[3].id
