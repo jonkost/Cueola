@@ -3048,12 +3048,12 @@ const LEARNING_LESSONS = [
       'Open Remote Op and load the same show code as the talent screen.',
       'Confirm the status says ready, then use Play to start talent scrolling.',
       'Use Space for play/pause, hold Down to brake, hold Up to boost, Left/Right for text size, and Option plus Down or Up for direction.',
-      'Use Reset if the talent needs to return to the top.',
-      'Watch for applied acknowledgements. If a command does not ack, check that the talent display is still connected.'
+      'Use Top if the talent needs to return to the top.',
+      'Watch the sent and applied status. If a command is not applied, check that the talent display is still connected.'
     ],
     callouts:[
       ['Control ownership','If Flowmingo Remote Op is active, Script Op pauses its own remote control briefly so operators do not fight each other.'],
-      ['Trouble signal','No talent ack means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its show code.']
+      ['Trouble signal','"The prompter screen did not answer" means the command was sent but the talent screen did not confirm it. Reconnect the talent display or reload its show code.']
     ],
     checks:['I can open Remote Op.','I know the hotkeys.','I know how to read sent versus applied status.'],
     actions:[['Open Remote Op','remote']]
@@ -15734,8 +15734,8 @@ function trackPrompterControl(control, origin='live', quiet=false) {
     delete _pendingPrompterControls[control.controlId];
     pending?.settle?.({ ok:false, acknowledged:false, error:`${label} was sent, but the talent screen did not answer` });
     markPrompterToggleState(control.action, 'failed');
-    if (origin === 'flowop') flowOpSetStatus(`${label} sent · talent did not answer`, true);
-    else markLivePrompterStatus('Talent did not answer', 'busy');
+    if (origin === 'flowop') flowOpSetStatus(`${label} sent · the prompter screen did not answer`, true);
+    else markLivePrompterStatus('The prompter screen did not answer', 'busy');
   }, 5000);
   _pendingPrompterControls[control.controlId] = { action:control.action, origin, waitTimer, failTimer };
 }

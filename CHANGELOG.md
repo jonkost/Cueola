@@ -2,6 +2,45 @@
 
 ## Next release (not pushed yet)
 
+### Prompter screens tidied: a real Settings sheet, one segmented control, plain words (Oct 16)
+
+**The gear opens Settings now.** On the talent screen the gear used to hide
+the whole bar and panel, which read as "the gear does nothing". Now it opens
+a Settings sheet: theme, align, text width, read line, the row chips, the
+clock and question size, the panel size, Hide controls, and the keys list.
+The panel itself is one row of show-time buttons (Play, Top, Reverse, Speed,
+Size, Mirror, Fullscreen, Settings), all the same size. Hidden controls come
+back when the mouse moves or the screen is tapped.
+
+- **Script Op tabs are one segmented control** (Jon asked): Playback, On air,
+  Clocks and Display sit in one rounded group with the icon beside the word,
+  the same as the Admin Panel. The Flowmingo Op and the pop-out match, and
+  the Flowmingo Op's Screen tab folded into Playback like the other two.
+- **Status that shows.** The talent bar's pill is green for READY, amber
+  while linking or unlinked, red when not connected; it never had colors
+  for the first two. The connect card's warnings and check marks read on the
+  Polar Bear theme too.
+- **One name for things.** Flowmingo, Script Op and Flowmingo Op in the copy
+  became "the prompter" and "the prompter controls"; Connect, Link and Load
+  became Link; Reset became Top; To Time became Count to; Tech Difficulty
+  became Tech difficulties; the "ack" wording is gone: the status says "The
+  prompter screen did not answer", and the Trouble signal lesson says the same
+  (that lesson's narration needs re-recording).
+  The pop-out window calls itself Script Op, like the panel it mirrors.
+- **The Flowmingo Op preview follows the talent**: the copy moves so the
+  talent's spot sits on the read line, the read line and width follow the
+  talent's settings, and Cue Now, Cue Next, speed and size numbers arrived.
+- **Pop-out:** Read line and Width controls, hover help that shows, the same
+  theme swatches as the app, a Clear gate that asks for the word CLEAR, and
+  the editor keys in the shortcut sheet.
+- **Touch and keys:** 44 pt buttons and sliders on touch screens, pinch to
+  size the text, a tap brings hidden controls back, Space after a mouse
+  click plays instead of pressing that button again, Esc never leaves the
+  screen, and leaving the screen leaves fullscreen.
+- **Screen readers:** the sheets are real dialogs that take focus and give
+  it back, every slider and code box has a name, pressed buttons say so,
+  hidden controls leave the Tab order, and the time readout stays quiet.
+
 ### The prompter link stops flashing Recover (Oct 16)
 
 **"Recover Flowmingo" kept flashing on show day.** The Live screen judged
