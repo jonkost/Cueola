@@ -75,6 +75,16 @@ final class FakeDeckTransport: DeckTransport {
         onInput?(d)
     }
 
+    /// A finger on the strip: 1 is a tap, 2 a long press, 3 a flick.
+    func touch(zone: Int, gesture: UInt8) {
+        guard let strip = model.strip else { return }
+        var d = [UInt8](repeating: 0, count: 16)
+        d[0] = 0x01; d[1] = 0x02; d[4] = gesture
+        let x = zone * (strip.width / strip.zones) + 10
+        d[6] = UInt8(x & 0xff); d[7] = UInt8((x >> 8) & 0xff)
+        onInput?(d)
+    }
+
     /// Every key's picture laid out as the deck shows it, turned back the
     /// way a person sees it, for looking at the design.
     func sheet() -> NSImage {
@@ -209,6 +219,17 @@ extension TestSnapshot {
             (1.2, {
                 state("l dial 2 pressed (GO)")
                 if let strip = NSImage(data: Data(plus.stripImage)) { save(strip, "deck-plus-strip-onair.png") }
+                engine.allStop()
+            }),
+            (0.5, {
+                plus.touch(zone: 1, gesture: 3)
+                plus.touch(zone: 1, gesture: 2)
+                plus.touch(zone: 0, gesture: 3)
+                note("m a flick and a long press on the standby zone, a flick on VOL: on air \(engine.pictureCue?.name ?? "nothing"), gain \(String(format: "%.2f", engine.masterGain))")
+                plus.touch(zone: 1, gesture: 1)
+            }),
+            (0.8, {
+                state("n a tap on the standby zone (GO)")
                 engine.allStop()
             }),
         ]

@@ -495,8 +495,11 @@ final class StreamDeckController: ObservableObject {
                 if p && !dialPressed[i] { pressDial(i) }
                 dialPressed[i] = p
             }
-        case .touch(let zone, _):
-            // A tap on the volume zone mutes and unmutes; on the standby zone, GO.
+        case .touch(let zone, let gesture):
+            // A tap on the volume zone mutes and unmutes; on the standby zone,
+            // GO. Only a tap: a brush across the strip or a finger resting on
+            // it must not fire a cue.
+            guard gesture == "tap" else { break }
             if zone == 0 { toggleMute() } else if zone == 1 { engine.run(from: "Stream Deck") { engine.go() } }
         case .unknown:
             break
