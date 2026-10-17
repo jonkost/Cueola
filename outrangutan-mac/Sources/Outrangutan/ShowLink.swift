@@ -376,7 +376,9 @@ final class ShowLink: ObservableObject {
     private func publishPlayingStart(_ cue: Cue, seconds: Double) {
         guard joined, let id = cue.wireID else { return }
         let live = engine.liveState()
-        let elapsed = live.cueId == id ? (live.offset ?? 0) * 1000 : 0
+        // The player's clock counts from the start of the file; the clip
+        // starts at its trim-in point, so the time played is measured from there.
+        let elapsed = live.cueId == id ? max(0, (live.offset ?? 0) - cue.trimIn) * 1000 : 0
         startSeq += 1
         let now = Self.now
         queueWrite([["outrangutan", "playingStart"]: [
