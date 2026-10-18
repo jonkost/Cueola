@@ -501,6 +501,9 @@ enum TestSnapshot {
                 }
             }
         }
+        // Every round's times, loaded ahead (b) and not (c), judged at the end.
+        var bFirst: [Double] = [], bMoving: [Double] = [], cFirst: [Double] = [], cMoving: [Double] = []
+        var bReady = 0
         func report(_ label: String) {
             let ms = firstFrame.map { String(format: "%.0f ms", $0 * 1000) } ?? "never (3 s)"
             let mv = moving.map { String(format: "%.0f ms", $0 * 1000) } ?? "never"
@@ -508,6 +511,8 @@ enum TestSnapshot {
             note("   frames per quarter second: " + frames.prefix(8).map(String.init).joined(separator: " "))
             note("   on air at \(String(format: "%.2f", engine.liveState().offset ?? -1)) s into the file, 3.0 s after GO")
         }
+        func median(_ v: [Double]) -> Double { let s = v.sorted(); return s.isEmpty ? 3 : s[s.count / 2] }
+        func ms(_ v: Double) -> String { String(format: "%.0f ms", v * 1000) }
         var steps: Steps = [
             (1.0, {
                 engine.replaceShow(cues: [a, still, b, sound], pads: [], banks: [], multiTrigger: nil)
@@ -518,15 +523,31 @@ enum TestSnapshot {
         for i in 1...3 {
             steps += [
                 (1.5, {
-                    if i == 1 { note("a standing by, loaded ahead: \(engine.preloadState); first frame already on the output, hidden: \(engine.monitor.preparedAndReady(.a))") }
-                    startWatch()
-                    engine.go()
+                    // GO only once the cue is really loaded ahead (up to 3 s),
+                    // so each b round measures a loaded start, not a cold one.
+                    let began = CACurrentMediaTime()
+                    @MainActor func goWhenReady() {
+                        let ready = engine.preloadState.contains("ready")
+                        if !ready && CACurrentMediaTime() - began < 3.0 {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { goWhenReady() }
+                            return
+                        }
+                        if ready { bReady += 1 }
+                        let waited = Int((CACurrentMediaTime() - began) * 1000)
+                        note("a\(i) standing by, loaded ahead: \(engine.preloadState) (waited \(waited) ms); first frame already on the output, hidden: \(engine.monitor.preparedAndReady(.a))")
+                        startWatch()
+                        engine.go()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            report("b\(i) GO on a cue loaded ahead (trim in 30 s)")
+                            bFirst.append(firstFrame ?? 3); bMoving.append(moving ?? 3)
+                            engine.allStop()
+                            engine.standbyID = engine.cues[0].id
+                        }
+                    }
+                    goWhenReady()
                 }),
-                (3.0, {
-                    report("b\(i) GO on a cue loaded ahead (trim in 30 s)")
-                    engine.allStop()
-                    engine.standbyID = engine.cues[0].id
-                }),
+                // The wait for ready (3 s at most) plus the 3 s on air.
+                (6.2, {}),
             ]
         }
         for i in 1...3 {
@@ -537,11 +558,24 @@ enum TestSnapshot {
                 }),
                 (3.0, {
                     report("c\(i) GO on a cue NOT loaded ahead")
+                    cFirst.append(firstFrame ?? 3); cMoving.append(moving ?? 3)
                     engine.allStop()
                     engine.standbyID = engine.cues[0].id
                 }),
             ]
         }
+        steps += [
+            (0.1, {
+                // The whole point of loading ahead: a loaded start shows its
+                // first frame well under 150 ms and gets moving sooner than
+                // a cold one, every time. (The first frame alone is close
+                // between the two: a cold start of an untrimmed clip shows
+                // its first frame fast too. Moving is where it tells.)
+                let bf = median(bFirst), bm = median(bMoving), cf = median(cFirst), cm = median(cMoving)
+                let ok = bf < 0.150 && bm < cm && bReady == 3
+                note("c0 loaded ahead beats cold start: first frame \(ms(bf)) vs \(ms(cf)), moving \(ms(bm)) vs \(ms(cm)) (loaded under 150 ms and moving sooner), ready at GO \(bReady)/3: \(ok ? "PASS" : "FAIL")")
+            }),
+        ]
         // A scroll through the list (a held arrow key, a dial spin): twenty
         // standby moves, as fast as the app takes them, must open one file,
         // the cue the scroll lands on.
