@@ -742,6 +742,10 @@ enum TestSnapshot {
                     "by": "Test Director", "sender": "flowmingo_test", "action": action, "cueId": cueId, "padId": ""]
         }
         var writesBefore = 0
+        func verdict(_ ok: Bool) -> String { ok ? "PASS" : "FAIL" }
+        func og() -> [String: Any] { fake.doc["outrangutan"] as? [String: Any] ?? [:] }
+        func ack() -> String { (og()["cmdAck"] as? [String: Any])?["commandId"] as? String ?? "-" }
+        func dropped() -> Int { engine.log.entries.filter { $0.text.contains("The live line dropped") }.count }
         return [
             (0.5, {
                 let still = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: "og_s1")
@@ -758,14 +762,20 @@ enum TestSnapshot {
                 // A fire written to the record: it should run inside this very call.
                 let before = engine.pictureCue?.name ?? "-"
                 fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
-                note("b a cue fire pushed by the cloud: picture before = \(before), right after the push = \(engine.pictureCue?.name ?? "-")")
+                let after = engine.pictureCue?.name ?? "-"
+                note("b a cue fire pushed by the cloud: picture before = \(before), right after the push = \(after) (Still): \(verdict(after == "Still"))")
             }),
             (0.5, {
-                let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
-                note("c writes for that one fire: \(fake.writeCount - writesBefore) (the got-it, what is on air and the clip start travel as one)")
-                note("   ack: \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-") live: \((og["live"] as? [String: Any])?["name"] ?? "-") start: \((og["playingStart"] as? [String: Any])?["name"] ?? "-")")
+                let writes = fake.writeCount - writesBefore
+                let live = (og()["live"] as? [String: Any])?["name"] as? String ?? "-"
+                let start = (og()["playingStart"] as? [String: Any])?["name"] as? String ?? "-"
+                note("c writes for that one fire: \(writes) (the got-it, what is on air and the clip start travel as one write): \(verdict(writes == 1))")
+                note("   ack: \(ack()) live: \(live) start: \(start) (out_TEST_1, Still, Still): \(verdict(ack() == "out_TEST_1" && live == "Still" && start == "Still"))")
                 let reads = fake.readCount
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { note("d reads in 2.2 s with the line up: \(fake.readCount - reads)") }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                    let n = fake.readCount - reads
+                    note("d reads in 2.2 s with the line up: \(n) (1, or 2 at most): \(verdict(n >= 1 && n <= 2))")
+                }
             }),
             (2.5, {
                 // The cloud gets busy: a write is refused, kept, and sent later.
@@ -774,12 +784,13 @@ enum TestSnapshot {
                 fake.set(["outrangutan", "command"], command("cue", cueId: "og_v1"))
             }),
             (0.5, {
-                note("e the cloud is busy: the fire still ran (picture = \(engine.pictureCue?.name ?? "-")), writes landed = \(fake.writeCount - writesBefore)")
+                let picture = engine.pictureCue?.name ?? "-", writes = fake.writeCount - writesBefore
+                note("e the cloud is busy: the fire still ran (picture = \(picture), Bars), writes landed = \(writes) (0): \(verdict(picture == "Bars" && writes == 0))")
                 fake.busy = false
             }),
             (2.5, {
-                let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
-                note("f the cloud is free again: writes landed = \(fake.writeCount - writesBefore), ack now = \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-")")
+                let writes = fake.writeCount - writesBefore
+                note("f the cloud is free again: writes landed = \(writes) (1 or more), ack now = \(ack()) (out_TEST_2): \(verdict(writes >= 1 && ack() == "out_TEST_2"))")
                 note("   log: " + engine.log.entries.suffix(6).map(\.text).joined(separator: " / "))
                 engine.allStop()
             }),
@@ -791,17 +802,20 @@ enum TestSnapshot {
                 fake.set(["outrangutan", "command"], command("cue", cueId: "og_v1"))
             }),
             (0.6, {
-                note("g the Wi-Fi dropped on GO: the fire ran (picture = \(engine.pictureCue?.name ?? "-")), writes landed = \(fake.writeCount - writesBefore)")
+                let picture = engine.pictureCue?.name ?? "-", writes = fake.writeCount - writesBefore
+                note("g the Wi-Fi dropped on GO: the fire ran (picture = \(picture), Bars), writes landed = \(writes) (0): \(verdict(picture == "Bars" && writes == 0))")
                 fake.fails = false
             }),
             (1.5, {
                 let og = fake.doc["outrangutan"] as? [String: Any] ?? [:]
                 let start = og["playingStart"] as? [String: Any] ?? [:]
                 let live = og["live"] as? [String: Any] ?? [:]
-                note("h the Wi-Fi is back: writes landed = \(fake.writeCount - writesBefore), start = \(start["name"] ?? "-") seq \(start["seq"] ?? "-"), ack = \((og["cmdAck"] as? [String: Any])?["commandId"] ?? "-"), live = \(live["name"] ?? "-")")
+                let writes = fake.writeCount - writesBefore
+                let landed = writes >= 1 && start["name"] as? String == "Bars" && ack() == "out_TEST_3" && live["name"] as? String == "Bars"
+                note("h the Wi-Fi is back: writes landed = \(writes), start = \(start["name"] ?? "-") seq \(start["seq"] ?? "-"), ack = \(ack()), live = \(live["name"] ?? "-") (Bars, out_TEST_3, Bars): \(verdict(landed))")
                 // Bars starts 5 s in: its start time is the moment it started, not 5 s earlier.
                 let ts = (start["ts"] as? Double) ?? 0, startedAt = (start["startedAt"] as? Double) ?? 0
-                note("   the trimmed clip's start time is \(Int(ts - startedAt)) ms before its write (0 is right; 5000 would be the trim)")
+                note("   the trimmed clip's start time is \(Int(ts - startedAt)) ms before its write (0 is right; 5000 would be the trim): \(verdict(abs(ts - startedAt) < 1000))")
                 engine.allStop()
             }),
             (0.5, {
@@ -816,7 +830,8 @@ enum TestSnapshot {
                     fake.set(["outrangutan", "command"], command("stop"))
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                    note("i two commands landed while a write was on its way: writes = \(fake.writeCount - writesBefore), answers written = \(fake.ackIds.dropFirst(acks).joined(separator: ", "))")
+                    let answers = Array(fake.ackIds.dropFirst(acks))
+                    note("i two commands landed while a write was on its way: writes = \(fake.writeCount - writesBefore), answers written = \(answers.joined(separator: ", ")) (out_TEST_4 then out_TEST_5): \(verdict(answers == ["out_TEST_4", "out_TEST_5"]))")
                 }
             }),
             (1.6, {
@@ -833,7 +848,8 @@ enum TestSnapshot {
             }),
             (1.5, {
                 let live = (fake.doc["outrangutan"] as? [String: Any])?["live"] as? [String: Any] ?? [:]
-                note("j a dial spin (40 volume ticks, 20 standby steps in 1 s): live writes = \(fake.writeCount - writesBefore), last gain on the wire = \(live["gain"] ?? "-") (engine says \(String(format: "%.2f", engine.masterGain)))")
+                let writes = fake.writeCount - writesBefore
+                note("j a dial spin (40 volume ticks, 20 standby steps in 1 s): live writes = \(writes) (under 10), last gain on the wire = \(live["gain"] ?? "-") (engine says \(String(format: "%.2f", engine.masterGain))): \(verdict(writes < 10 && abs(((live["gain"] as? Double) ?? -1) - engine.masterGain) < 0.001))")
             }),
             (0.5, {
                 // The line dies without a word: the cloud keeps the change
@@ -843,11 +859,89 @@ enum TestSnapshot {
                 let before = engine.pictureCue?.name ?? "-"
                 fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) {
-                    note("k the line went quiet: picture before = \(before), 2.3 s later = \(engine.pictureCue?.name ?? "-"); reads in 2.3 s = \(fake.readCount - reads), lines opened = \(fake.listenCount - lines) (the new line answers at once in this pretend cloud, so reads slow down again)")
+                    let picture = engine.pictureCue?.name ?? "-", opened = fake.listenCount - lines
+                    note("k the line went quiet: picture before = \(before), 2.3 s later = \(picture) (Still); reads in 2.3 s = \(fake.readCount - reads), lines opened = \(opened) (1; the new line answers at once in this pretend cloud, so reads slow down again): \(verdict(picture == "Still" && opened == 1))")
                     note("   log: " + engine.log.entries.suffix(3).map(\.text).joined(separator: " / "))
                 }
             }),
             (2.5, { fake.mute = false; engine.allStop() }),
+            (0.5, {
+                // The Wi-Fi blinks: the open line fails with a plain error.
+                // The app must say so once, read five times a second while
+                // the line is down, open a new line, and slow the reads
+                // again once it is up. A fire pushed while the line is down
+                // lands by a read, or by the new line sending the record.
+                let drops = dropped(), lines = fake.listenCount
+                fake.dropLineOnce = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    let pushedAt = CACurrentMediaTime()
+                    fake.set(["outrangutan", "command"], command("cue", cueId: "og_v1"))
+                    var landed: Double?
+                    let t = Timer(timeInterval: 0.02, repeats: true) { timer in
+                        MainActor.assumeIsolated {
+                            if engine.pictureCue?.name == "Bars" { landed = CACurrentMediaTime() - pushedAt; timer.invalidate() }
+                            else if CACurrentMediaTime() - pushedAt > 2.0 { timer.invalidate() }
+                        }
+                    }
+                    RunLoop.main.add(t, forMode: .common)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        let ms = landed.map { Int($0 * 1000) }
+                        let said = dropped() - drops, opened = fake.listenCount - lines
+                        // The line comes back 1 s after it dropped (0.5 s doubled once), and the
+                        // reads run five times a second until then: the fire lands in about
+                        // 0.75 s here. Well over a second would mean the line stayed down.
+                        note("l the live line dropped once: the fire landed \(ms.map { "in \($0) ms" } ?? "never") (under 1500), said once in the log: \(said) time(s), lines opened: \(opened) (1): \(verdict((ms ?? 9999) < 1500 && said == 1 && opened == 1))")
+                        note("   log: " + engine.log.entries.suffix(3).map(\.text).joined(separator: " / "))
+                    }
+                }
+            }),
+            (2.6, {
+                // Once the line is up again the safety-net reads slow back
+                // down to one every 2 s: not the eleven a 0.2 s cadence makes.
+                let reads = fake.readCount
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                    let n = fake.readCount - reads
+                    note("   reads in the 2.2 s after: \(n) (1, or 2 at most): \(verdict(n >= 1 && n <= 2))")
+                }
+            }),
+            (2.5, {
+                // Two copies cross: a slow read starts while the volume is
+                // 0.9 and lands after the line has already brought 0.5. The
+                // older copy must be dropped, or the fader snaps back to 0.9.
+                fake.set(["outrangutan", "gain"], ["v": 0.9, "id": "og_test_old", "ts": ShowLink.now, "sender": "flowmingo_test"])
+                let was = engine.masterGain
+                fake.readDelay = 0.6
+                let reads = fake.readCount
+                let began = CACurrentMediaTime()
+                let t = Timer(timeInterval: 0.02, repeats: true) { timer in
+                    MainActor.assumeIsolated {
+                        if fake.readCount > reads {
+                            // A read is in flight holding 0.9: push 0.5 now.
+                            timer.invalidate()
+                            fake.set(["outrangutan", "gain"], ["v": 0.5, "id": "og_test_new", "ts": ShowLink.now, "sender": "flowmingo_test"])
+                            let pushed = engine.masterGain
+                            // Every level the fader takes from here on. (The
+                            // app's own write echoes back over the line and
+                            // would put a wrong level right again within a
+                            // beat, so a look at the end alone proves nothing.)
+                            var levels: [Double] = []
+                            let watching = engine.$masterGain.sink { levels.append($0) }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                watching.cancel()
+                                fake.readDelay = 0
+                                let strayed = levels.filter { abs($0 - 0.5) > 0.001 }.map { String(format: "%.2f", $0) }
+                                note("m a crossed copy dropped: gain was \(String(format: "%.2f", was)) (0.90), \(String(format: "%.2f", pushed)) right after the push, \(String(format: "%.2f", engine.masterGain)) after the slow read landed (0.50), strayed to: \(strayed.isEmpty ? "nothing" : strayed.joined(separator: " ")) (nothing): \(verdict(abs(was - 0.9) < 0.001 && abs(pushed - 0.5) < 0.001 && strayed.isEmpty))")
+                            }
+                        } else if CACurrentMediaTime() - began > 2.5 {
+                            timer.invalidate()
+                            fake.readDelay = 0
+                            note("m a crossed copy dropped: no read started in 2.5 s: FAIL")
+                        }
+                    }
+                }
+                RunLoop.main.add(t, forMode: .common)
+            }),
+            (3.6, { engine.allStop() }),
         ]
     }
 
@@ -2153,16 +2247,24 @@ final class FakeRecordStore: ShowRecordStore {
     /// Pretend the live line died without saying so: changes are kept but
     /// not pushed, so only a read can bring them.
     var mute = false
+    /// Pretend the Wi-Fi blinked: the open live line fails once, with a
+    /// plain error. The next line opens and sends the record again.
+    var dropLineOnce = false
+    /// Pretend a slow read: the copy is taken the moment the read starts
+    /// and handed over this many seconds later, so it can cross a push.
+    var readDelay: Double = 0
     /// Every answer written, in order, by its command id.
     private(set) var ackIds: [String] = []
     /// How many times a live line was opened.
     private(set) var listenCount = 0
-    private var listeners: [@MainActor ([String: Any]) -> Void] = []
+    private var listeners: [Int: @MainActor ([String: Any]) -> Void] = [:]
     private var writeSeq = 0
 
     func read(code: String) async throws -> [String: Any] {
         readCount += 1
-        return stamped(doc)
+        let copy = stamped(doc)
+        if readDelay > 0 { try await Task.sleep(nanoseconds: UInt64(readDelay * 1_000_000_000)) }
+        return copy
     }
 
     func write(code: String, _ updates: [[String]: Any]) async throws {
@@ -2181,9 +2283,18 @@ final class FakeRecordStore: ShowRecordStore {
         onMessage(["targetChange": ["targetChangeType": "ADD"]])
         onMessage(["documentChange": ["document": ["fields": FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:], "updateTime": stamp()]]])
         onMessage(["targetChange": ["targetChangeType": "CURRENT"]])
-        listeners.append(onMessage)
-        // The line stays open until the test ends.
-        while !Task.isCancelled { try await Task.sleep(nanoseconds: 100_000_000) }
+        let id = listenCount
+        listeners[id] = onMessage
+        // A line that fell over, or was hung up on, hears nothing more.
+        defer { listeners[id] = nil }
+        // The line stays open until the test ends, unless asked to drop.
+        while !Task.isCancelled {
+            if dropLineOnce {
+                dropLineOnce = false
+                throw CloudError(message: "lost")
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
     }
 
     func set(_ path: [String], _ value: Any) {
@@ -2192,7 +2303,7 @@ final class FakeRecordStore: ShowRecordStore {
         guard pushes, !mute else { return }
         let fields = FirestoreValue.encode(doc)["mapValue"].flatMap { ($0 as? [String: Any])?["fields"] } ?? [:]
         let message: [String: Any] = ["documentChange": ["document": ["fields": fields, "updateTime": stamp()]]]
-        listeners.forEach { $0(message) }
+        listeners.keys.sorted().forEach { listeners[$0]?(message) }
     }
 
     /// A write time like the cloud's, counting up with every change.
