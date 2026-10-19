@@ -213,7 +213,7 @@ final class PadBoard: ObservableObject {
         guard pad.fileIsThere || channels[id]?.buffer != nil else { return .refused("\(pad.name) has no media on this Mac") }
         startAudio()
         guard let ch = channel(for: pad), let buffer = ch.buffer else {
-            return .refused(pendingLoad ? "\(pad.name) is still loading; it plays once the other pads stop" : "\(pad.name) would not load")
+            return .refused(pendingLoad ? "\(pad.name) is still loading; hit it again once the other pads stop" : "\(pad.name) would not load")
         }
         if !multiTrigger { pads.filter { $0.id != id }.forEach { stop($0.id) } }
         if pad.retrigger == .toggle && ch.isSounding { stop(id); return .done }
