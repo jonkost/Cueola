@@ -7,23 +7,37 @@ import SwiftUI
 /// student drops in from anywhere shows up in the cue list (sounds can go to
 /// the pads instead).
 ///
-/// It only takes a file once it has finished arriving: its size must stay
-/// the same for two looks in a row, and a cloud placeholder that has not
-/// downloaded yet is left alone until it has.
+/// It only takes a file once it has finished arriving: its size and its
+/// written-at time must stay the same for three looks in a row, and a cloud
+/// placeholder that has not downloaded yet is left alone until it has. A
+/// file that would not open is said in the Show Log and tried again when it
+/// changes, and now and then meanwhile (a cloud file can finish downloading
+/// without its size or time changing). A file written over after it joined
+/// is a new file: it joins again, beside the old cue.
 final class WatchFolder: ObservableObject {
     @Published private(set) var folder: URL?
     @Published var soundsToPads: Bool { didSet { save() } }
     @Published private(set) var lastAdded: String?
 
+    /// What a file looked like at one look: the same file again, or a new one
+    /// under the same name.
+    struct Stamp: Equatable {
+        let size: Int
+        let modified: Date?
+    }
+
     private let engine: Engine
     private var seen: Set<String> = []
-    private var growing: [String: (size: Int, steady: Int)] = [:]   // size at the last look, and how many looks it held
+    private var stamps: [String: Stamp] = [:]    // what each seen file looked like when it was taken
+    private var growing: [String: (stamp: Stamp, steady: Int)] = [:]   // the last look, and how many looks it held
     private var checking: Set<String> = []
     private var looking = false
-    private var broken: [String: Int] = [:]      // would not open at this size
+    private var broken: [String: (stamp: Stamp, looks: Int)] = [:]      // would not open like this; looks since
     private var timer: Timer?
     private static var off: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var every: TimeInterval = 2
+    /// How many looks a file that would not open waits before it is tried again unchanged.
+    static var retestAfter = 15
 
     init(engine: Engine) {
         self.engine = engine
@@ -41,7 +55,9 @@ final class WatchFolder: ObservableObject {
     func watch(_ url: URL, takeWhatIsThere: Bool) {
         folder = url
         seen = takeWhatIsThere ? [] : Set(Self.mediaFiles(in: url).map(\.lastPathComponent))
+        stamps = [:]
         growing = [:]
+        broken = [:]
         save()
         start()
         engine.log.add(.file, "Watching the folder \u{201C}\(url.lastPathComponent)\u{201D} for new media")
@@ -53,6 +69,7 @@ final class WatchFolder: ObservableObject {
         if let folder { engine.log.add(.file, "Stopped watching \u{201C}\(folder.lastPathComponent)\u{201D}") }
         folder = nil
         seen = []
+        stamps = [:]
         save()
     }
 
@@ -93,27 +110,40 @@ final class WatchFolder: ObservableObject {
         guard let folder, !engine.locked, !looking else { return }
         looking = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let found: [(url: URL, size: Int, placeholder: Bool)] = Self.mediaFiles(in: folder).map { url in
-                let v = try? url.resourceValues(forKeys: [.fileSizeKey, .ubiquitousItemDownloadingStatusKey])
+            let found: [(url: URL, stamp: Stamp, placeholder: Bool)] = Self.mediaFiles(in: folder).map { url in
+                let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
                 let placeholder = v?.ubiquitousItemDownloadingStatus.map { $0 != .current && $0 != .downloaded } ?? false
-                return (url, v?.fileSize ?? 0, placeholder)
+                return (url, Stamp(size: v?.fileSize ?? 0, modified: v?.contentModificationDate), placeholder)
             }
             DispatchQueue.main.async { self?.consider(found, in: folder) }
         }
     }
 
-    private func consider(_ found: [(url: URL, size: Int, placeholder: Bool)], in scanned: URL) {
+    private func consider(_ found: [(url: URL, stamp: Stamp, placeholder: Bool)], in scanned: URL) {
         looking = false
         guard folder == scanned else { return }
-        for (url, size, placeholder) in found {
+        for (url, stamp, placeholder) in found {
             let name = url.lastPathComponent
-            guard !seen.contains(name), !checking.contains(name) else { continue }
+            guard !checking.contains(name) else { continue }
+            if seen.contains(name) {
+                // Taken before. Written over since (a new size or time): it is
+                // a new file, and joins again once it has finished arriving.
+                guard let was = stamps[name] else { stamps[name] = stamp; continue }
+                if was == stamp { continue }
+                seen.remove(name); stamps[name] = nil
+                save()
+                engine.log.add(.file, "\u{201C}\(name)\u{201D} in the watched folder has changed. It joins once it finishes arriving.")
+            }
             // A cloud file that is still only a placeholder: wait for it.
-            guard !placeholder, size > 0 else { continue }
-            // A file that would not open waits until it changes.
-            if broken[name] == size { continue }
-            // The same size three looks in a row, then a real test: it must open.
-            if let g = growing[name], g.size == size { growing[name] = (size, g.steady + 1) } else { growing[name] = (size, 0); continue }
+            guard !placeholder, stamp.size > 0 else { continue }
+            // A file that would not open waits until it changes, or for a while:
+            // a cloud file can finish downloading without its size or time changing.
+            if let b = broken[name] {
+                if b.stamp == stamp && b.looks < Self.retestAfter { broken[name] = (stamp, b.looks + 1); continue }
+                if b.stamp == stamp { growing[name] = (stamp, 2) } else { broken[name] = nil }
+            }
+            // The same size and time three looks in a row, then a real test: it must open.
+            if let g = growing[name], g.stamp == stamp { growing[name] = (stamp, g.steady + 1) } else { growing[name] = (stamp, 0); continue }
             guard let g = growing[name], g.steady >= 2 else { continue }
             growing[name] = nil
             checking.insert(name)
@@ -122,17 +152,27 @@ final class WatchFolder: ObservableObject {
                 guard let self else { return }
                 self.checking.remove(name)
                 guard self.folder == scanned else { return }
-                if ok { self.take(url) } else { self.broken[name] = size }
+                if ok { self.take(url, as: stamp) } else { self.wouldNotOpen(name, as: stamp) }
             }
         }
     }
 
-    private func take(_ url: URL) {
-        seen.insert(url.lastPathComponent)
+    private func take(_ url: URL, as stamp: Stamp) {
+        let name = url.lastPathComponent
+        seen.insert(name)
+        stamps[name] = stamp
+        broken[name] = nil
         if soundsToPads && PadBoard.isSound(url) { engine.pads.add(urls: [url]) } else { engine.add(urls: [url]) }
-        engine.log.add(.file, "Added \u{201C}\(url.lastPathComponent)\u{201D} from the watched folder")
-        lastAdded = url.lastPathComponent
+        engine.log.add(.file, "Added \u{201C}\(name)\u{201D} from the watched folder")
+        lastAdded = name
         save()
+    }
+
+    private func wouldNotOpen(_ name: String, as stamp: Stamp) {
+        if broken[name]?.stamp != stamp {
+            engine.log.add(.file, "\u{201C}\(name)\u{201D} in the watched folder would not open. It is tried again when the file changes, and now and then meanwhile.")
+        }
+        broken[name] = (stamp, 0)
     }
 
     /// True when the file really plays: a still opens as a picture; a video

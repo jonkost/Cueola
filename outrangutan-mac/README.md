@@ -258,8 +258,11 @@ effect, or a rundown row's sound effect hits the pad on this Mac.
 sounds and stills that land in it join the show on their own: point it at a
 shared Dropbox or Google Drive folder and the crew can send clips from
 anywhere. A file joins only once it has finished arriving (the same size
-three looks in a row, and it really opens). Sounds can become pads instead.
-While editing is locked, new files wait until it unlocks.
+and written-at time three looks in a row, and it really opens). A file that
+will not open is said in the Show Log and tried again when it changes, and
+now and then meanwhile, since a cloud file can finish downloading without
+changing. A file written over after it joined is a new file: it joins again,
+beside the old cue. Sounds can become pads instead. While editing is locked, new files wait until it unlocks.
 
 ## OBS
 
@@ -369,8 +372,12 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   cue Inspector), for looking at the design. Test pictures cannot draw
   Liquid Glass; that needs eyes on the real app.
 - `padsearch`: pictures of the pad search, with matches and with none.
-- `watch`: a watched folder: a half-copied clip waits, a finished one joins,
-  a sound becomes a pad, and the lock holds new files.
+- `watch`: a watched folder: a half-copied clip waits, a finished one joins
+  (one half copied before the pick too), a sound becomes a pad, the lock
+  holds new files, a file at its final size before its bytes are real is set
+  aside and joins when the bytes land (with a new time, or unchanged after a
+  few looks), a clip written
+  over joins again.
 - `obs`: a pretend OBS checks the password proof (against openssl), takes a
   cue's scene switch and a start recording, and fires a cue with its own
   scene change.

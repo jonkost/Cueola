@@ -1292,36 +1292,69 @@ enum TestSnapshot {
         let fm = FileManager.default
         func names() -> String { engine.cues.map(\.name).joined(separator: ", ") }
         func pads() -> String { engine.pads.pads.map(\.name).joined(separator: ", ") }
+        func said(_ words: String) -> Int { engine.log.entries.filter { $0.kind == .file && $0.text.contains(words) }.count }
+        func lengths(_ name: String) -> String {
+            engine.cues.filter { $0.name == name }.map { engine.durations[$0.id].map { String(format: "%.2f", $0) } ?? "?" }.joined(separator: ", ")
+        }
+        func verdict(_ ok: Bool) -> String { ok ? "PASS" : "FAIL" }
+        func file(_ name: String) -> URL { folder.appendingPathComponent(name) }
+        let clip = try! Data(contentsOf: media.appendingPathComponent("bars-4x3.mp4"))
+        let clip16 = try! Data(contentsOf: media.appendingPathComponent("bars-16x9.mp4"))
+        // A cloud file keeps its own written-at time through a download.
+        let longAgo = Date(timeIntervalSince1970: 1_000_000_000)
+        func writeKeepingTime(_ data: Data, to url: URL) {
+            try? data.write(to: url)
+            try? fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: url.path)
+        }
         return [
             (0.5, {
                 try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-                try? fm.copyItem(at: media.appendingPathComponent("still-16x9.png"), to: folder.appendingPathComponent("Already here.png"))
+                try? fm.copyItem(at: media.appendingPathComponent("still-16x9.png"), to: file("Already here.png"))
+                // A clip half copied before the folder is picked ("Only New Ones"): it joins once it finishes.
+                try? clip.prefix(clip.count / 2).write(to: file("Early clip.mp4"))
                 engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
                 WatchFolder.every = 0.4
+                WatchFolder.retestAfter = 5
                 watch.soundsToPads = true
                 watch.watch(folder, takeWhatIsThere: false)
                 // A clip still arriving: the first half now, the rest later.
-                let clip = try! Data(contentsOf: media.appendingPathComponent("bars-4x3.mp4"))
-                try? clip.prefix(clip.count / 2).write(to: folder.appendingPathComponent("Arriving clip.mp4"))
+                try? clip.prefix(clip.count / 2).write(to: file("Arriving clip.mp4"))
             }),
             (2.5, {
                 note("a a half-copied clip that stopped changing is tested and waits: cues [\(names())]")
-                let clip = try! Data(contentsOf: media.appendingPathComponent("bars-4x3.mp4"))
-                try? clip.write(to: folder.appendingPathComponent("Arriving clip.mp4"))
-                try? fm.copyItem(at: media.appendingPathComponent("demo-rimshot.wav"), to: folder.appendingPathComponent("Rimshot.wav"))
+                try? clip.write(to: file("Arriving clip.mp4"))
+                try? clip.write(to: file("Early clip.mp4"))
+                try? fm.copyItem(at: media.appendingPathComponent("demo-rimshot.wav"), to: file("Rimshot.wav"))
             }),
             (2.5, {
-                note("b once finished: cues [\(names())], pads [\(pads())]; the file already there was left out")
+                note("b once finished: cues [\(names())], pads [\(pads())]; the file already there is left out, the one half copied before the pick joins: \(verdict(names().contains("Early clip") && !names().contains("Already here")))")
                 engine.locked = true
-                try? fm.copyItem(at: media.appendingPathComponent("bars-16x9.mp4"), to: folder.appendingPathComponent("During the show.mp4"))
+                try? fm.copyItem(at: media.appendingPathComponent("bars-16x9.mp4"), to: file("During the show.mp4"))
             }),
             (2.5, { note("c locked: the new file waits: cues [\(names())]"); engine.locked = false }),
             (2.5, {
                 note("d unlocked: cues [\(names())]")
-                engine.log.entries.filter { $0.kind == .file }.forEach { note("   log: \($0.line)") }
                 picture(GeneralSettings(watch: watch), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("watch-settings.png"))
+                // Two files at their final size before their bytes are real (a writer that
+                // sets the size first; a cloud file still downloading).
+                try? Data(count: clip.count).write(to: file("Preallocated.mp4"))
+                writeKeepingTime(Data(count: clip.count), to: file("Cloud clip.mp4"))
             }),
-            (1.0, { watch.stop(); WatchFolder.every = 2 }),
+            (2.5, {
+                note("e zeros at the final size, tested once and set aside: cues [\(names())], said in the log \(said("Preallocated.mp4\u{201D} in the watched folder would not open")) and \(said("Cloud clip.mp4\u{201D} in the watched folder would not open")) time(s) (once each): \(verdict(!names().contains("Preallocated") && !names().contains("Cloud clip") && said("Preallocated.mp4\u{201D} in the watched folder would not open") == 1 && said("Cloud clip.mp4\u{201D} in the watched folder would not open") == 1))")
+                // The real bytes land: one file with a new written-at time, one keeping
+                // its time like a cloud download; and a clip re-exported over the old one.
+                try? clip.write(to: file("Preallocated.mp4"))
+                writeKeepingTime(clip, to: file("Cloud clip.mp4"))
+                try? clip16.write(to: file("Arriving clip.mp4"))
+            }),
+            (3.0, {
+                note("g the real bytes landed: cues [\(names())]; Preallocated (new time) and Cloud clip (same time, tried again after \(WatchFolder.retestAfter) looks) joined, each still said once: \(verdict(names().contains("Preallocated") && names().contains("Cloud clip") && said("Preallocated.mp4\u{201D} in the watched folder would not open") == 1 && said("Cloud clip.mp4\u{201D} in the watched folder would not open") == 1))")
+                let twice = engine.cues.filter { $0.name == "Arriving clip" }.count
+                note("h a clip written over: \(twice) cues named Arriving clip, lengths \(lengths("Arriving clip")), said changed \(said("has changed")) time(s) (it and Early clip): \(verdict(twice == 2 && said("has changed") == 2))")
+                engine.log.entries.filter { $0.kind == .file }.forEach { note("   log: \($0.line)") }
+            }),
+            (1.0, { watch.stop(); WatchFolder.every = 2; WatchFolder.retestAfter = 15 }),
         ]
     }
 
