@@ -208,7 +208,9 @@ final class PadBoard: ObservableObject {
     @discardableResult
     func fire(_ id: String) -> WireResult {
         guard let pad = pad(id: id) else { return .refused("pad is not on this Mac") }
-        guard pad.fileIsThere else { return .refused("\(pad.name) has no media on this Mac") }
+        // A sound already in memory plays even when its file has gone (a
+        // stick pulled out, a folder tidied): the hit never waits on the disk.
+        guard pad.fileIsThere || channels[id]?.buffer != nil else { return .refused("\(pad.name) has no media on this Mac") }
         startAudio()
         guard let ch = channel(for: pad), let buffer = ch.buffer else {
             return .refused(pendingLoad ? "\(pad.name) is still loading; it plays once the other pads stop" : "\(pad.name) would not load")

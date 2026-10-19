@@ -1068,6 +1068,19 @@ enum TestSnapshot {
                 engine.standbyText = ""
                 engine.closeOutput(1)
             }),
+            (0.5, {
+                // A pad loaded from a stick, then the stick pulled out: the
+                // sound is in memory, so it still plays.
+                let stick = dir.appendingPathComponent("Stick.wav")
+                try? FileManager.default.removeItem(at: stick)
+                try? FileManager.default.copyItem(at: media.appendingPathComponent("demo-rimshot.wav"), to: stick)
+                engine.pads.add(urls: [stick])
+                let pad = engine.pads.pads.first { $0.name == "Stick" }
+                try? FileManager.default.removeItem(at: stick)
+                let r = engine.pads.fire(pad?.id ?? "")
+                note("6 a loaded pad whose file is gone: file there = \(pad?.fileIsThere ?? true), hit: \(r.ok ? "played" : r.reason)")
+            }),
+            (0.6, { engine.pads.stopAll() }),
         ]
     }
 
