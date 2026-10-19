@@ -12,12 +12,16 @@ final class Recorder: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var seconds: Double = 0
+    /// True when the recording stopped on its own because the sound input
+    /// changed (a USB mic unplugged, headphones connected).
+    @Published private(set) var inputChanged = false
     let meter = LevelMeter()
 
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
     private var started = Date()
     private var clock: Timer?
+    private var inputWatch: NSObjectProtocol?
 
     /// Test mode records into its own folder, never the real Music folder.
     static var testFolder: URL?
@@ -69,6 +73,7 @@ final class Recorder: ObservableObject {
                                interleaved: format.isInterleaved)
         started = Date()
         seconds = 0
+        inputChanged = false
         state = .recording
     }
 
@@ -90,6 +95,7 @@ final class Recorder: ObservableObject {
     /// Closes the file.
     func finish() {
         clock?.invalidate(); clock = nil
+        if let w = inputWatch { NotificationCenter.default.removeObserver(w); inputWatch = nil }
         guard let url = file?.url else { state = .idle; return }
         file = nil
         seconds = Date().timeIntervalSince(started)
@@ -111,6 +117,14 @@ final class Recorder: ObservableObject {
             input.removeTap(onBus: 0)
             state = .idle
             return
+        }
+        // When the input hardware changes, macOS stops the engine and the
+        // tap goes quiet. Stop properly so the clock stops too and the
+        // take so far is kept.
+        inputWatch = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            guard let self, self.state == .recording else { return }
+            self.inputChanged = true
+            self.stop()
         }
         clock = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -182,7 +196,9 @@ struct RecordSheet: View {
         case .asking: return "macOS is asking to let Outrangutan use the microphone."
         case .denied: return "Outrangutan can't use the microphone. Allow it in System Settings, Privacy & Security, Microphone, then try again."
         case .recording: return "Recording. Press Stop when you are done."
-        case .done(let url): return "Recorded \(url.lastPathComponent). Trim it on the pad afterwards with the trim bar."
+        case .done(let url):
+            let note = recorder.inputChanged ? "The sound input changed, so recording stopped on its own. " : ""
+            return "\(note)Recorded \(url.lastPathComponent). Trim it on the pad afterwards with the trim bar."
         }
     }
 }
