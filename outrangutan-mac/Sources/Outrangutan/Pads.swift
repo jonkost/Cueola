@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreAudio
 import OutrangutanCore
 import UniformTypeIdentifiers
 
@@ -186,14 +187,22 @@ final class PadBoard: ObservableObject {
             DispatchQueue.main.async { self?.meter.take(peaks[0], peaks[1]) }
         }
         // When the sound hardware changes (an interface plugged in or out),
-        // the engine stops. Start it again and carry on.
+        // the engine stops. Start it again, on the device Settings picked.
         NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio, queue: .main) { [weak self] _ in
-            self?.restartAudio()
+            self?.soundHardwareChanged()
         }
+        // When the Mac's list of sound devices changes (the interface
+        // plugged back in, with a new id), the pads go back to it.
+        deviceWatch = { [weak self] _, _ in DispatchQueue.main.async { self?.devicesChangedSoon() } }
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &PadBoard.devicesAddress, .main, deviceWatch)
         loading = true
         self.pads.forEach { channel(for: $0, rewire: false) }
         loading = false
         startAudio()
+    }
+
+    deinit {
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &PadBoard.devicesAddress, .main, deviceWatch)
     }
 
     var currentBank: PadBank? { banks.first { $0.id == currentBankID } }
@@ -255,17 +264,32 @@ final class PadBoard: ObservableObject {
         }
     }
 
+    /// Where Settings sent the pads, so a hardware change can put them back.
+    private var route: (uid: String?, firstChannel: Int)?
+    /// The device the pads are pinned to right now (0 for none).
+    private var pinnedID: AudioDeviceID = 0
+    private var deviceWatch: AudioObjectPropertyListenerBlock = { _, _ in }
+    private var deviceCheck: DispatchWorkItem?
+    private static var devicesAddress = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                                                   mScope: kAudioObjectPropertyScopeGlobal,
+                                                                   mElement: kAudioObjectPropertyElementMain)
+
     /// Sends the pads to a sound device, on a chosen pair of its channels
     /// (0 is channels 1 and 2, 2 is channels 3 and 4, and so on). nil is the
-    /// Mac's default output. Stops whatever pads are sounding.
+    /// Mac's default output. Stops whatever pads are sounding. A device
+    /// that is not here right now is stood in for by the Mac's default
+    /// output, and taken up again when it comes back.
     func setOutput(device uid: String?, firstChannel: Int) {
+        route = (uid, firstChannel)
         channels.values.forEach { $0.stopAll() }
         sounding.removeAll()
         audio.stop()
+        pinnedID = 0
         if let unit = audio.outputNode.audioUnit, let dev = AudioDevices.device(uid: uid) ?? AudioDevices.defaultOutput() {
             var id = dev.objectID
             AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
                                  &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            pinnedID = dev.objectID
             // The channel map says which of our two channels feeds each of
             // the device's channels; -1 leaves a channel silent.
             let total = dev.channels
@@ -636,10 +660,33 @@ final class PadBoard: ObservableObject {
         try? audio.start()
     }
 
-    private func restartAudio() {
-        channels.values.forEach { $0.stopAll() }
-        sounding.removeAll()
-        startAudio()
+    /// The sound hardware changed under the engine (the interface pulled,
+    /// a sample rate changed): the pads go back where Settings sent them,
+    /// or to the Mac's default output while that device is away. Called
+    /// from the engine's own notice, and from the outputs test.
+    func soundHardwareChanged() {
+        if let route {
+            setOutput(device: route.uid, firstChannel: route.firstChannel)
+        } else {
+            channels.values.forEach { $0.stopAll() }
+            sounding.removeAll()
+            startAudio()
+        }
+    }
+
+    /// The list of sound devices changed. A moment later (a device just
+    /// plugged in is still waking up), if the device Settings picked is
+    /// here under a new id, the pads go back to it. Any other change (a
+    /// headset pairing) leaves the pads alone, so nothing sounding stops.
+    private func devicesChangedSoon() {
+        deviceCheck?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let route = self.route, let uid = route.uid,
+                  let dev = AudioDevices.device(uid: uid), dev.objectID != self.pinnedID else { return }
+            self.setOutput(device: uid, firstChannel: route.firstChannel)
+        }
+        deviceCheck = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 }
 

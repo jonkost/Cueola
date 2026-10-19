@@ -1950,6 +1950,14 @@ enum TestSnapshot {
             }),
             (0.4, { if let p = engine.pads.pads.first { engine.pads.fire(p.id) } }),
             (0.4, { note("7 pad meter while the applause plays: left \(String(format: "%.2f", engine.pads.meter.left)) right \(String(format: "%.2f", engine.pads.meter.right))") }),
+            (0.1, {
+                // The sound hardware changes under the engine: the pads go
+                // back to the device Settings picked and play again.
+                engine.pads.soundHardwareChanged()
+                note("8 after a sound hardware change, pads play to: \(engine.pads.channelMapNote)")
+                if let p = engine.pads.pads.first { note("   a pad hit after it: \(engine.pads.fire(p.id).ok ? "played" : "refused")") }
+            }),
+            (0.4, { note("   pad meter after: left \(String(format: "%.2f", engine.pads.meter.left)) right \(String(format: "%.2f", engine.pads.meter.right))") }),
             (0.1, { engine.pads.stopAll(); defaults.set("cues", forKey: "ui.tab") }),
             (0.8, { snap("o-8-cues") }),
             (0.1, { defaults.set("pads", forKey: "ui.tab") }),
