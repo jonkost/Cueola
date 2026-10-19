@@ -425,11 +425,10 @@ final class PadBoard: ObservableObject {
         if let ch = channels[id] {
             ch.setSound(eq: pad.eq, comp: pad.comp)
             if !fader.isRunning("pad-" + id) { ch.gainMixer.outputVolume = Float(pad.gain) }
-            if pad.trimIn != before.trimIn || pad.trimOut != before.trimOut {
-                ch.stopAll()
-                sounding[id] = nil
-                reloadSoon(pad)
-            }
+            // A pad that is sounding keeps playing the sound it started with
+            // (its voice holds its own copy); the trimmed one is used by
+            // the next hit.
+            if pad.trimIn != before.trimIn || pad.trimOut != before.trimOut { reloadSoon(pad) }
         }
     }
 

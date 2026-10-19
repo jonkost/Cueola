@@ -2036,6 +2036,17 @@ enum TestSnapshot {
                 note("12 hotkey \(key.uppercased()) hit: sounding \(sounding())")
             }),
             (0.8, { note("   writes: \(fake.writeCount)") }),
+            (0.1, {
+                // A trim edit while the pad sounds: it keeps playing; the
+                // trimmed sound is for the next hit.
+                board.stopAll()
+                board.fire(ids()[0])
+                board.update(ids()[0]) { $0.trimIn = 0.5 }
+            }),
+            (0.5, {
+                note("13 applause trimmed while sounding: sounding \(sounding()), next hit is \(board.length(ids()[0]).map { String(format: "%.1fs", $0) } ?? "not loaded")")
+                board.stopAll()
+            }),
         ]
     }
 
