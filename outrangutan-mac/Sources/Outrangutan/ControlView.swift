@@ -447,7 +447,6 @@ struct ControlView: View {
                 // not change the selection, so the binding above stays quiet.)
                 .background(ClickWatch { touchedPads = false })
                 .padding(.horizontal, 10)
-                .contextMenu(forSelectionType: UUID.self) { ids in cueMenu(ids) }
                 .onDeleteCommand {
                     let ids = picked.isEmpty ? Set([engine.standbyID].compactMap { $0 }) : picked
                     if !engine.locked, !ids.isEmpty { engine.remove(ids: ids) }
@@ -567,6 +566,11 @@ struct ControlView: View {
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
+        // The right-click menu sits on each row, not on the list's selection:
+        // a menu attached to the selection takes the mouse-down a row needs
+        // to start a drag, and the cues could not be dragged into a new
+        // order. A right-click on a picked cue acts on every picked cue.
+        .contextMenu { cueMenu(picked.contains(cue.id) ? picked : [cue.id]) }
     }
 
     @ViewBuilder
