@@ -25,6 +25,13 @@ const refined = D.makeProfile(0x00aa, { unitInfo: { keys: 32, cols: 8 }, overrid
 eq('override cols wins', refined.cols, 6);
 eq('override rotation wins', refined.rotation, 0);
 
+// The 2022 XL and the Mini MK.2 are pinned, not adaptive.
+const xl2022 = D.makeProfile(0x008f, {});
+eq('XL 2022 keys', xl2022.keys, 32); ok('XL 2022 pinned', xl2022.adaptive === false);
+const miniMk2 = D.makeProfile(0x0090, {});
+eq('Mini MK.2 keys', miniMk2.keys, 6); eq('Mini MK.2 cols', miniMk2.cols, 3); eq('Mini MK.2 key px', miniMk2.keyPx, 80);
+ok('Mini MK.2 pinned, no strip', miniMk2.adaptive === false && miniMk2.strip === null);
+
 // ── Key input report (cmd 0x00, states at data[3]) ──────────────────────────
 function keyReport(pressedIdx, total) {
   const d = new Uint8Array(4 + total);

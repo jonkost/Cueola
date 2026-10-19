@@ -78,6 +78,11 @@
     0x006d: { name: 'Stream Deck (v2)',   keys: 15, cols: 5, keyPx: 72, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
     0x0080: { name: 'Stream Deck MK.2',   keys: 15, cols: 5, keyPx: 72, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
     0x006c: { name: 'Stream Deck XL',     keys: 32, cols: 8, keyPx: 96, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
+    // The 2022 XL and the Mini MK.2 are the same decks with new numbers. Without
+    // these rows an unknown Elgato device is treated as a 36-key + XL, so a
+    // Mini MK.2 would get 36 keys of pictures it cannot show.
+    0x008f: { name: 'Stream Deck XL (2022)', keys: 32, cols: 8, keyPx: 96, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
+    0x0090: { name: 'Stream Deck Mini (MK.2)', keys: 6, cols: 3, keyPx: 80, stateOffset: 3, rotation: 180, reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 0, strip: null },
     0x0084: { name: 'Stream Deck +',      keys: 8,  cols: 4, keyPx: 120, stateOffset: 3, rotation: 0,  reset: [0x03, 0x02], bright: [0x03, 0x08], dials: 4, strip: { w: 800, h: 100, zones: 4 } },
     // Stream Deck + XL (Elgato model 20GBD9901). Numbers verified against
     // Elgato's HID docs (docs.elgato.com/streamdeck/hid/stream-deck-plus-xl)

@@ -144,7 +144,7 @@ const SHELL_ASSETS = [
   'cueola-app.js?v=32428222bd',
   'outrangutan/outrangutan.css?v=c643a77857',
   'outrangutan/outrangutan.js?v=e6d66161a1',
-  'cueola-streamdeck-device.js?v=48990ed663',
+  'cueola-streamdeck-device.js?v=eae222bcce',
   'cueola-obs.js?v=7ea9a03cd8',
   'cueola-streamdeck.js?v=afc6662a04',
 ];
