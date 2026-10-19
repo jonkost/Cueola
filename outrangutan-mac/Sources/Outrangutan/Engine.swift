@@ -441,6 +441,9 @@ final class Engine: ObservableObject {
     private var windows: [Int: OutputWindowController] = [:]
     private var stillViews: [OutputView] = []
     private let fader = Fader()
+    /// Ducking has its own clock: All Stop and Fade cancel every cue fade,
+    /// and a duck climbing back must not be frozen half way by them.
+    private let duckFader = Fader()
     /// Cue sound on a chosen channel pair; off while pair 1 and 2 is picked.
     let cueSound = CueSoundEngine()
     private let videoDecks: [Deck]
@@ -449,9 +452,6 @@ final class Engine: ObservableObject {
     private var soundDeck: Deck?
     private var lastLane: CueKind = .video
 
-    /// Ducking has its own clock: All Stop and Fade cancel every cue fade,
-    /// and a duck climbing back must not be frozen half way by them.
-    private let duckFader = Fader()
     // The still or matte on air
     private var stillCue: Cue?
     private var stillSlot: PictureSlot = .s1
@@ -747,6 +747,7 @@ final class Engine: ObservableObject {
         let decks = (videoDecks + soundDecks).filter { $0.cue != nil && !$0.isPreloaded }
         let startPicture = decks.map { $0.pictureLevel }, startSound = decks.map { $0.soundLevel }
         let startStill = stillLevel
+        let leaving = stillOut
         decks.forEach { fader.cancel($0.name) }
         pads.fadeOutAll()
         fader.run("all", from: 1, to: 0, seconds: 1, apply: { [weak self] v in
@@ -754,13 +755,17 @@ final class Engine: ObservableObject {
             for (i, d) in decks.enumerated() {
                 d.pictureLevel = startPicture[i] * v
                 d.soundLevel = startSound[i] * v
-        let leaving = stillOut
                 self.apply(d)
             }
             self.stillLevel = startStill * v
             self.applyStill()
+            if let leaving { leaving.views.forEach { $0.setOpacity(leaving.slot, Float(leaving.level * v)) } }
         }, done: { [weak self] in self?.stopEverything() })
     }
+
+    /// A fader ride sends many values a second; the show is saved once
+    /// when the ride settles, not on every tick.
+    private var gainSaveTimer: Timer?
 
     func setGain(_ value: Double) {
         masterGain = min(1.2, max(0, value))
@@ -776,10 +781,6 @@ final class Engine: ObservableObject {
         }
         onTransport?()
     }
-    /// A fader ride sends many values a second; the show is saved once
-    /// when the ride settles, not on every tick.
-    private var gainSaveTimer: Timer?
-
 
     // MARK: Firing
 
@@ -926,6 +927,7 @@ final class Engine: ObservableObject {
         // An earlier still may still be dissolving away on this layer: its
         // clean-up must not blank the new one when it ends.
         fader.cancel("still-out-\(slot.rawValue)")
+        if stillOut?.slot == slot { stillOut = nil }
         let dissolve = cue.xfade > 0 && (pictureDeck != nil || stillCue != nil)
         let startLevel: Double = (dissolve || cue.fadeIn > 0) ? 0 : 1
         let targets = views(for: cue)
@@ -944,7 +946,6 @@ final class Engine: ObservableObject {
                 self?.stillLevel = v; self?.applyStill()
             }
         } else {
-        if stillOut?.slot == slot { stillOut = nil }
             fader.cancel("still")
             applyStill()
         }
@@ -976,11 +977,13 @@ final class Engine: ObservableObject {
         if let leaving = stillCue {
             let oldSlot = stillSlot
             let oldViews = stillViews
+            let oldLevel = stillLevel
             pads.cueLeftAir(leaving.id)
             stillCue = nil
             stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil; stillLeft = nil
             fader.cancel("still")
             if seconds > 0 {
+                stillOut = (oldSlot, oldViews, oldLevel)
                 fader.run("still-out-\(oldSlot.rawValue)", from: 1, to: 1, seconds: seconds, apply: { _ in },
                           done: { [weak self] in
                               oldViews.forEach { $0.hide(oldSlot) }
@@ -997,13 +1000,11 @@ final class Engine: ObservableObject {
     /// A video or sound reached its end or its trim out point. Matches
     /// handleEnded in the web app.
     private func reachedEnd(_ deck: Deck) {
-            let oldLevel = stillLevel
         guard let cue = deck.cue, !deck.held else { return }
         if cue.loop {
             deck.rewindAndPlay()
             onClipStart?(cue, playLength(cue))
             return
-                stillOut = (oldSlot, oldViews, oldLevel)
         }
         if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
             // The next cue on the same lane takes over on its own. On the
@@ -1490,6 +1491,7 @@ final class Engine: ObservableObject {
         for w in windows.values { w.pictureView.hide(.s1); w.pictureView.hide(.s2) }
         monitors.forEach { $0.hide(.s1); $0.hide(.s2) }
         stillViews = []
+        stillOut = nil
     }
 
     private func stopSound() {
@@ -1508,7 +1510,6 @@ final class Engine: ObservableObject {
     /// deck, a little later for a setting change (a slider drag changes a
     /// cue many times a second, and the player must not reload on each one).
     /// With `restart` the wait begins again on every call, so a run of quick
-        stillOut = nil
     /// moves ends in one load when the moves stop.
     private func scheduleStandbyPreload(after seconds: Double = 0, restart: Bool = false) {
         if !restart, let t = preloadTimer, t.fireDate.timeIntervalSinceNow <= seconds { return }
@@ -1626,7 +1627,9 @@ final class Engine: ObservableObject {
 
     private func tick() {
         preRemaining = pendingLeft ?? pending.map { max(0, $0.at.timeIntervalSinceNow) }
-        // Fade out before the end, for cues that ask for it.
+        // Fade out before the end, for cues that ask for it. A fade-in or a
+        // dissolve-in still running goes first; the fade-out then takes
+        // whatever time is left.
         for d in [pictureDeck, soundDeck].compactMap({ $0 }) {
             guard let cue = d.cue, cue.fadeOut > 0, !cue.loop, !d.fadingOut, !d.held, !paused, !fader.isRunning(d.name),
                   let left = d.remaining, left <= cue.fadeOut, left > 0 else { continue }
@@ -1709,7 +1712,17 @@ final class Engine: ObservableObject {
         if let deck = playing(pictureDeck), let cue = deck.cue, let wire = cue.wireID {
             point = RecoveryPoint(wireID: wire, name: cue.name, offset: deck.current)
         } else if let still = stillCue, let wire = still.wireID {
-            RecoveryPoint(wireID: wire, name: still.name, offset: 0).save()
+            point = RecoveryPoint(wireID: wire, name: still.name, offset: 0)
+        } else if let deck = playing(soundDeck), let cue = deck.cue, let wire = cue.wireID {
+            point = RecoveryPoint(wireID: wire, name: cue.name, offset: deck.current)
+        } else if let p = pending, let wire = p.cue.wireID {
+            point = RecoveryPoint(wireID: wire, name: p.cue.name, offset: 0)
+        } else {
+            point = nil
+        }
+        lastRecoveryPoint = point
+        if let point {
+            point.save()
             recoveryNoted = true
         } else if recoveryNoted {
             RecoveryPoint.clear()
@@ -1717,9 +1730,13 @@ final class Engine: ObservableObject {
         }
     }
 
+    /// What the crash note last said, for test mode (which never writes it).
+    private(set) var lastRecoveryPoint: RecoveryPoint?
+
     /// A clean quit leaves nothing to recover.
     func quitting() {
         clock?.invalidate()
+        if gainSaveTimer != nil { gainSaveTimer?.invalidate(); gainSaveTimer = nil; save() }
         RecoveryPoint.clear()
     }
 
@@ -1743,14 +1760,10 @@ final class Engine: ObservableObject {
         }
     }
 
-        if gainSaveTimer != nil { gainSaveTimer?.invalidate(); gainSaveTimer = nil; save() }
     private func save() {
         ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
                                 pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
                                 standbyText: standbyText.isEmpty ? nil : standbyText))
-    /// What the crash note last said, for test mode (which never writes it).
-    private(set) var lastRecoveryPoint: RecoveryPoint?
-
     }
 
     // MARK: Outputs and sound
@@ -1769,6 +1782,9 @@ final class Engine: ObservableObject {
         windows[id] = w
         return w
     }
+
+    /// Closes an output the way its red button does, for test mode.
+    func debugCloseWindow(_ id: Int) { windows[id]?.closeFromWindow() }
 
     /// The outputs a cue shows on: its own, or every one for "every output".
     /// A cue pointed at an output that was removed uses the first output.
@@ -1790,9 +1806,6 @@ final class Engine: ObservableObject {
             }
             return d.lastFrame
         }
-    /// Closes an output the way its red button does, for test mode.
-    func debugCloseWindow(_ id: Int) { windows[id]?.closeFromWindow() }
-
         guard let still = stillCue else { return nil }
         if still.kind == .matte {
             return CIImage(color: CIColor(color: NSColor(hex: still.color) ?? .black) ?? .black)
@@ -1858,6 +1871,11 @@ final class Engine: ObservableObject {
     func setHotkey(_ id: UUID, _ key: String) {
         let k = key.lowercased()
         guard cues.contains(where: { $0.id == id }), cues.first(where: { $0.id == id })?.hotkey != k else { return }
+        // A show key (GO, Stop...) always wins, so a cue can never take one.
+        if KeyMap.shared.keys.values.contains(where: { !$0.padName.isEmpty && $0.padName == k }) {
+            log.add(.problem, "\(k.uppercased()) is a show key, so a cue cannot have it")
+            return
+        }
         noteUndo("Hotkey", key: "hotkey:\(id)")
         for i in cues.indices {
             if cues[i].id == id { cues[i].hotkey = k } else if !k.isEmpty && cues[i].hotkey == k { cues[i].hotkey = "" }
@@ -1890,11 +1908,6 @@ final class Engine: ObservableObject {
     /// than 1 and 2 is picked and the cue plays to the cue sound device (not
     /// to an output's own sound device).
     private func usesLane(for cue: Cue) -> Bool {
-        // A show key (GO, Stop...) always wins, so a cue can never take one.
-        if KeyMap.shared.keys.values.contains(where: { !$0.padName.isEmpty && $0.padName == k }) {
-            log.add(.problem, "\(k.uppercased()) is a show key, so a cue cannot have it")
-            return
-        }
         cueSound.isOn && soundDevice(for: cue) == audio.cueDevice
     }
 

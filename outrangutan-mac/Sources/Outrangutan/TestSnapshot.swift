@@ -992,6 +992,7 @@ enum TestSnapshot {
         matte.xfade = 0.5
         var loop = file("bars-4x3.mp4", .video, "5 Bars 4x3, 10 to 13 s, loop")
         loop.trimIn = 10; loop.trimOut = 13; loop.loop = true
+        var pausedLevel = 0.0
         return [
             (1.0, {
                 engine.cues = [still, video, sound, matte, loop]
@@ -1000,7 +1001,6 @@ enum TestSnapshot {
             }),
             (0.5, { engine.go() }),
             (0.4, { state("a GO on the still: waiting out its pre-wait"); note("   pre-wait left: \(engine.preRemaining.map { String(format: "%.1f", $0) } ?? "-")") }),
-        var pausedLevel = 0.0
             (1.0, { state("b the still is up, its timer counting"); snap("t-b-still") }),
             (1.6, { state("c the timer ended, Follow started the video under a dissolve") }),
             (0.4, { snap("t-c-dissolve") }),
@@ -1016,14 +1016,6 @@ enum TestSnapshot {
             (0.1, { engine.fadeStopAll() }),
             (0.5, { state("i half way through Fade") }),
             (0.9, { state("j after Fade"); snap("t-j-end") }),
-        ]
-    }
-
-    private static var virtualBox = MIDIEndpointRef()
-    private static var sockets: [URLSessionWebSocketTask] = []
-
-    private static var fakeObs: FakeObs?
-    private static let testUndo = UndoManager()
             // A Follow that cannot take over: the next cue's file is missing.
             // The clip must still stop at its out point.
             (0.1, {
@@ -1095,6 +1087,14 @@ enum TestSnapshot {
                 note("r the clip stopped at the Out it was fired with: status \(engine.status.rawValue) at \(String(format: "%.2f", at)) s, clock \(engine.remaining.map { String(format: "%.2f", $0) } ?? "none"): \(engine.status == .holding && at >= 11.5 && at <= 12.1 ? "PASS" : "FAIL")")
                 engine.allStop()
             }),
+        ]
+    }
+
+    private static var virtualBox = MIDIEndpointRef()
+    private static var sockets: [URLSessionWebSocketTask] = []
+
+    private static var fakeObs: FakeObs?
+    private static let testUndo = UndoManager()
 
     /// The reviewer's findings, each played out.
     @MainActor private static func fixSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void) -> Steps {
@@ -1781,6 +1781,9 @@ enum TestSnapshot {
                 horn.emoji = "📯"
                 engine.replaceShow(cues: [intro, still, applause, lost], pads: [horn], banks: [bank], multiTrigger: true)
                 engine.update(engine.cues[0].id) { $0.sfxPadId = horn.id; $0.trimIn = 90 }
+                // A picked screen that is not here: the output opens as a
+                // window, the kind with a red button.
+                engine.outputs[0].screen = "A screen that is not here"
                 link.join(code: "LOG1")
             }),
             (1.0, { engine.openOutput(); engine.go() }),
@@ -1789,9 +1792,6 @@ enum TestSnapshot {
             (0.4, { send("cue", cueId: engine.cues[1].wireID ?? "") }),
             (0.8, { send("pad", padId: engine.pads.pads[0].id) }),
             (0.6, { send("cue", cueId: "og_not_here") }),
-                // A picked screen that is not here: the output opens as a
-                // window, the kind with a red button.
-                engine.outputs[0].screen = "A screen that is not here"
             (0.6, { engine.standbyID = engine.cues[3].id; engine.go() }),
             (0.3, { engine.stop(); engine.pads.fire(engine.pads.pads[0].id) }),
             (0.4, { send("panic") }),
