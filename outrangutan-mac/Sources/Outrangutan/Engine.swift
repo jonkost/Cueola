@@ -1752,7 +1752,13 @@ final class Engine: ObservableObject {
         if let w = windows[id] { return w }
         let w = OutputWindowController()
         w.pictureView.standbyText = standbyText
-        w.onClose = { [weak self] in self?.openOutputs.remove(id); self?.onTransport?() }
+        w.onClose = { [weak self] in
+            guard let self else { return }
+            // The red button, Command-W: logged like any other close.
+            if self.openOutputs.contains(id) { self.log.add(.output, "\(self.outputLabel(id)) closed by its window") }
+            self.openOutputs.remove(id)
+            self.onTransport?()
+        }
         windows[id] = w
         return w
     }
@@ -1777,6 +1783,9 @@ final class Engine: ObservableObject {
             }
             return d.lastFrame
         }
+    /// Closes an output the way its red button does, for test mode.
+    func debugCloseWindow(_ id: Int) { windows[id]?.closeFromWindow() }
+
         guard let still = stillCue else { return nil }
         if still.kind == .matte {
             return CIImage(color: CIColor(color: NSColor(hex: still.color) ?? .black) ?? .black)

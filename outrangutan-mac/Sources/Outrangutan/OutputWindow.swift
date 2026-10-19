@@ -72,6 +72,10 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
         window = nil
         onClose?()
     }
+
+    /// Closes the window the way its red button does (through
+    /// windowWillClose), for test mode.
+    func closeFromWindow() { window?.close() }
 }
 
 /// Black background with the four picture layers.

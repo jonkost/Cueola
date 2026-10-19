@@ -1781,11 +1781,16 @@ enum TestSnapshot {
             (0.4, { send("cue", cueId: engine.cues[1].wireID ?? "") }),
             (0.8, { send("pad", padId: engine.pads.pads[0].id) }),
             (0.6, { send("cue", cueId: "og_not_here") }),
+                // A picked screen that is not here: the output opens as a
+                // window, the kind with a red button.
+                engine.outputs[0].screen = "A screen that is not here"
             (0.6, { engine.standbyID = engine.cues[3].id; engine.go() }),
             (0.3, { engine.stop(); engine.pads.fire(engine.pads.pads[0].id) }),
             (0.4, { send("panic") }),
             (0.8, {
-                engine.closeOutput(1)
+                // Closed with its red button, not from the toolbar.
+                engine.debugCloseWindow(1)
+                note("closed by its window: logged \(engine.log.entries.contains { $0.text.hasSuffix("closed by its window") } ? "PASS" : "FAIL"), output open \(engine.liveState().outputsOpen)")
                 engine.log.entries.forEach { note("log: \($0.line)") }
                 // The Show Log window, drawn the way the test camera can.
                 let root = ShowLogView(log: engine.log) { "Log Test Show" }
