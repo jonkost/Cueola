@@ -3,6 +3,12 @@ import OutrangutanCore
 
 /// A pretend Stream Deck: takes the app's reports like the real one, puts
 /// the key pictures back together, and presses keys and turns dials.
+///
+/// It is as strict as the real deck. A report of the wrong size, a picture
+/// for a key the deck does not have, a part out of order, a picture that
+/// does not decode to the key's size, or anything sent after the deck was
+/// closed is written down as a fault, so a test can say PASS or FAIL
+/// instead of a person reading the numbers.
 final class FakeDeckTransport: DeckTransport {
     let productID: Int
     let serial = "TEST0001"
@@ -10,12 +16,18 @@ final class FakeDeckTransport: DeckTransport {
     var onGone: (() -> Void)?
     private let lock = NSLock()
     private var partial: [Int: [UInt8]] = [:]
+    private var nextPart: [Int: Int] = [:]
     private var stripPartial: [UInt8] = []
+    private var stripNextPart = 0
     private var _keyImages: [Int: [UInt8]] = [:]
     private var _stripImage: [UInt8] = []
     private var _features: [[UInt8]] = []
     private var _reports = 0
     private var _closed = false
+    private var _sequence: [String] = []
+    private var _faults: [String] = []
+    private var _goodKeys = Set<Int>()
+    private var _stripGood = false
 
     init(productID: Int) { self.productID = productID }
 
@@ -27,30 +39,117 @@ final class FakeDeckTransport: DeckTransport {
     /// True once the app closed this deck: like the real one, it takes
     /// nothing after that.
     var closed: Bool { lock.lock(); defer { lock.unlock() }; return _closed }
+    /// Everything the deck took, in order: "reset", "brightness", then
+    /// "key 1", "key 2"... as each picture completes, and "strip".
+    var sequence: [String] { lock.lock(); defer { lock.unlock() }; return _sequence }
+    /// What the real deck would have refused or shown wrong.
+    var faults: [String] { lock.lock(); defer { lock.unlock() }; return _faults }
+    /// How many keys hold a picture that decodes to the key's size.
+    var goodPictures: Int { lock.lock(); defer { lock.unlock() }; return _goodKeys.count }
+    /// True once the strip holds a picture that decodes to the strip's size.
+    var stripGood: Bool { lock.lock(); defer { lock.unlock() }; return _stripGood }
+
+    private func fault(_ text: String) { _faults.append(text) }
 
     func write(_ r: [UInt8]) {
         lock.lock(); defer { lock.unlock() }
-        guard !_closed else { return }
+        guard !_closed else { fault("a report came after the deck was closed"); return }
         _reports += 1
-        guard r.count > 16, r[0] == 0x02 else { return }
-        if r[1] == 0x07 {
-            let key = Int(r[2]), last = r[3] == 1, len = Int(r[4]) | (Int(r[5]) << 8)
-            partial[key, default: []] += r[8..<min(r.count, 8 + len)]
-            if last { _keyImages[key] = partial[key]; partial[key] = nil }
-        } else if r[1] == 0x01 {
-            // The Mini's and the 2017 deck's form.
-            let key = Int(r[5]) - 1, last = r[4] == 1
-            partial[key, default: []] += r[16...]
-            if last { _keyImages[key] = partial[key]; partial[key] = nil }
-        } else if r[1] == 0x0c {
-            let last = r[10] == 1, len = Int(r[13]) | (Int(r[14]) << 8)
-            stripPartial += r[16..<min(r.count, 16 + len)]
-            if last { _stripImage = stripPartial; stripPartial = [] }
+        let m = model
+        let size = m.packet == .original ? 8191 : 1024
+        guard r.count == size else { fault("report \(_reports) is \(r.count) bytes, not \(size)"); return }
+        guard r[0] == 0x02 else { fault(String(format: "report %d starts with %02x, not 02", _reports, r[0])); return }
+        if r[1] == 0x07 && m.packet == .gen2 {
+            let key = Int(r[2]), last = r[3] == 1, len = Int(r[4]) | (Int(r[5]) << 8), part = Int(r[6]) | (Int(r[7]) << 8)
+            guard len > 0, len <= size - 8 else { fault("key \(key + 1) part \(part) says it holds \(len) bytes"); return }
+            took(key: key, part: part, last: last, bytes: r[8..<(8 + len)])
+        } else if r[1] == 0x01 && m.packet != .gen2 {
+            // The Mini's and the 2017 deck's form: no length, the picture
+            // fills the report, and the 2017 deck counts parts from 1.
+            let key = StreamDeckProtocol.wireKey(Int(r[5]) - 1, model: m), last = r[4] == 1
+            let part = m.packet == .mini ? Int(r[2]) : Int(r[2]) - 1
+            took(key: key, part: part, last: last, bytes: r[16...])
+        } else if r[1] == 0x0c, let strip = m.strip {
+            let last = r[10] == 1, part = Int(r[11]) | (Int(r[12]) << 8), len = Int(r[13]) | (Int(r[14]) << 8)
+            if part != stripNextPart { fault("strip part \(part) came when part \(stripNextPart) was due") }
+            stripNextPart = part + 1
+            guard len > 0, len <= size - 16 else { fault("strip part \(part) says it holds \(len) bytes"); return }
+            stripPartial += r[16..<(16 + len)]
+            if last {
+                _stripImage = stripPartial; stripPartial = []; stripNextPart = 0
+                let w = strip.encodeRotated ? strip.height : strip.width, h = strip.encodeRotated ? strip.width : strip.height
+                _stripGood = decodes(_stripImage, name: "the strip", width: w, height: h)
+                _sequence.append("strip")
+            }
+        } else {
+            fault(String(format: "report %d is a kind this deck does not take: %02x", _reports, r[1]))
         }
     }
 
-    func writeFeature(_ r: [UInt8]) { lock.lock(); if !_closed { _features.append(r) }; lock.unlock() }
-    func close() { lock.lock(); _closed = true; lock.unlock() }
+    /// One part of a key's picture.
+    private func took(key: Int, part: Int, last: Bool, bytes: ArraySlice<UInt8>) {
+        let m = model
+        guard key >= 0, key < m.keys else { fault("a picture for key \(key + 1), but this deck has \(m.keys) keys"); return }
+        let due = nextPart[key, default: 0]
+        if part != due { fault("key \(key + 1): part \(part) came when part \(due) was due") }
+        nextPart[key] = part + 1
+        partial[key, default: []] += bytes
+        guard last else { return }
+        var image = partial[key] ?? []
+        partial[key] = nil; nextPart[key] = nil
+        if m.imageFormat == .bmp, image.count >= 6 {
+            // The last report is padded; a bitmap says its own length.
+            let n = Int(image[2]) | (Int(image[3]) << 8) | (Int(image[4]) << 16) | (Int(image[5]) << 24)
+            if n <= image.count { image = Array(image.prefix(n)) }
+        }
+        _keyImages[key] = image
+        _sequence.append("key \(key + 1)")
+        if decodes(image, name: "key \(key + 1)", width: m.keyPixels, height: m.keyPixels) { _goodKeys.insert(key) } else { _goodKeys.remove(key) }
+    }
+
+    /// True when the bytes are a picture of this size, in the form this
+    /// deck wants (a 24-bit bitmap with its rows counted, or a JPEG).
+    private func decodes(_ bytes: [UInt8], name: String, width: Int, height: Int) -> Bool {
+        if model.imageFormat == .bmp && !name.hasPrefix("the strip") {
+            guard bytes.count >= 54, bytes[0] == 0x42, bytes[1] == 0x4d else { fault("\(name) is not a BMP"); return false }
+            let rows = Int(bytes[22]) | (Int(bytes[23]) << 8), bits = Int(bytes[28]) | (Int(bytes[29]) << 8)
+            guard rows == height, bits == 24 else { fault("\(name) BMP says \(rows) rows at \(bits) bits, not \(height) at 24"); return false }
+        }
+        guard let rep = NSBitmapImageRep(data: Data(bytes)) else { fault("\(name) does not decode as a picture"); return false }
+        guard rep.pixelsWide == width, rep.pixelsHigh == height else {
+            fault("\(name) is \(rep.pixelsWide)x\(rep.pixelsHigh), not \(width)x\(height)"); return false
+        }
+        return true
+    }
+
+    func writeFeature(_ r: [UInt8]) {
+        lock.lock(); defer { lock.unlock() }
+        guard !_closed else { fault("a feature report came after the deck was closed"); return }
+        let want = model.packet == .gen2 ? 32 : 17
+        if r.count != want { fault("feature report is \(r.count) bytes, not \(want)") }
+        _features.append(r)
+        let reset = StreamDeckProtocol.resetReport(model: model), bright = StreamDeckProtocol.brightnessReport(model: model, percent: 0)
+        if r.count >= 2 && r[0] == reset[0] && r[1] == reset[1] { _sequence.append("reset") }
+        else if r.count >= 2 && r[0] == bright[0] && r[1] == bright[1] { _sequence.append("brightness") }
+        else { _sequence.append(String(format: "feature %02x", r.first ?? 0)) }
+    }
+
+    func close() {
+        onInput = nil
+        lock.lock(); _closed = true; lock.unlock()
+    }
+
+    /// Yanks the cable. The app hears the deck is gone, and the deck
+    /// forgets everything it was shown, like a fresh one plugged in later.
+    func unplug() {
+        lock.lock()
+        partial = [:]; nextPart = [:]; stripPartial = []; stripNextPart = 0
+        _keyImages = [:]; _stripImage = []; _features = []; _reports = 0; _closed = false
+        _sequence = []; _faults = []; _goodKeys = []; _stripGood = false
+        lock.unlock()
+        onInput = nil
+        onGone?()
+    }
 
     /// What the deck took last: "03 02" is the reset that darkens it.
     var lastFeature: String { features.last.map { String(format: "%02x %02x", $0[0], $0[1]) } ?? "-" }
@@ -122,13 +221,15 @@ final class FakeDeckTransport: DeckTransport {
 }
 
 extension TestSnapshot {
-    /// The "deck" test: a pretend XL, then a pretend Stream Deck +.
+    /// The "deck" test: a pretend XL (unplugged and plugged back in along
+    /// the way), then a pretend Stream Deck +, then a pretend Mini.
     @MainActor
     static func deckSteps(engine: Engine, dir: URL, note: @escaping (String) -> Void, state: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
         let deck = StreamDeckController(engine: engine)
         let xl = FakeDeckTransport(productID: 0x006c)
         let plus = FakeDeckTransport(productID: 0x0084)
+        let mini = FakeDeckTransport(productID: 0x0063)
         weak var ghost: FakeDeckTransport?
         var wasOn = true
         func save(_ image: NSImage, _ name: String) {
@@ -146,6 +247,19 @@ extension TestSnapshot {
                 }.joined(separator: " | ")
             }
             note(label + ":\n      " + rows.joined(separator: "\n      "))
+        }
+        /// Says PASS when the deck took a right-sized picture for every key
+        /// (and the strip), reset then brightness came before any of them,
+        /// and the deck found nothing to refuse.
+        func judge(_ t: FakeDeckTransport, _ label: String) {
+            let m = t.model, px = m.keyPixels
+            let first = Array(t.sequence.prefix(2))
+            let ok = t.goodPictures == m.keys && first == ["reset", "brightness"] && t.faults.isEmpty && (m.strip == nil || t.stripGood)
+            var text = "\(label) \(t.goodPictures) of \(m.keys) pictures \(px)x\(px)" + (m.imageFormat == .bmp ? " BMP" : "")
+            if let s = m.strip { text += ", strip \(s.width)x\(s.height) \(t.stripGood ? "ok" : "MISSING")" }
+            text += ", \(first.isEmpty ? "nothing" : first.joined(separator: " then ")) first, \(t.faults.count) faults, \(t.reports) reports: \(ok ? "PASS" : "FAIL")"
+            note(text)
+            for f in t.faults.prefix(6) { note("   fault: " + f) }
         }
         return [
             (0.5, {
@@ -170,9 +284,8 @@ extension TestSnapshot {
             }),
             (1.5, {
                 note("a \(deck.modelName): \(deck.message)")
-                note("   reset and brightness went first: " + xl.features.map { String(format: "%02x %02x %02x", $0[0], $0[1], $0[2]) }.joined(separator: ", "))
-                note("   \(xl.keyImages.count) key pictures in \(xl.reports) reports; sizes \(xl.keyImages.values.map(\.count).min() ?? 0) to \(xl.keyImages.values.map(\.count).max() ?? 0) bytes")
-                faces("b the keys at rest (standby is 1_Intro)")
+                judge(xl, "b")
+                faces("   the keys at rest (standby is 1_Intro)")
                 save(xl.sheet(), "deck-xl.png")
                 xl.press([0])     // GO
             }),
@@ -208,27 +321,45 @@ extension TestSnapshot {
             (0.5, {
                 state("h first cue key on page two")
                 engine.allStop()
+                // The USB hub hiccups: the only deck goes away (after what
+                // was already on its way to it has landed).
+                deck.writes.sync {}
+                xl.unplug()
+                let ok = deck.state == .looking && deck.message.contains("unplugged")
+                note("i the XL unplugged: \(deck.state), \(deck.message): \(ok ? "PASS" : "FAIL")")
+            }),
+            (0.5, {
+                // And comes back two seconds later: every key is drawn again.
+                deck.attach(xl)
+            }),
+            (1.0, {
+                judge(xl, "j the XL plugged back in:")
+                let standby = deck.faces.count > 8 && deck.faces[8].rim == DeckFaces.colors.standby
+                note("   standby rim back on cue 17's key: \(standby ? "PASS" : "FAIL")")
                 deck.attach(plus)
             }),
             (1.5, {
-                note("i \(deck.modelName): \(deck.message)")
+                note("k \(deck.modelName): \(deck.message)")
                 note("   the XL went dark when the + took over: its last feature report is \(xl.lastFeature) (03 02 = reset)")
+                judge(plus, "   the +:")
                 faces("   keys")
                 save(plus.sheet(), "deck-plus.png")
                 if let strip = NSImage(data: Data(plus.stripImage)) { save(strip, "deck-plus-strip.png") }
-                note("   strip picture: \(plus.stripImage.count) bytes")
+                // A press on the deck that was set aside must do nothing.
+                xl.press([0])
+                note("   GO on the dark XL: on air \(engine.pictureCue?.name ?? "nothing"): \(engine.pictureCue == nil ? "PASS" : "FAIL")")
                 plus.turn(dial: 0, by: 5)
-                note("j dial 1 up five clicks: gain \(String(format: "%.2f", engine.masterGain))")
+                note("l dial 1 up five clicks: gain \(String(format: "%.2f", engine.masterGain))")
                 plus.pressDial(0)
                 note("   dial 1 pressed: gain \(engine.masterGain)")
                 plus.pressDial(0)
                 note("   pressed again: gain \(String(format: "%.2f", engine.masterGain))")
                 plus.turn(dial: 1, by: 2)
-                note("k dial 2 turned: standby \(engine.standbyCue?.name ?? "-")")
+                note("m dial 2 turned: standby \(engine.standbyCue?.name ?? "-")")
                 plus.pressDial(1)
             }),
             (1.2, {
-                state("l dial 2 pressed (GO)")
+                state("n dial 2 pressed (GO)")
                 if let strip = NSImage(data: Data(plus.stripImage)) { save(strip, "deck-plus-strip-onair.png") }
                 engine.allStop()
             }),
@@ -236,34 +367,54 @@ extension TestSnapshot {
                 plus.touch(zone: 1, gesture: 3)
                 plus.touch(zone: 1, gesture: 2)
                 plus.touch(zone: 0, gesture: 3)
-                note("m a flick and a long press on the standby zone, a flick on VOL: on air \(engine.pictureCue?.name ?? "nothing"), gain \(String(format: "%.2f", engine.masterGain))")
+                note("o a flick and a long press on the standby zone, a flick on VOL: on air \(engine.pictureCue?.name ?? "nothing"), gain \(String(format: "%.2f", engine.masterGain))")
                 plus.touch(zone: 1, gesture: 1)
             }),
             (0.8, {
-                state("n a tap on the standby zone (GO)")
+                state("p a tap on the standby zone (GO)")
                 engine.allStop()
-                // A third deck plugged in takes over; unplugged, the XL (dark
+                // The Mini from the show rig: bitmaps turned on their side,
+                // the older report form, six keys.
+                deck.attach(mini)
+            }),
+            (1.5, {
+                note("q \(deck.modelName): \(deck.message)")
+                judge(mini, "   the Mini:")
+                faces("   keys")
+                save(mini.sheet(), "deck-mini.png")
+                mini.press([0])    // GO
+            }),
+            (0.8, {
+                state("r GO pressed on the Mini")
+                mini.press([5])    // its one pad
+            }),
+            (0.5, {
+                note("s pad key pressed on the Mini: sounding " + engine.pads.sounding.keys.compactMap { engine.pads.pad(id: $0)?.name }.joined(separator: ", "))
+                engine.allStop()
+                // A fourth deck plugged in takes over; unplugged, the XL (dark
                 // and waiting all this time) takes over again, and nothing
                 // holds on to the deck that left.
                 do {
                     let third = FakeDeckTransport(productID: 0x0080)
                     deck.attach(third)
                     ghost = third
-                    note("o a MK.2 plugged in: \(deck.modelName) drives; the + went dark: \(plus.lastFeature)")
-                    third.onGone?()
+                    note("t a MK.2 plugged in: \(deck.modelName) drives; the Mini went dark: \(mini.lastFeature)")
+                    deck.writes.sync {}
+                    third.unplug()
                 }
-                plus.onGone?()
+                plus.unplug()
+                mini.unplug()
             }),
             (0.5, {
-                note("p the MK.2 and the + unplugged: \(deck.modelName) drives again (\(deck.state)), \(deck.message)")
+                note("u the MK.2, the + and the Mini unplugged: \(deck.modelName) drives again (\(deck.state)), \(deck.message)")
                 note("   the deck that left is " + (ghost == nil ? "freed" : "STILL HELD"))
-                note("   \(xl.keyImages.count) key pictures on the XL again")
+                judge(xl, "   the XL again:")
                 wasOn = deck.enabled
                 deck.enabled = false
             }),
             (0.5, {
-                note("q deck off in Settings: \(deck.message)")
-                note("   the XL's last report is \(xl.lastFeature) (03 02 = reset, dark), closed: \(xl.closed)")
+                note("v deck off in Settings: \(deck.message)")
+                note("   the XL's last report is \(xl.lastFeature) (03 02 = reset, dark), closed: \(xl.closed), faults after: \(xl.faults.count)")
                 deck.enabled = wasOn
             }),
         ]
