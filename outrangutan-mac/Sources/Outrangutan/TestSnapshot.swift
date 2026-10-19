@@ -1737,6 +1737,20 @@ enum TestSnapshot {
                 note("i back to standard: \(keyList())")
                 engine.allStop()
             }),
+            (0.5, {
+                // A file panel or alert is up. Those are app-modal, not
+                // sheets, so a plain window run the same way stands in for
+                // one. Space (GO again) must reach the panel, not the show.
+                let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+                let before = gos()
+                let session = NSApp.beginModalSession(for: panel)
+                let modal = NSApp.modalWindow != nil
+                press(49, " ")
+                _ = NSApp.runModalSession(session)
+                NSApp.endModalSession(session)
+                panel.orderOut(nil)
+                note("j Space under a file panel (app-modal, seen \(modal)): GOs \(before) -> \(gos()): \(modal && gos() == before ? "PASS" : "FAIL")")
+            }),
         ]
     }
 

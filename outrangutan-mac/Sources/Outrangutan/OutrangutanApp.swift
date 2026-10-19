@@ -267,6 +267,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // test's own pretend key presses reach it.)
         keyWatcher = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            // An Open or Save panel or an alert is up (they are app-modal,
+            // not sheets): it gets every key, never the show.
+            if NSApp.modalWindow != nil { return event }
             if NSApp.keyWindow?.firstResponder is NSText { return event }
             // A sheet (Connect, Record a Sound) or Settings is in front: its
             // own buttons get the keys, never GO.
