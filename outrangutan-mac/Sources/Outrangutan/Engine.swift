@@ -668,7 +668,14 @@ final class Engine: ObservableObject {
         } else if hasAnythingToPause {
             log.add(.pause, "Paused", from: source)
             paused = true
-            for d in [pictureDeck, soundDeck].compactMap({ $0 }) { d.pause() }
+            for d in [pictureDeck, soundDeck].compactMap({ $0 }) {
+                d.pause()
+                // A fade-out under way holds too; the clock restarts it from
+                // this level over the time left once the cue carries on.
+                if d.fadingOut { fader.cancel(d.name); d.fadingOut = false }
+            }
+            if let cue = stillCue, cue.fadeOut > 0, let ends = stillEndsAt, stillTimer != nil,
+               ends.timeIntervalSinceNow <= cue.fadeOut { fader.cancel("still") }
             if let ends = stillEndsAt, stillTimer != nil {
                 stillLeft = max(0, ends.timeIntervalSinceNow)
                 stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil
@@ -1585,7 +1592,7 @@ final class Engine: ObservableObject {
         preRemaining = pendingLeft ?? pending.map { max(0, $0.at.timeIntervalSinceNow) }
         // Fade out before the end, for cues that ask for it.
         for d in [pictureDeck, soundDeck].compactMap({ $0 }) {
-            guard let cue = d.cue, cue.fadeOut > 0, !cue.loop, !d.fadingOut, !d.held, !paused,
+            guard let cue = d.cue, cue.fadeOut > 0, !cue.loop, !d.fadingOut, !d.held, !paused, !fader.isRunning(d.name),
                   let left = d.remaining, left <= cue.fadeOut, left > 0 else { continue }
             d.fadingOut = true
             let p = d.pictureLevel, s = d.soundLevel

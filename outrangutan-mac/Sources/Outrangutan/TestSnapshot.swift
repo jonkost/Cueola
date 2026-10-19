@@ -992,6 +992,7 @@ enum TestSnapshot {
             }),
             (0.5, { engine.go() }),
             (0.4, { state("a GO on the still: waiting out its pre-wait"); note("   pre-wait left: \(engine.preRemaining.map { String(format: "%.1f", $0) } ?? "-")") }),
+        var pausedLevel = 0.0
             (1.0, { state("b the still is up, its timer counting"); snap("t-b-still") }),
             (1.6, { state("c the timer ended, Follow started the video under a dissolve") }),
             (0.4, { snap("t-c-dissolve") }),
@@ -1015,6 +1016,77 @@ enum TestSnapshot {
 
     private static var fakeObs: FakeObs?
     private static let testUndo = UndoManager()
+            // A Follow that cannot take over: the next cue's file is missing.
+            // The clip must still stop at its out point.
+            (0.1, {
+                var short = file("bars-16x9.mp4", .video, "Bars 10 to 12, Follow, hold")
+                short.trimIn = 10; short.trimOut = 12; short.continueMode = .autoFollow; short.endAction = .hold
+                let lost = Cue(name: "Clip that moved", path: "/nowhere/clip.mov", kind: .video, wireID: Cue.newWireID(offsetMs: 7))
+                engine.cues = [short, lost]
+                engine.standbyID = short.id
+                engine.go()
+            }),
+            (2.5, {
+                let at = engine.soundPosition(lane: 0) ?? -1
+                note("k Follow refused (file missing): status \(engine.status.rawValue), clip held at \(String(format: "%.2f", at)) s: \(engine.status == .holding && at >= 11.5 && at <= 12.1 ? "PASS" : "FAIL")")
+                engine.allStop()
+                // The next cue has a pre-wait: the clip must not roll on
+                // past its out point while the wait runs.
+                var short = file("bars-16x9.mp4", .video, "Bars 10 to 12, Follow")
+                short.trimIn = 10; short.trimOut = 12; short.continueMode = .autoFollow
+                var next = file("bars-4x3.mp4", .video, "Next, waits 3")
+                next.preWait = 3
+                engine.cues = [short, next]
+                engine.standbyID = short.id
+                engine.go()
+            }),
+            (3.0, {
+                note("l Follow into a pre-wait, 1 s in: status \(engine.status.rawValue), decks: \(engine.soundRoutes.isEmpty ? "clear" : engine.soundRoutes): \(engine.status == .pre && engine.soundRoutes.isEmpty ? "PASS" : "FAIL")")
+                engine.allStop()
+                // A fade-out as long as the clip must wait for the fade-in.
+                var bumper = file("bars-16x9.mp4", .video, "Bumper 10 to 13, fade in 0.5, fade out 5")
+                bumper.trimIn = 10; bumper.trimOut = 13; bumper.fadeIn = 0.5; bumper.fadeOut = 5
+                engine.cues = [bumper]
+                engine.standbyID = bumper.id
+                engine.go()
+            }),
+            (1.0, {
+                note("m fade-out longer than the clip, 1 s after GO: level \(String(format: "%.2f", engine.cueLevel)) (above 0.5, not black): \(engine.cueLevel > 0.5 ? "PASS" : "FAIL")")
+                engine.allStop()
+                // Pause holds a running fade-out where it is.
+                var fading = file("bars-16x9.mp4", .video, "Bars 10 to 14, fade out 2")
+                fading.trimIn = 10; fading.trimOut = 14; fading.fadeOut = 2
+                engine.cues = [fading]
+                engine.standbyID = fading.id
+                engine.go()
+            }),
+            (2.6, { engine.togglePause(); pausedLevel = engine.cueLevel; note("n paused 0.6 s into the fade-out: level \(String(format: "%.2f", pausedLevel))") }),
+            (1.0, {
+                let now = engine.cueLevel
+                note("o a second later, still paused: level \(String(format: "%.2f", now)) (unchanged): \(abs(now - pausedLevel) < 0.02 && now > 0.3 ? "PASS" : "FAIL")")
+                engine.togglePause()
+            }),
+            (0.7, {
+                note("p carrying on, 0.7 s later: level \(String(format: "%.2f", engine.cueLevel)), clock \(engine.remaining.map { String(format: "%.2f", $0) } ?? "none") (fading, not black yet): \(engine.cueLevel > 0.05 && (engine.remaining ?? 0) > 0 ? "PASS" : "FAIL")")
+                engine.allStop()
+                // Trim Out changed while on air: the clock and the stop agree
+                // (both keep the Out the cue was fired with).
+                var trimmed = file("bars-16x9.mp4", .video, "Bars 10 to 12, hold")
+                trimmed.trimIn = 10; trimmed.trimOut = 12; trimmed.endAction = .hold
+                engine.cues = [trimmed]
+                engine.standbyID = trimmed.id
+                engine.go()
+            }),
+            (0.5, {
+                engine.update(engine.cues[0].id) { $0.trimOut = 20 }
+                let left = engine.remaining ?? -1
+                note("q Out moved to 20 s on air: clock \(String(format: "%.2f", left)) (still under 2 s): \(left >= 0 && left < 2 ? "PASS" : "FAIL")")
+            }),
+            (2.0, {
+                let at = engine.soundPosition(lane: 0) ?? -1
+                note("r the clip stopped at the Out it was fired with: status \(engine.status.rawValue) at \(String(format: "%.2f", at)) s, clock \(engine.remaining.map { String(format: "%.2f", $0) } ?? "none"): \(engine.status == .holding && at >= 11.5 && at <= 12.1 ? "PASS" : "FAIL")")
+                engine.allStop()
+            }),
 
     /// The reviewer's findings, each played out.
     @MainActor private static func fixSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void) -> Steps {
