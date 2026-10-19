@@ -51,7 +51,21 @@ final class CueSoundEngine {
     private(set) var isOn = false
     /// Where cue sound is going, in words, for Settings and Show Check.
     private(set) var note = ""
+    /// Called when the sound hardware moved cue sound on its own (the
+    /// interface pulled or plugged back in), with a line for the show log
+    /// and whether the engine is still running. Off the lane path when it
+    /// is not: cues then play from their players.
+    var onHardwareChange: ((String, Bool) -> Void)?
     private let audio = AVAudioEngine()
+    /// Where Settings sent cue sound, so a hardware change can put it back.
+    private var route: (uid: String?, firstChannel: Int)?
+    /// The device cue sound is pinned to right now (0 for none).
+    private var pinnedID: AudioDeviceID = 0
+    private var deviceWatch: AudioObjectPropertyListenerBlock = { _, _ in }
+    private var deviceCheck: DispatchWorkItem?
+    private static var devicesAddress = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                                                   mScope: kAudioObjectPropertyScopeGlobal,
+                                                                   mElement: kAudioObjectPropertyElementMain)
 
     init(laneCount: Int = 4) {
         lanes = (0..<laneCount).map { _ in SoundLane() }
@@ -66,10 +80,48 @@ final class CueSoundEngine {
         }
         // Test mode never makes a sound. The lanes still carry it.
         if TestSnapshot.isOn { audio.mainMixerNode.outputVolume = 0 }
+        // When the sound hardware changes (the interface pulled, a sample
+        // rate changed), the engine stops. Put cue sound back where
+        // Settings sent it, or on the Mac's default output meanwhile.
         NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio, queue: .main) { [weak self] _ in
-            guard let self, self.isOn else { return }
-            self.start()
+            self?.soundHardwareChanged()
         }
+        // When the Mac's list of sound devices changes (the interface
+        // plugged back in, with a new id), cue sound goes back to it.
+        deviceWatch = { [weak self] _, _ in DispatchQueue.main.async { self?.devicesChangedSoon() } }
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &CueSoundEngine.devicesAddress, .main, deviceWatch)
+    }
+
+    deinit {
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &CueSoundEngine.devicesAddress, .main, deviceWatch)
+    }
+
+    /// The sound hardware changed under the engine. Cue sound goes back to
+    /// the device Settings picked, or to the Mac's default output while
+    /// that device is away; the show log says where it went. A cue on air
+    /// keeps going: its deck notes the lane's clock again on the next tick.
+    func soundHardwareChanged() {
+        guard isOn, let route else { return }
+        setOutput(device: route.uid, firstChannel: route.firstChannel)
+        guard isOn else { return }
+        onHardwareChange?("The sound hardware changed: cue sound now plays on \(note)", true)
+    }
+
+    /// The list of sound devices changed. A moment later (a device just
+    /// plugged in is still waking up), if the device Settings picked is
+    /// here under a new id, cue sound goes back to it. Any other change
+    /// (a headset pairing) leaves cue sound alone.
+    private func devicesChangedSoon() {
+        deviceCheck?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let route = self.route, route.firstChannel > 0, let uid = route.uid,
+                  let dev = AudioDevices.device(uid: uid), dev.objectID != self.pinnedID else { return }
+            self.setOutput(device: uid, firstChannel: route.firstChannel)
+            guard self.isOn else { return }
+            self.onHardwareChange?("\(dev.name) is back: cue sound plays on \(self.note)", true)
+        }
+        deviceCheck = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     /// Sends cue sound to a device on a chosen pair (0 is channels 1 and 2,
@@ -77,8 +129,10 @@ final class CueSoundEngine {
     /// cues then play straight from their players. Cues already playing
     /// keep the path they started on.
     func setOutput(device uid: String?, firstChannel: Int) {
+        route = (uid, firstChannel)
         audio.stop()
         lanes.forEach { $0.ring.flush(); $0.clock.stop() }
+        pinnedID = 0
         guard firstChannel > 0 else {
             isOn = false
             note = ""
@@ -89,6 +143,7 @@ final class CueSoundEngine {
             var id = dev.objectID
             AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
                                  &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            pinnedID = dev.objectID
             let total = dev.channels
             var map = [Int32](repeating: -1, count: total)
             // A pair this device does not have goes to channels 1 and 2,
@@ -116,8 +171,16 @@ final class CueSoundEngine {
         start()
     }
 
+    /// Starts the engine. When it will not start, the engine switches
+    /// itself off so cues play from their players (on the Mac's output, at
+    /// their level) instead of into a lane nobody is listening to.
     private func start() {
         guard isOn, !audio.isRunning else { return }
-        do { try audio.start() } catch { note = "the sound engine would not start: \(error.localizedDescription)" }
+        do { try audio.start() } catch {
+            isOn = false
+            pinnedID = 0
+            note = "the sound engine would not start: \(error.localizedDescription)"
+            onHardwareChange?("Cue sound: \(note). Cues play from their players until the device comes back or is picked again", false)
+        }
     }
 }

@@ -494,6 +494,14 @@ final class Engine: ObservableObject {
         pads.onChange = { [weak self] in self?.save(); self?.onCuesChanged?() }
         // Ducking: cue sound dips while any pad sounds, and comes back after.
         duckWatch = pads.$sounding.map { !$0.isEmpty }.removeDuplicates().sink { [weak self] busy in self?.setDuck(busy) }
+        // The interface pulled or plugged back in: the cue sound engine
+        // moves on its own and says so here. If it could not start, cues
+        // on its path come out of their players again, at their level.
+        cueSound.onHardwareChange = { [weak self] text, running in
+            guard let self else { return }
+            self.log.add(running ? .output : .problem, text)
+            if !running { for d in self.videoDecks + self.soundDecks where d.viaLane { d.leaveLane(); self.apply(d) } }
+        }
         watchShowKeys()
         applySoundRoutes()
         pads.locked = locked
@@ -1855,7 +1863,9 @@ final class Engine: ObservableObject {
             pads.setOutput(device: audio.padDevice, firstChannel: audio.padFirstChannel)
             padsRoute = (audio.padDevice, audio.padFirstChannel)
         }
-        if cueRoute == nil || cueRoute! != (audio.cueDevice, audio.cueFirstChannel) {
+        // A pair other than 1 and 2 with the engine off means it would not
+        // start last time: picking it again is a fresh try.
+        if cueRoute == nil || cueRoute! != (audio.cueDevice, audio.cueFirstChannel) || (audio.cueFirstChannel > 0 && !cueSound.isOn) {
             cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
             cueRoute = (audio.cueDevice, audio.cueFirstChannel)
             if !cueSound.isOn {
