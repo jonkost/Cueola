@@ -441,6 +441,9 @@ final class Engine: ObservableObject {
     private var soundDeck: Deck?
     private var lastLane: CueKind = .video
 
+    /// Ducking has its own clock: All Stop and Fade cancel every cue fade,
+    /// and a duck climbing back must not be frozen half way by them.
+    private let duckFader = Fader()
     // The still or matte on air
     private var stillCue: Cue?
     private var stillSlot: PictureSlot = .s1
@@ -1845,7 +1848,7 @@ final class Engine: ObservableObject {
         let target = audio.duckUnderPads && busy ? pow(10, -audio.duckDb / 20) : 1
         guard target != duck else { return }
         let from = duck
-        fader.run("duck", from: 0, to: 1, seconds: target < from ? 0.15 : 0.8) { [weak self] v in
+        duckFader.run("duck", from: 0, to: 1, seconds: target < from ? 0.15 : 0.8) { [weak self] v in
             guard let self else { return }
             self.duck = from + (target - from) * v
             (self.videoDecks + self.soundDecks).forEach(self.apply)

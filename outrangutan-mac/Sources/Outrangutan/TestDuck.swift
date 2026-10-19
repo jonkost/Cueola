@@ -28,6 +28,17 @@ extension TestSnapshot {
             }),
             (2.6, {
                 note("3 pad over, a second later: level \(level()) (back to 1.00): \(engine.cueLevel > 0.99 ? "PASS" : "FAIL")")
+                engine.pads.fire(engine.pads.pads[0].id)
+            }),
+            (2.0, {
+                // The horn is 1.8 s: the duck is still climbing back when
+                // All Stop lands, and the next GO must not play ducked.
+                note("3b All Stop while the duck climbs back: level \(level()), duck \(String(format: "%.2f", engine.duck))")
+                engine.allStop()
+                engine.go()
+            }),
+            (1.0, {
+                note("3c the next cue a second later: level \(level()) (1.00, not stuck ducked): \(engine.cueLevel > 0.99 ? "PASS" : "FAIL")")
                 engine.audio.duckUnderPads = false
                 engine.pads.fire(engine.pads.pads[0].id)
             }),
