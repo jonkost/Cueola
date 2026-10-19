@@ -166,7 +166,9 @@ Show** (Command-O) and **New Show** (Command-N).
 - A show saved in the browser opens here, and one saved here opens in the
   browser. Cues keep their ids, so rundown rows linked to them stay linked.
 - Opening a show copies its media to **Movies, Outrangutan**, in a folder
-  named for the show.
+  named for the show. Opening the same show again uses that folder: a file
+  already there at the right size is not copied twice, so a show opened at
+  every class meeting keeps one copy of its media.
 - Saving runs in the background, with a progress bar in the toolbar. The
   show keeps running while it saves.
 - The window is named for the show file. Double-clicking a show file in
@@ -404,8 +406,10 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   the Show Log and the cue sheet and log printed to PDF.
 - `files`: saves a show file, opens it again and checks every cue and pad
   came back the same, opens a file shaped like the web app's, picks up
-  after a pretend crash, and saves a media file that grows mid-save.
-  Everything is written inside the test folder.
+  after a pretend crash, saves a media file that grows mid-save, opens the
+  same show twice into Movies (one folder, nothing copied the second time)
+  and opens a broken file (no half-made folder left). Everything is written
+  inside the test folder, its own Movies included.
 
 ## What is inside
 

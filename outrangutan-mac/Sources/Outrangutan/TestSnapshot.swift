@@ -1879,7 +1879,8 @@ enum TestSnapshot {
     }
 
     /// Show files and crash recovery. Everything is written inside the test
-    /// folder; the real show and the Movies folder are never touched.
+    /// folder (its own Movies included); the real show and the real Movies
+    /// folder are never touched.
     @MainActor private static func fileSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void,
                                   state: @escaping (String) -> Void, snap: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -2100,8 +2101,51 @@ enum TestSnapshot {
                     let ok = grew && r.size("media/m_grow") == UInt64(finalBytes.count) && same && next && p.terminationStatus == 0
                     note("n a file that grew by 100000 bytes mid-save: entry \(r.size("media/m_grow")) of \(finalBytes.count) bytes, bytes match \(same), next entry whole \(next), the Mac's zip tool \(p.terminationStatus == 0 ? "OK" : "FAILED") \(ok ? "PASS" : "FAIL")")
                 } catch { note("n a file that grew mid-save: FAIL \(error)") }
-                state("o done")
             }),
+            (0.5, {
+                // The same show opened twice with no folder chosen: one
+                // folder under Movies, Outrangutan (the test's own Movies),
+                // and nothing copied the second time.
+                let base = dir.appendingPathComponent("Movies/Outrangutan", isDirectory: true)
+                func folders() -> [String] { ((try? FileManager.default.contentsOfDirectory(atPath: base.path)) ?? []).sorted() }
+                Task {
+                    guard let payload = try? ShowFiles.readManifest(showURL) else { return note("o could not open") }
+                    let first = await files.load(showURL, payload: payload)
+                    let firstBytes = files.lastOpenCopied
+                    let second = await files.load(showURL, payload: payload)
+                    let secondBytes = files.lastOpenCopied
+                    let ok = first && second && firstBytes > 0 && secondBytes == 0 && folders() == ["Test Show"]
+                    note("o the same show opened twice into Movies: folders \(folders().joined(separator: ", ")); copied \(firstBytes) bytes, then \(secondBytes) \(ok ? "PASS" : "FAIL")")
+                    note("   \(filesThere())")
+                    // A show file broken past its cue list: the open fails
+                    // and the half-made folder is not left behind.
+                    let brokenURL = dir.appendingPathComponent("Broken Show.ogshow")
+                    do {
+                        let payload: [String: Any] = ["kind": "outrangutan-show", "app": "outrangutan", "schema": 3, "container": "zip",
+                                                      "show": ["cues": [["id": "c_broken1", "name": "Broken clip", "type": "video", "mediaId": "m_broken", "armed": true]],
+                                                               "pads": []] as [String: Any],
+                                                      "mediaIndex": ["m_broken": ["name": "broken.mp4", "mime": "video/mp4", "kind": "video", "file": "media/m_broken"]]]
+                        let w = try ShowArchive.Writer(url: brokenURL)
+                        try w.add(name: "show.json", data: try JSONSerialization.data(withJSONObject: payload))
+                        try w.add(name: "media/m_broken", data: Data(repeating: 1, count: 4096))
+                        try w.finish()
+                        // The clip's own header in the file (the second one;
+                        // the first is show.json) loses its mark.
+                        var bytes = try Data(contentsOf: brokenURL)
+                        let mark = Data([0x50, 0x4B, 0x03, 0x04])
+                        if let json = bytes.range(of: mark), let clip = bytes.range(of: mark, in: json.upperBound..<bytes.count) {
+                            bytes.replaceSubrange(clip, with: Data("XXXX".utf8))
+                        }
+                        try bytes.write(to: brokenURL)
+                        let manifest = try ShowFiles.readManifest(brokenURL)
+                        let opened = await files.load(brokenURL, payload: manifest)
+                        let left = FileManager.default.fileExists(atPath: base.appendingPathComponent("Broken Show").path)
+                        note("p a show file broken past its cue list: opened \(opened), folder left behind \(left), folders \(folders().joined(separator: ", ")) \(!opened && !left ? "PASS" : "FAIL")")
+                        note("   said: \(files.lastProblem ?? "-")")
+                    } catch { note("p a broken show file: FAIL \(error)") }
+                }
+            }),
+            (3.0, { state("q done") }),
         ]
     }
 

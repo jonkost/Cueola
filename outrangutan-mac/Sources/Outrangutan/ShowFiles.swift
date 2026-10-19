@@ -267,21 +267,33 @@ final class ShowFiles: ObservableObject {
         var errorDescription: String? { "It may be a different kind of file, or it may be damaged." }
     }
 
+    /// How many bytes of media the last open really copied out. A file
+    /// already in the show's folder at the right size is not copied again.
+    private(set) var lastOpenCopied: UInt64 = 0
+
     /// Copies the media out, then swaps the show in.
     @discardableResult
     func load(_ url: URL, payload: [String: Any], mediaFolder: URL? = nil) async -> Bool {
         let name = url.deletingPathExtension().lastPathComponent
-        let folder = mediaFolder ?? Self.freshFolder(named: name)
+        let folder = mediaFolder ?? Self.mediaFolder(named: name)
         working = "Opening \u{201C}\(name)\u{201D}"
         progress = 0
         defer { working = nil }
         let mediaIndex = payload["mediaIndex"] as? [String: Any] ?? [:]
         let legacy = payload["media"] as? [String: Any] ?? [:]
-        let result: Result<[String: String], Error> = await Task.detached(priority: .userInitiated) {
+        let result: Result<(paths: [String: String], copied: UInt64), Error> = await Task.detached(priority: .userInitiated) {
+            // The folder from the last time this show was opened is used
+            // again: a file already there at the right size is kept, so a
+            // show opened at every class meeting has one copy of its media,
+            // not one per open. A folder made now is removed if the open
+            // fails, so nothing half-made is left behind.
+            let madeNow = !FileManager.default.fileExists(atPath: folder.path)
+            var writing: URL?
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 var paths: [String: String] = [:]
                 var used = Set<String>()
+                var copied: UInt64 = 0
                 if !mediaIndex.isEmpty {
                     let zip = try ShowArchive.Reader(url: url)
                     let total = Double(max(1, mediaIndex.values.reduce(UInt64(0)) { sum, m in
@@ -291,13 +303,20 @@ final class ShowFiles: ObservableObject {
                     for (id, raw) in mediaIndex {
                         guard let m = raw as? [String: Any], let file = m["file"] as? String, zip.has(file) else { continue }
                         let dest = Self.destination(in: folder, name: m["name"] as? String, mime: m["mime"] as? String, id: id, used: &used)
+                        paths[id] = dest.path
+                        if Self.sizeOnDisk(dest) == zip.size(file) { done += zip.size(file); continue }
                         let before = done
+                        writing = dest
+                        // The old file is unlinked first, so a deck still
+                        // reading it keeps the file it had.
+                        try? FileManager.default.removeItem(at: dest)
                         try zip.extract(file, to: dest) { n in
                             let p = Double(before + n) / total
                             Task { @MainActor [weak self] in self?.progress = p }
                         }
+                        writing = nil
                         done += zip.size(file)
-                        paths[id] = dest.path
+                        copied += zip.size(file)
                     }
                 } else {
                     // The web app's older show files carry media as text.
@@ -306,19 +325,26 @@ final class ShowFiles: ObservableObject {
                               let comma = text.firstIndex(of: ","),
                               let bytes = Data(base64Encoded: String(text[text.index(after: comma)...])) else { continue }
                         let dest = Self.destination(in: folder, name: m["name"] as? String, mime: m["mime"] as? String, id: id, used: &used)
-                        try bytes.write(to: dest)
                         paths[id] = dest.path
+                        if Self.sizeOnDisk(dest) == UInt64(bytes.count) { continue }
+                        writing = dest
+                        try bytes.write(to: dest)
+                        writing = nil
+                        copied += UInt64(bytes.count)
                     }
                 }
-                return .success(paths)
+                return .success((paths, copied))
             } catch {
+                if madeNow { try? FileManager.default.removeItem(at: folder) }
+                else if let half = writing { try? FileManager.default.removeItem(at: half) }
                 return .failure(error)
             }
         }.value
-        guard case .success(let paths) = result else {
+        guard case .success(let (paths, copied)) = result else {
             if case .failure(let e) = result { alert("Could not open the show.", e.localizedDescription) }
             return false
         }
+        lastOpenCopied = copied
         let show = payload["show"] as? [String: Any] ?? [:]
         let settings = show["settings"] as? [String: Any] ?? [:]
         let cues = Self.cues(from: show["cues"] as? [Any] ?? [], paths: paths,
@@ -494,18 +520,21 @@ final class ShowFiles: ObservableObject {
         UTType(filenameExtension: url.pathExtension.lowercased())?.preferredMIMEType ?? "application/octet-stream"
     }
 
-    /// A new folder for a show's media: Movies, Outrangutan, the show's name.
-    nonisolated static func freshFolder(named name: String) -> URL {
-        let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+    /// Where a show's media goes: Movies, Outrangutan, the show's name. The
+    /// same folder every time that show is opened. In test mode it is a
+    /// Movies folder inside the test folder, so the real one is never touched.
+    nonisolated static func mediaFolder(named name: String) -> URL {
+        let movies = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent("Movies", isDirectory: true) }
+            ?? FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
         let base = movies.appendingPathComponent("Outrangutan", isDirectory: true)
         let clean = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-        var folder = base.appendingPathComponent(clean, isDirectory: true)
-        var n = 2
-        while FileManager.default.fileExists(atPath: folder.path) {
-            folder = base.appendingPathComponent("\(clean) \(n)", isDirectory: true)
-            n += 1
-        }
-        return folder
+        return base.appendingPathComponent(clean, isDirectory: true)
+    }
+
+    /// A file's size on disk, or nil when there is no file there.
+    nonisolated static func sizeOnDisk(_ url: URL) -> UInt64? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value
     }
 
     /// Where one media file goes: its own name, with the right extension so
