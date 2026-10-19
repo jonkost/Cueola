@@ -759,10 +759,20 @@ final class Engine: ObservableObject {
         masterGain = min(1.2, max(0, value))
         [pictureDeck, soundDeck].compactMap { $0 }.forEach(apply)
         pads.setMaster(masterGain)
-            if let leaving { leaving.views.forEach { $0.setOpacity(leaving.slot, Float(leaving.level * v)) } }
-        save()
+        if gainSaveTimer == nil {
+            let t = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in
+                self?.gainSaveTimer = nil
+                self?.save()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            gainSaveTimer = t
+        }
         onTransport?()
     }
+    /// A fader ride sends many values a second; the show is saved once
+    /// when the ride settles, not on every tick.
+    private var gainSaveTimer: Timer?
+
 
     // MARK: Firing
 
@@ -1726,6 +1736,7 @@ final class Engine: ObservableObject {
         }
     }
 
+        if gainSaveTimer != nil { gainSaveTimer?.invalidate(); gainSaveTimer = nil; save() }
     private func save() {
         ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
                                 pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
