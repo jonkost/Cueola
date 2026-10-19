@@ -17,6 +17,12 @@ it to Applications.
 Xcode must be installed. You do not need to switch Xcode on first, because
 the build script points at it for you. The app needs macOS 14 (Sonoma) or newer.
 
+If the build stops with "You have not agreed to the Xcode license
+agreements" (it does after an Xcode update), either agree in Terminal with
+`sudo xcodebuild -license accept`, or build with the command line tools
+instead: `DEVELOPER_DIR=/Library/Developer/CommandLineTools ./build-app.sh`.
+The app builds either way; `swift test` needs the full Xcode.
+
 ## Put it on the other Mac
 
 After building, make a disk image to carry across:

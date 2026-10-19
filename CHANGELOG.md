@@ -35,6 +35,50 @@
   (docs/rules-additive-2026-10-17-grading.rules); until then each device
   keeps its own copy and the view says so.
 
+### Outrangutan for Mac: a hardening round (Oct 17 to 19)
+
+Eight reviewers read the Oct 16 code with one lens each, three skeptics
+judged every finding, and the confirmed ones were fixed one file at a
+time with the build and the tests run after each. Twenty-seven fixes:
+
+- **Stream Deck:** the deck goes dark before the app lets go of it and is
+  freed when unplugged; one program holds the deck (opened shared with a
+  note when the Mac will not allow that); a second deck waits its turn and
+  takes over when the first is unplugged; a deck that stops answering is
+  reported; only a tap on the strip fires GO or mute; the 2017 deck's
+  keys count right to left. KeyWi Bird in the browser knows the 2022 XL
+  and the Mini MK.2.
+- **Show link:** a dial spin or a held arrow key no longer floods the
+  cloud with writes; a failed write is sent again and two answers both
+  go out; a bad reply to the hourly sign-in renewal no longer signs the
+  Mac out; a no from the cloud after the live line opens is logged and
+  not retried forever; a live line that died without a word is reopened
+  (after a moment, since its own copy of a change is usually just
+  behind a read); the live line works for a student sign-in too, by
+  watching the whole record when the lean watch is refused; a trimmed
+  clip's start time no longer runs the rundown's countdown short.
+- **Playback:** GO before a loaded-ahead file is ready no longer jumps
+  the clip back to its start; a scroll through the list loads only the
+  cue it lands on; a cue only standing by on the cue sound engine makes
+  no sound and keeps no time; a fired deck is never cleared by the next
+  standby; a start point from a crash is let go when another cue runs
+  first; the cue meter's level map reads only the part that can play.
+- **Picture:** the alpha key's background color fills the whole screen
+  however the still is framed.
+- **Windows and menus:** Move Cue Up and Down in the Edit menu move the
+  picked cues; in the Both view, clicking the picked cue again brings the
+  Inspector back from the pads; Lock Editing covers show files and media
+  opened from Finder or the Dock.
+- **Tests:** the load-ahead, live line and deck scenarios judge every
+  step with PASS or FAIL; the pretend deck is as strict as a real one and
+  the Mini, an unplug and a replug join in; the key picture tests use
+  bytes that all differ. A full proof run: the build, 68 core tests and
+  all 28 scenarios green.
+
+Still owed by Jon: a look at the real XL, + and Mini on the playback Mac
+after the deck fixes (the app now takes the deck for itself), and one
+real show with the live line, reading the show log for "Live line open".
+
 ### Outrangutan for Mac: what the Oct 16 show asked for
 
 - **Faster GO.** The cue standing by is loaded ahead, like a pro deck: the
