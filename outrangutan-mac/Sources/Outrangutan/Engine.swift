@@ -335,7 +335,7 @@ final class Engine: ObservableObject {
         case holding = "HOLD"
     }
 
-    @Published var cues: [Cue] { didSet { save(); loadDurations(); onCuesChanged?(); scheduleStandbyPreload(after: 0.3) } }
+    @Published var cues: [Cue] { didSet { dropShowKeyClashes(); save(); loadDurations(); onCuesChanged?(); scheduleStandbyPreload(after: 0.3) } }
     /// The standby is not in the live packet, so moving it tells the show
     /// link nothing: a dial spin would only flood the cloud with writes.
     /// Loading ahead waits a moment after each move, so a held arrow key or
@@ -1852,14 +1852,17 @@ final class Engine: ObservableObject {
     /// cleared, the way a pad's is.
     private var showKeyWatch: AnyCancellable?
     private func watchShowKeys() {
-        showKeyWatch = KeyMap.shared.$keys.sink { [weak self] keys in
-            guard let self else { return }
-            let taken = Set(keys.values.map(\.padName).filter { !$0.isEmpty })
-            let clashing = self.cues.filter { !$0.hotkey.isEmpty && taken.contains($0.hotkey) }
-            guard !clashing.isEmpty else { return }
-            for c in clashing { self.log.add(.problem, "\u{201C}\(c.name)\u{201D} lost its hotkey \(c.hotkey.uppercased()): a show key took it") }
-            for i in self.cues.indices where taken.contains(self.cues[i].hotkey) { self.cues[i].hotkey = "" }
-        }
+        showKeyWatch = KeyMap.shared.$keys.sink { [weak self] keys in self?.dropShowKeyClashes(keys) }
+    }
+
+    /// Takes a show key off any cue that has it: when a show key changes,
+    /// and when cues arrive (a show file made on a Mac with other keys).
+    private func dropShowKeyClashes(_ keys: [KeyMap.Action: KeyMap.Key] = KeyMap.shared.keys) {
+        let taken = Set(keys.values.map(\.padName).filter { !$0.isEmpty })
+        let clashing = cues.filter { !$0.hotkey.isEmpty && taken.contains($0.hotkey) }
+        guard !clashing.isEmpty else { return }
+        for c in clashing { log.add(.problem, "\u{201C}\(c.name)\u{201D} lost its hotkey \(c.hotkey.uppercased()): a show key took it") }
+        for i in cues.indices where taken.contains(cues[i].hotkey) { cues[i].hotkey = "" }
     }
 
     /// Where the player on a lane is, in seconds into its file; for test mode.
@@ -1871,6 +1874,11 @@ final class Engine: ObservableObject {
     /// than 1 and 2 is picked and the cue plays to the cue sound device (not
     /// to an output's own sound device).
     private func usesLane(for cue: Cue) -> Bool {
+        // A show key (GO, Stop...) always wins, so a cue can never take one.
+        if KeyMap.shared.keys.values.contains(where: { !$0.padName.isEmpty && $0.padName == k }) {
+            log.add(.problem, "\(k.uppercased()) is a show key, so a cue cannot have it")
+            return
+        }
         cueSound.isOn && soundDevice(for: cue) == audio.cueDevice
     }
 

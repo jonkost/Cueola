@@ -76,7 +76,24 @@ extension TestSnapshot {
                 note("8 W moved to the title card: \(keys) \(keys == ["-", "w", "q", "-"] ? "PASS" : "FAIL")")
                 engine.duplicate(engine.cues[1].id)
                 note("9 a copy has no key: \(engine.cues[2].hotkey.isEmpty ? "PASS" : "FAIL")")
+                // Stop moved to T on this Mac: a cue cannot take T, and a
+                // show file made elsewhere with T on a cue loses it on open.
+                KeyMap.shared.set(.stop, to: KeyMap.Key(code: 17, name: "T"))
+                engine.setHotkey(engine.cues[0].id, "t")
+                note("10 T is a show key now; a cue asking for it: \(engine.cues[0].hotkey.isEmpty ? "refused PASS" : "took it FAIL")")
+                let lost = engine.log.entries.filter { $0.text.contains("lost its hotkey") }.count
+                let url = dir.appendingPathComponent("Keys.ogshow")
+                Task { @MainActor in
+                    engine.replaceShow(cues: [], pads: [], banks: [], multiTrigger: nil)
+                    guard let payload = try? ShowFiles.readManifest(url) else { return note("11 could not read the file back") }
+                    _ = await files.load(url, payload: payload, mediaFolder: dir.appendingPathComponent("opened"))
+                    let keys = engine.cues.map { $0.hotkey.isEmpty ? "-" : $0.hotkey }
+                    let logged = engine.log.entries.filter { $0.text.contains("lost its hotkey") }.count > lost
+                    roundTrip = "11 opened with T as the Stop key: hotkeys \(keys) \(keys == ["-", "-", "q", "w"] ? "PASS" : "FAIL"); logged \(logged ? "PASS" : "FAIL")"
+                    KeyMap.shared.set(.stop, to: KeyMap.Action.stop.standard)
+                }
             }),
+            (3.0, { note(roundTrip ?? "11 the second round trip never finished: FAIL") }),
         ]
     }
 }
