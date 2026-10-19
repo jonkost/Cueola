@@ -87,15 +87,21 @@ final class MidiInput: ObservableObject {
     /// Reads MIDI 1.0 channel messages out of a packet list.
     private static func messages(in list: UnsafePointer<MIDIEventList>) -> [(UInt8, UInt8, UInt8)] {
         var out: [(UInt8, UInt8, UInt8)] = []
-        var packet = list.pointee.packet
+        // Walk the list where it sits. The packets are packed one after the
+        // other, so stepping from a copy of the first one would read past
+        // the copy and take whatever is there for the later messages.
+        var packet = UnsafeRawPointer(list).advanced(by: MemoryLayout<MIDIEventList>.offset(of: \MIDIEventList.packet)!)
+            .assumingMemoryBound(to: MIDIEventPacket.self)
+        let wordsAt = MemoryLayout<MIDIEventPacket>.offset(of: \MIDIEventPacket.words)!
         for _ in 0..<list.pointee.numPackets {
-            let words = withUnsafeBytes(of: packet.words) { raw in
-                Array(raw.bindMemory(to: UInt32.self).prefix(Int(packet.wordCount)))
-            }
-            for word in words where word >> 28 == 0x2 {
+            let count = min(Int(packet.pointee.wordCount), 64)
+            let words = UnsafeRawPointer(packet).advanced(by: wordsAt)
+            for i in 0..<count {
+                let word = words.load(fromByteOffset: i * 4, as: UInt32.self)
+                guard word >> 28 == 0x2 else { continue }
                 out.append((UInt8((word >> 16) & 0xFF), UInt8((word >> 8) & 0x7F), UInt8(word & 0x7F)))
             }
-            packet = MIDIEventPacketNext(&packet).pointee
+            packet = UnsafePointer(MIDIEventPacketNext(packet))
         }
         return out
     }
@@ -123,7 +129,7 @@ final class MidiInput: ObservableObject {
                 case .fadeStop: engine.fadeStopAll()
                 case .panic: engine.allStop()
                 case .cue:
-                    if let cue = engine.cue(wireID: binding.ref) { engine.standbyID = cue.id; engine.go() }
+                    if let cue = engine.cue(wireID: binding.ref) { engine.go(to: cue) }
                 case .pad: engine.pads.fire(binding.ref)
                 case .master: break
                 }

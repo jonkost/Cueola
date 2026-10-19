@@ -575,7 +575,7 @@ final class StreamDeckController: ObservableObject {
             case .volumeDown: engine.setGain(engine.masterGain - 0.05)
             case .mute: toggleMute()
             case .cue(let id):
-                if let cue = engine.cues.first(where: { $0.id == id }) { engine.standbyID = cue.id; engine.go() }
+                if let cue = engine.cues.first(where: { $0.id == id }) { engine.go(to: cue) }
             case .pad(let id):
                 _ = engine.pads.fire(id)
             }

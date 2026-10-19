@@ -1761,6 +1761,13 @@ enum TestSnapshot {
                 midi.set("n:0:62", ref: engine.cues[0].wireID ?? "")
                 midi.pretend(0x90, 62, 100)
                 note("e D4 fires cue 1: GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-")")
+                // Paused on Bars, a pad learned as "fire cue 1" must fire
+                // it fresh, not carry the paused clip on.
+                engine.togglePause()
+                let wasPaused = engine.isPaused, before = gos()
+                midi.pretend(0x90, 62, 100)
+                let freshly = gos() == before + 1 && engine.pictureCue?.name == "Bars" && !engine.isPaused
+                note("e2 paused=\(wasPaused), D4 while paused: GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-") paused=\(engine.isPaused) \(freshly ? "fired fresh" : "FAIL: did not fire fresh")")
                 engine.allStop()
                 engine.setGain(1)
                 // Now through the Mac's own MIDI system: a pretend box that
@@ -1785,6 +1792,25 @@ enum TestSnapshot {
             (0.5, {
                 note("g C4 from the box fired GO: GOs=\(gos()) on air=\(engine.pictureCue?.name ?? "-")")
                 engine.log.entries.filter { $0.from.hasPrefix("MIDI") }.forEach { note("   log: \($0.line)") }
+                // A box that dumps many messages at once (a fader box sending
+                // every value on a scene change): 24 packets in one list.
+                // Each must be read from the list itself; the last one wins.
+                let size = 1024
+                let buffer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 8)
+                defer { buffer.deallocate() }
+                let list = buffer.assumingMemoryBound(to: MIDIEventList.self)
+                var packet = MIDIEventListInit(list, ._1_0)
+                for value in 0...23 as ClosedRange<UInt32> {
+                    var word: UInt32 = 0x2 << 28 | 0xB0 << 16 | 7 << 8 | value
+                    packet = MIDIEventListAdd(list, size, packet, MIDITimeStamp(value + 1), 1, &word)
+                }
+                MIDIReceivedEventList(virtualBox, list)
+            }),
+            (0.5, {
+                let gain = engine.masterGain
+                let fine = abs(gain - 23.0 / 127.0) < 0.001
+                note("h 24 fader values in one list: gain \(String(format: "%.3f", gain)), want \(String(format: "%.3f", 23.0 / 127.0)) \(fine ? "ok" : "FAIL")  GOs=\(gos())")
+                engine.setGain(1)
                 engine.allStop()
                 let root = MidiSettings(midi: midi, engine: engine)
                     .frame(width: 560, height: 470)

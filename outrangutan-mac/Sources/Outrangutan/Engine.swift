@@ -627,6 +627,18 @@ final class Engine: ObservableObject {
         return result
     }
 
+    /// A control learned as "fire this cue" (a MIDI pad, a deck key): stands
+    /// the cue by and fires it, paused or not. GO while paused only carries
+    /// on, so going through it would resume the old clip and never fire.
+    @discardableResult
+    func go(to cue: Cue) -> WireResult {
+        standbyID = cue.id
+        let next = nextArmed(after: cue)
+        let result = fire(cue)
+        if result.ok, standbyID == cue.id, let next { standbyID = next.id }
+        return result
+    }
+
     /// Runs something on behalf of someone other than this Mac's keyboard
     /// and mouse, so the show log says who.
     func run(from who: String, _ body: () -> Void) {

@@ -419,8 +419,10 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   scopes; saves each scope and the frame it read.
 - `listen`: joins show WEBTEST and waits a minute, for trying the direct
   link from a real browser.
-- `midi`: learning a button and a fader and using them, then a message from
-  a pretend MIDI box through the Mac's own MIDI system.
+- `midi`: learning a button and a fader and using them, a cue pad pressed
+  while paused (it fires the cue fresh), then a message from a pretend MIDI
+  box through the Mac's own MIDI system, and 24 fader values in one
+  delivery (every one is read; the last wins).
 - `keys`: moved show keys, a held key, two keys swapping, the lock, and the
   time of day. Its key presses are pretend ones, sent to the app only.
 - `log`: a short show from this Mac and from the rundown, then a picture of
