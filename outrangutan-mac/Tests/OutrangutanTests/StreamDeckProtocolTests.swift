@@ -46,24 +46,35 @@ final class StreamDeckProtocolTests: XCTestCase {
     }
 
     func testKeyPicturesAreCutIntoReports() {
-        let image = [UInt8](repeating: 0xab, count: 2500)
+        // Every byte of the picture is different from its neighbours, so a
+        // slice repeated, skipped or shifted by one shows up when the parts
+        // are put back together.
+        func picture(_ n: Int) -> [UInt8] { (0..<n).map { UInt8(($0 * 7) & 0xff) } }
+        let image = picture(2500)
         let r = P.keyImageReports(model: xl, key: 9, image: image)
         XCTAssertEqual(r.count, 3)
         XCTAssertEqual(r[0].count, 1024)
         XCTAssertEqual(Array(r[0][0..<8]), [0x02, 0x07, 9, 0, 0xf8, 0x03, 0, 0])   // 1016 bytes, page 0, not last
         XCTAssertEqual(Array(r[2][0..<8]), [0x02, 0x07, 9, 1, 0xd4, 0x01, 2, 0])   // 468 bytes, page 2, last
-        XCTAssertEqual(r[2][8], 0xab)
         XCTAssertEqual(r[2][8 + 468], 0)
-        let m = P.keyImageReports(model: mini, key: 2, image: [UInt8](repeating: 1, count: 1500))
+        // Back together through each report's own length.
+        XCTAssertEqual(r.flatMap { Array($0[8..<(8 + (Int($0[4]) | (Int($0[5]) << 8)))]) }, image)
+        let miniImage = picture(1500)
+        let m = P.keyImageReports(model: mini, key: 2, image: miniImage)
         XCTAssertEqual(m.count, 2)
         XCTAssertEqual(Array(m[0][0..<6]), [0x02, 0x01, 0, 0, 0, 3])
         XCTAssertEqual(Array(m[1][0..<6]), [0x02, 0x01, 1, 0, 1, 3])
-        XCTAssertEqual(m[1][16], 1)
+        // No length in this form: the picture fills the reports, the last
+        // one padded with zeros.
+        XCTAssertEqual(Array(m.flatMap { $0[16...] }.prefix(miniImage.count)), miniImage)
+        XCTAssertTrue(m[1][(16 + 1500 - 1008)...].allSatisfy { $0 == 0 })
         // The 2017 deck counts keys right to left, so the app's key 0 is its key 4 (byte 5 = 4 + 1).
-        let o = P.keyImageReports(model: P.model(productID: 0x0060)!, key: 0, image: [UInt8](repeating: 1, count: 15606))
+        let originalImage = picture(15606)
+        let o = P.keyImageReports(model: P.model(productID: 0x0060)!, key: 0, image: originalImage)
         XCTAssertEqual(o.count, 2)
         XCTAssertEqual(o[0].count, 8191)
         XCTAssertEqual(Array(o[1][0..<6]), [0x02, 0x01, 2, 0, 1, 5])
+        XCTAssertEqual(Array(o.flatMap { $0[16...] }.prefix(originalImage.count)), originalImage)
     }
 
     func testOriginalDeckCountsKeysRightToLeft() {
