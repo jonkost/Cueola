@@ -89,8 +89,14 @@ public enum ShowArchive {
                 try handle.write(contentsOf: chunk)
             }
             let after = try handle.offset()
+            // The size was measured before the copy. A file that grew or
+            // shrank while it was being copied (a clip re-exported over the
+            // old one mid-save) is recorded at the length really written,
+            // so the entry is never cut short or glued to the next header.
+            let written = after - (offset + 30 + UInt64(nameBytes.count))
+            guard after <= ShowArchive.most else { throw Failure.tooBig }
             try handle.seek(toOffset: offset + 14)
-            var sum = Data(); sum.le32(crc.value)
+            var sum = Data(); sum.le32(crc.value); sum.le32(UInt32(written)); sum.le32(UInt32(written))
             try handle.write(contentsOf: sum)
             try handle.seek(toOffset: after)
 
@@ -98,7 +104,7 @@ public enum ShowArchive {
             central.le16(20); central.le16(20); central.le16(0x0800); central.le16(0)
             central.le16(time); central.le16(date)
             central.le32(crc.value)
-            central.le32(UInt32(size)); central.le32(UInt32(size))
+            central.le32(UInt32(written)); central.le32(UInt32(written))
             central.le16(UInt16(nameBytes.count)); central.le16(0); central.le16(0)
             central.le16(0); central.le16(0); central.le32(0)
             central.le32(UInt32(offset))

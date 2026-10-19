@@ -55,6 +55,33 @@ final class ShowArchiveTests: XCTestCase {
         XCTAssertEqual(p.terminationStatus, 0)
     }
 
+    /// A clip re-exported over the old one while the show is being saved:
+    /// the entry records the bytes really written, not the size from before.
+    func testRecordsTheSizeReallyWritten() throws {
+        let media = folder.appendingPathComponent("growing.bin")
+        try Data(repeating: 3, count: 1000).write(to: media)
+        let zip = folder.appendingPathComponent("show.ogshow")
+        let w = try ShowArchive.Writer(url: zip)
+        var grew = false
+        try w.add(name: "media/m_1", file: media) { _ in
+            guard !grew else { return }
+            grew = true
+            let h = try! FileHandle(forWritingTo: media)
+            try! h.seekToEnd()
+            try! h.write(contentsOf: Data(repeating: 4, count: 500))
+            try! h.close()
+        }
+        try w.add(name: "show.json", data: Data("{}".utf8))
+        try w.finish()
+        let r = try ShowArchive.Reader(url: zip)
+        XCTAssertTrue(grew)
+        XCTAssertEqual(r.size("media/m_1"), 1500)
+        let out = folder.appendingPathComponent("out.bin")
+        try r.extract("media/m_1", to: out)
+        XCTAssertEqual(try Data(contentsOf: out), try Data(contentsOf: media))
+        XCTAssertEqual(try r.data("show.json"), Data("{}".utf8))
+    }
+
     func testRefusesSomethingThatIsNotAZip() throws {
         let bad = folder.appendingPathComponent("bad.ogshow")
         try Data("{\"kind\":\"outrangutan-show\"}".utf8).write(to: bad)

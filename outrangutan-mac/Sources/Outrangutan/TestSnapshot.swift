@@ -2064,7 +2064,43 @@ enum TestSnapshot {
                 let noted = engine.lastRecoveryPoint?.wireID ?? "-"
                 note("m crash note with a still and a bed on air: \(noted) \(noted == engine.cues[1].wireID ? "PASS" : "FAIL") (picture \(engine.pictureCue?.name ?? "-"), sound \(engine.soundCue?.name ?? "-"))")
                 engine.allStop()
-                state("n done")
+                // A media file that grows while the show file is being
+                // written (a clip re-exported over the old one mid-save):
+                // the entry must record the bytes really written.
+                do {
+                    let growing = dir.appendingPathComponent("growing.wav")
+                    let grownURL = dir.appendingPathComponent("Grown Show.ogshow")
+                    try? FileManager.default.removeItem(at: growing)
+                    try FileManager.default.copyItem(at: media.appendingPathComponent("demo-applause.wav"), to: growing)
+                    let w = try ShowArchive.Writer(url: grownURL)
+                    try w.add(name: "show.json", data: Data("{}".utf8))
+                    var grew = false
+                    try w.add(name: "media/m_grow", file: growing) { _ in
+                        guard !grew else { return }
+                        grew = true
+                        if let h = try? FileHandle(forWritingTo: growing) {
+                            try? h.seekToEnd()
+                            try? h.write(contentsOf: Data(repeating: 0x5A, count: 100_000))
+                            try? h.close()
+                        }
+                    }
+                    try w.add(name: "media/m_after", data: Data(repeating: 1, count: 300))
+                    try w.finish()
+                    let finalBytes = try Data(contentsOf: growing)
+                    let r = try ShowArchive.Reader(url: grownURL)
+                    let out = dir.appendingPathComponent("grown-out.wav")
+                    try r.extract("media/m_grow", to: out)
+                    let same = (try? Data(contentsOf: out)) == finalBytes
+                    let next = (try? r.data("media/m_after"))?.count == 300
+                    let p = Process()
+                    p.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+                    p.arguments = ["-tq", grownURL.path]
+                    p.standardOutput = FileHandle.nullDevice
+                    try? p.run(); p.waitUntilExit()
+                    let ok = grew && r.size("media/m_grow") == UInt64(finalBytes.count) && same && next && p.terminationStatus == 0
+                    note("n a file that grew by 100000 bytes mid-save: entry \(r.size("media/m_grow")) of \(finalBytes.count) bytes, bytes match \(same), next entry whole \(next), the Mac's zip tool \(p.terminationStatus == 0 ? "OK" : "FAILED") \(ok ? "PASS" : "FAIL")")
+                } catch { note("n a file that grew mid-save: FAIL \(error)") }
+                state("o done")
             }),
         ]
     }

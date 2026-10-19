@@ -403,8 +403,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `log`: a short show from this Mac and from the rundown, then a picture of
   the Show Log and the cue sheet and log printed to PDF.
 - `files`: saves a show file, opens it again and checks every cue and pad
-  came back the same, opens a file shaped like the web app's, and picks up
-  after a pretend crash. Everything is written inside the test folder.
+  came back the same, opens a file shaped like the web app's, picks up
+  after a pretend crash, and saves a media file that grows mid-save.
+  Everything is written inside the test folder.
 
 ## What is inside
 
