@@ -268,24 +268,51 @@ enum ShowStore {
             .appendingPathComponent("show.json")
     }
 
-    static func load() -> ShowFile {
-        guard let data = try? Data(contentsOf: fileURL),
-              let show = try? JSONDecoder().decode(ShowFile.self, from: data) else { return ShowFile() }
-        return show
+    /// True when show.json is there but could not be read and could not be
+    /// set aside. Nothing is saved over it then, so it can still be looked at.
+    private(set) static var holdingUnreadFile = false
+
+    struct HeldError: LocalizedError {
+        var errorDescription: String? { "the saved show could not be read at launch and is kept as it was" }
     }
 
-    static func save(_ show: ShowFile) {
+    /// Reads the saved show. A file that is there but cannot be read is set
+    /// aside as show.json.broken-<date> and reported, never thrown away:
+    /// the next save makes a fresh show.json beside it. If it cannot even be
+    /// set aside, saving is held off so the file stays as it was.
+    static func load() -> (show: ShowFile, problem: String?) {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return (ShowFile(), nil) }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return (try JSONDecoder().decode(ShowFile.self, from: data), nil)
+        } catch {
+            let why = error.localizedDescription
+            let stamp = DateFormatter()
+            stamp.dateFormat = "yyyy-MM-dd-HHmmss"
+            let aside = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("show.json.broken-\(stamp.string(from: Date()))")
+            do {
+                try FileManager.default.moveItem(at: fileURL, to: aside)
+                return (ShowFile(), "The saved show could not be read, so Outrangutan opened empty. "
+                        + "The file is kept as \(aside.lastPathComponent) next to show.json. (\(why))")
+            } catch {
+                holdingUnreadFile = true
+                return (ShowFile(), "The saved show could not be read, so Outrangutan opened empty. "
+                        + "show.json is left as it was and nothing will be saved over it. (\(why))")
+            }
+        }
+    }
+
+    /// Saves the show. Throws when it could not, so the operator can be told.
+    static func save(_ show: ShowFile) throws {
         // Test mode reads your show but never changes it.
         if ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil { return }
-        do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(show).write(to: fileURL, options: .atomic)
-        } catch {
-            NSLog("Outrangutan could not save the show: \(error)")
-        }
+        if holdingUnreadFile { throw HeldError() }
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(show).write(to: fileURL, options: .atomic)
     }
 }
 

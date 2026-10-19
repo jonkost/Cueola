@@ -481,7 +481,8 @@ final class Engine: ObservableObject {
     init() {
         videoDecks = [Deck(name: "a", slot: .a, lane: cueSound.lanes[0]), Deck(name: "b", slot: .b, lane: cueSound.lanes[1])]
         soundDecks = [Deck(name: "sa", slot: nil, lane: cueSound.lanes[2]), Deck(name: "sb", slot: nil, lane: cueSound.lanes[3])]
-        var show = ShowStore.load()
+        let loaded = ShowStore.load()
+        var show = loaded.show
         // Cues saved before the rundown link had no lasting id, and ids made
         // before 9/29 sorted backwards. Give them new ones, in list order.
         for i in show.cues.indices where show.cues[i].wireID == nil || Cue.isBackwardsID(show.cues[i].wireID) {
@@ -521,6 +522,10 @@ final class Engine: ObservableObject {
         pads.locked = locked
         pads.onLog = { [weak self] text in self?.log.add(.pad, text, from: self?.source ?? ShowLog.thisMac) }
         log.add(.file, "Outrangutan opened: \(ShowFiles.count(cues.count, "cue")), \(ShowFiles.count(pads.pads.count, "pad"))")
+        if let problem = loaded.problem {
+            log.add(.problem, problem)
+            notice = problem
+        }
         save()
         loadDurations()
         if let point = RecoveryPoint.load(), let cue = cues.first(where: { $0.wireID == point.wireID }) {
@@ -1761,10 +1766,28 @@ final class Engine: ObservableObject {
         }
     }
 
+    /// True while the last save failed, so the Show Log gets one red line
+    /// per run of failures, not one per edit.
+    private var saveFailing = false
+    private static let savePrefix = "The show could not be saved: "
+
     private func save() {
-        ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
-                                pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
-                                standbyText: standbyText.isEmpty ? nil : standbyText))
+        do {
+            try ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
+                                        pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
+                                        standbyText: standbyText.isEmpty ? nil : standbyText))
+            if saveFailing {
+                saveFailing = false
+                log.add(.file, "The show is being saved again")
+                if notice?.hasPrefix(Self.savePrefix) == true { notice = nil }
+            }
+        } catch {
+            // Said once in the log and kept under the clock, so a full disk or
+            // a locked file never loses the rest of the class quietly.
+            let text = Self.savePrefix + error.localizedDescription
+            if !saveFailing { saveFailing = true; log.add(.problem, text) }
+            notice = text
+        }
     }
 
     // MARK: Outputs and sound
