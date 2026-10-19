@@ -204,7 +204,7 @@ struct SoundSettings: View {
 
     private func pairName(_ first: Int, on uid: String?) -> String {
         let missing = first + 2 > (device(uid)?.channels ?? 2)
-        return "\(first + 1) and \(first + 2)" + (missing ? " (not on this device)" : "")
+        return "\(first + 1) and \(first + 2)" + (missing ? " (not on this device: plays on 1 and 2)" : "")
     }
 
     /// From the list already fetched: asking the Mac for its sound devices

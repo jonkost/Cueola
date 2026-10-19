@@ -1921,8 +1921,12 @@ enum TestSnapshot {
             (0.4, { engine.identifyOutputs() }),
             (0.4, { snap("o-5-identify") }),
             (0.1, {
+                // A pair this output does not have (7 and 8 on a two-channel
+                // output) goes to 1 and 2, and the note says so.
+                engine.audio.padFirstChannel = 6
+                note("6 pads picked for 7 and 8: \(engine.pads.channelMapNote)")
                 engine.audio.padFirstChannel = 0
-                note("6 pads play to: \(engine.pads.channelMapNote)")
+                note("   pads play to: \(engine.pads.channelMapNote)")
                 if engine.pads.pads.isEmpty {
                     engine.pads.add(urls: [media.appendingPathComponent("demo-applause.wav")])
                 }

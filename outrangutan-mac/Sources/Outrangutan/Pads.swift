@@ -270,8 +270,12 @@ final class PadBoard: ObservableObject {
             // the device's channels; -1 leaves a channel silent.
             let total = dev.channels
             var map = [Int32](repeating: -1, count: total)
+            // A pair this device does not have (a show file from a bigger
+            // rig) goes to channels 1 and 2, never on top of another pair.
+            let wanted = max(0, firstChannel)
+            let missing = total >= 2 && wanted + 2 > total
             if total >= 2 {
-                let first = min(max(0, firstChannel), total - 2)
+                let first = missing ? 0 : wanted
                 map[first] = 0
                 map[first + 1] = 1
             } else if total == 1 {
@@ -282,6 +286,7 @@ final class PadBoard: ObservableObject {
                 AudioUnitSetProperty(unit, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Global, 0, &map, size)
             }
             channelMapNote = "\(dev.name), channels \(map.firstIndex(of: 0).map { "\($0 + 1) and \($0 + 2)" } ?? "1")"
+                + (missing ? " (\(wanted + 1) and \(wanted + 2) are not on this device)" : "")
         }
         // Two channels into the device; the map places them.
         let rate = audio.outputNode.outputFormat(forBus: 0).sampleRate
