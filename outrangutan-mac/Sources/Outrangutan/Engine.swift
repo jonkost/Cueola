@@ -636,9 +636,11 @@ final class Engine: ObservableObject {
         source = was
     }
 
-    /// OBS switched to a scene: fire the cue waiting for it, if one is.
-    func obsSceneChanged(_ scene: String) {
-        guard !scene.isEmpty, let cue = cues.first(where: { $0.obsTriggerScene == scene }) else { return }
+    /// OBS switched to a scene: fire the cue waiting for it, if one is. The
+    /// cue that asked OBS for the scene itself (`own`) is passed over, so a
+    /// cue never starts itself again through its own switch.
+    func obsSceneChanged(_ scene: String, own: Cue.ID? = nil) {
+        guard !scene.isEmpty, let cue = cues.first(where: { $0.obsTriggerScene == scene && $0.id != own }) else { return }
         run(from: "OBS, scene \(scene)") {
             standbyID = cue.id
             go()

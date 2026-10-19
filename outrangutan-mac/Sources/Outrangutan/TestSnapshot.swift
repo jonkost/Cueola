@@ -1427,13 +1427,17 @@ enum TestSnapshot {
                 b.obsTriggerScene = "Break"
                 var c = Cue(name: "Roll and record", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
                 c.obs.action = .startRecord
-                engine.replaceShow(cues: [a, b, c], pads: [], banks: [], multiTrigger: nil)
+                // Waits for Tight too: cue 1's own switch must fire this
+                // one, and not cue 1 again.
+                var d = Cue(name: "Tight bumper", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 3))
+                d.obsTriggerScene = "Tight"
+                engine.replaceShow(cues: [a, b, c, d], pads: [], banks: [], multiTrigger: nil)
                 obs.host = "localhost"; obs.port = 44559; obs.password = "wrong"
                 obs.connect()
             }),
             (1.0, { note("a wrong password: \(obs.status)"); obs.password = "showtime"; obs.connect() }),
             (1.0, { note("b right password: \(obs.status); scenes \(obs.scenes); program \(obs.current)"); engine.go() }),
-            (1.0, { note("c after GO on cue 1 (it asks for Tight, and waits for Tight): GOs \(gos())"); fake.switchScene("Break") }),
+            (1.0, { note("c after GO on cue 1 (it asks for Tight, and waits for Tight; cue 4 waits for Tight too): GOs \(gos())"); fake.switchScene("Break") }),
             (1.0, {
                 note("d OBS switched to Break by itself: GOs \(gos())")
                 picture(ObsSettings(obs: obs), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("obs-settings.png"))
@@ -1448,6 +1452,13 @@ enum TestSnapshot {
                 engine.log.entries.filter { $0.from == "OBS" }.forEach { note("   log: \($0.line)") }
                 engine.allStop()
                 obs.disconnect()
+            }),
+            // With OBS closed, a cue's OBS step is skipped, and the log says so.
+            (0.3, { engine.standbyID = engine.cues[2].id; engine.go() }),
+            (0.5, {
+                note("f GO on cue 3 with OBS disconnected: recording = \(obs.recording); the OBS log line(s) since:")
+                engine.log.entries.filter { $0.from == "OBS" }.suffix(1).forEach { note("   log: \($0.line)") }
+                engine.allStop()
             }),
             (0.3, {}),
         ]

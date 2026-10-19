@@ -277,7 +277,11 @@ Connect. Then in a cue's Inspector (Cue tab, OBS):
 - **When it starts:** switch OBS to a scene, or start or stop recording or
   streaming, as the cue starts.
 - **Fire when OBS shows:** the cue stands by and fires when OBS switches to
-  that scene. A cue's own scene switch never fires it again.
+  that scene. A cue's own scene switch never fires it again, but it does
+  fire another cue waiting for that scene.
+
+While OBS is not connected, a cue's OBS step is skipped and the show log
+says so beside the cue.
 
 The password stays on this Mac, in the app's settings.
 
@@ -387,8 +391,9 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   few looks), a sound with every pad taken becomes a cue, a clip written
   over joins again, and the folder going away and coming back is logged.
 - `obs`: a pretend OBS checks the password proof (against openssl), takes a
-  cue's scene switch and a start recording, and fires a cue with its own
-  scene change.
+  cue's scene switch (which fires the other cue waiting for that scene, not
+  the cue itself) and a start recording, fires a cue with its own scene
+  change, and with OBS disconnected a cue's OBS step is skipped and logged.
 - `key`: color bars with the green bar keyed out, then a luma key switched
   on while on air; reads the real frames.
 - `stillkey`: a see-through PNG (a lower third drawn by the test) standing

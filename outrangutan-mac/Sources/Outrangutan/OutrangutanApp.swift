@@ -309,9 +309,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A Stream Deck plugged into this Mac. Test mode hands over a
         // pretend one instead of looking on USB.
         if !TestSnapshot.isOn { deck.start() }
-        obs.onScene = { [weak self] scene in self?.engine.obsSceneChanged(scene) }
+        obs.onScene = { [weak self] scene, own in self?.engine.obsSceneChanged(scene, own: own) }
         obs.onLog = { [weak self] kind, text in self?.engine.log.add(kind, text, from: "OBS") }
-        engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name) }
+        engine.onCueBegan = { [weak self] cue in self?.obs.fire(cue.obs, for: cue.name, id: cue.id) }
         // If the app is about to die of an exception, write down why first:
         // the crash report never carries the reason. Logs/crash.txt.
         NSSetUncaughtExceptionHandler { e in

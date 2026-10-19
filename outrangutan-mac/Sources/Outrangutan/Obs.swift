@@ -53,15 +53,16 @@ final class ObsClient: ObservableObject {
     @Published var password = UserDefaults.standard.string(forKey: "obs.password") ?? "" { didSet { save() } }
     @Published var autoConnect = UserDefaults.standard.bool(forKey: "obs.auto") { didSet { save() } }
 
-    /// Called when OBS switches its program scene.
-    var onScene: ((String) -> Void)?
+    /// Called when OBS switches its program scene, with the cue whose own
+    /// switch this is (so it is not fired again), if a cue asked for it.
+    var onScene: ((String, Cue.ID?) -> Void)?
     /// Called with a line for the show log.
     var onLog: ((ShowLog.Kind, String) -> Void)?
 
     private var task: URLSessionWebSocketTask?
-    /// The scene a cue just asked for. Its own switch never fires a cue, so
-    /// a cue can not start itself again through OBS.
-    private var ownScene: (name: String, at: Date)?
+    /// The scene a cue just asked for, and which cue. Its own switch never
+    /// fires that cue again; another cue waiting for the scene still fires.
+    private var ownScene: (name: String, at: Date, cue: Cue.ID)?
     private var seq = 0
     private var wanted = false
     private var retry: Timer?
@@ -103,13 +104,18 @@ final class ObsClient: ObservableObject {
         status = .off
     }
 
-    /// Runs a cue's OBS action, if OBS is connected.
-    func fire(_ obs: CueObs, for cueName: String) {
-        guard obs.action != .none, isConnected else { return }
+    /// Runs a cue's OBS action. When OBS is not connected the action is
+    /// skipped, and the show log says so beside the cue.
+    func fire(_ obs: CueObs, for cueName: String, id: Cue.ID) {
+        guard obs.action != .none, obs.action != .scene || !obs.scene.isEmpty else { return }
+        let what = obs.action == .scene ? "switch to \(obs.scene)" : obs.action.label.lowercased()
+        guard isConnected else {
+            onLog?(.problem, "OBS not connected: skipped \(what) (with \(cueName))")
+            return
+        }
         switch obs.action {
         case .scene:
-            guard !obs.scene.isEmpty else { return }
-            ownScene = (obs.scene, Date())
+            ownScene = (obs.scene, Date(), id)
             request("SetCurrentProgramScene", ["sceneName": obs.scene])
         case .startRecord: request("StartRecord")
         case .stopRecord: request("StopRecord")
@@ -117,7 +123,7 @@ final class ObsClient: ObservableObject {
         case .stopStream: request("StopStream")
         case .none: break
         }
-        onLog?(.link, "OBS: \(obs.action == .scene ? "switch to \(obs.scene)" : obs.action.label.lowercased()) (with \(cueName))")
+        onLog?(.link, "OBS: \(what) (with \(cueName))")
     }
 
     func refreshScenes() { request("GetSceneList") }
@@ -229,11 +235,14 @@ final class ObsClient: ObservableObject {
             switch d["eventType"] as? String {
             case "CurrentProgramSceneChanged":
                 current = data["sceneName"] as? String ?? ""
+                // The cue that asked for this scene does not fire itself
+                // again. Any other cue waiting for the scene still does.
+                var skip: Cue.ID?
                 if let own = ownScene, own.name == current, Date().timeIntervalSince(own.at) < 2 {
+                    skip = own.cue
                     ownScene = nil
-                } else {
-                    onScene?(current)
                 }
+                onScene?(current, skip)
             case "SceneListChanged": request("GetSceneList")
             case "RecordStateChanged": recording = data["outputActive"] as? Bool ?? recording
             case "StreamStateChanged": streaming = data["outputActive"] as? Bool ?? streaming
