@@ -1336,12 +1336,19 @@ enum TestSnapshot {
                 note("d unlocked: cues [\(names())]")
                 picture(GeneralSettings(watch: watch), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("watch-settings.png"))
                 // Two files at their final size before their bytes are real (a writer that
-                // sets the size first; a cloud file still downloading).
+                // sets the size first; a cloud file still downloading), and every pad taken.
                 try? Data(count: clip.count).write(to: file("Preallocated.mp4"))
                 writeKeepingTime(Data(count: clip.count), to: file("Cloud clip.mp4"))
+                if let bank = engine.pads.currentBank {
+                    for slot in 0..<PadBoard.padCountMax where engine.pads.pad(bank: bank.id, slot: slot) == nil {
+                        engine.pads.assign(url: media.appendingPathComponent("demo-rimshot.wav"), slot: slot)
+                    }
+                }
+                try? fm.copyItem(at: media.appendingPathComponent("sfx-ding.wav"), to: file("Ding.wav"))
             }),
             (2.5, {
                 note("e zeros at the final size, tested once and set aside: cues [\(names())], said in the log \(said("Preallocated.mp4\u{201D} in the watched folder would not open")) and \(said("Cloud clip.mp4\u{201D} in the watched folder would not open")) time(s) (once each): \(verdict(!names().contains("Preallocated") && !names().contains("Cloud clip") && said("Preallocated.mp4\u{201D} in the watched folder would not open") == 1 && said("Cloud clip.mp4\u{201D} in the watched folder would not open") == 1))")
+                note("f a sound with every pad taken: pads \(engine.pads.pads.count), cues [\(names())]: \(verdict(engine.pads.pads.count == PadBoard.padCountMax && names().contains("Ding") && said("no free pad") == 1)) (added as a cue, said so)")
                 // The real bytes land: one file with a new written-at time, one keeping
                 // its time like a cloud download; and a clip re-exported over the old one.
                 try? clip.write(to: file("Preallocated.mp4"))

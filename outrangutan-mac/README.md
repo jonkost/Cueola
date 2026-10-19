@@ -262,7 +262,8 @@ and written-at time three looks in a row, and it really opens). A file that
 will not open is said in the Show Log and tried again when it changes, and
 now and then meanwhile, since a cloud file can finish downloading without
 changing. A file written over after it joined is a new file: it joins again,
-beside the old cue. Sounds can become pads instead. While editing is locked, new files wait until it unlocks.
+beside the old cue. Sounds can become pads instead; with every pad in the
+bank taken, a sound becomes a cue, and the log says so. While editing is locked, new files wait until it unlocks.
 
 ## OBS
 
@@ -376,7 +377,7 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   (one half copied before the pick too), a sound becomes a pad, the lock
   holds new files, a file at its final size before its bytes are real is set
   aside and joins when the bytes land (with a new time, or unchanged after a
-  few looks), a clip written
+  few looks), a sound with every pad taken becomes a cue, a clip written
   over joins again.
 - `obs`: a pretend OBS checks the password proof (against openssl), takes a
   cue's scene switch and a start recording, and fires a cue with its own

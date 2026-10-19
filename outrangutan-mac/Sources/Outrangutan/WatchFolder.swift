@@ -162,8 +162,20 @@ final class WatchFolder: ObservableObject {
         seen.insert(name)
         stamps[name] = stamp
         broken[name] = nil
-        if soundsToPads && PadBoard.isSound(url) { engine.pads.add(urls: [url]) } else { engine.add(urls: [url]) }
-        engine.log.add(.file, "Added \u{201C}\(name)\u{201D} from the watched folder")
+        if soundsToPads && PadBoard.isSound(url) {
+            let before = engine.pads.pads.count
+            engine.pads.add(urls: [url])
+            if engine.pads.pads.count > before {
+                engine.log.add(.file, "Added \u{201C}\(name)\u{201D} from the watched folder")
+            } else {
+                // Every pad in the bank is taken (or there is no bank): a cue, so the sound is not lost.
+                engine.add(urls: [url])
+                engine.log.add(.file, "Added \u{201C}\(name)\u{201D} from the watched folder as a cue: no free pad in the bank")
+            }
+        } else {
+            engine.add(urls: [url])
+            engine.log.add(.file, "Added \u{201C}\(name)\u{201D} from the watched folder")
+        }
         lastAdded = name
         save()
     }
