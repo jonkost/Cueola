@@ -56,6 +56,20 @@ public final class SoundRing {
     /// A chunk landing this far from where the last one ended, in frames,
     /// counts as a seek: the ring starts over at the chunk's time.
     public let seekTolerance: Int
+    /// When the frames due run this far past what one call can hand out,
+    /// in frames, the ring skips the overdue ones and carries on with the
+    /// frames due now. Sync wins over completeness, like a broadcast deck:
+    /// a resume or a stall that jumps the clock ahead would otherwise leave
+    /// the sound that far behind the picture for the rest of the cue,
+    /// because each call hands out one call's worth and never more.
+    public let catchUp: Int
+    /// How long the ring must stay past the catch-up line, in frames handed
+    /// out, before it skips: a clock noted "moving" at GO runs ahead until
+    /// the player truly starts and the next tick notes where it is, which
+    /// lasts a tick or two; skipping then would cut the first bit of the
+    /// sound. A real jump lasts for good, so waiting a few ticks costs
+    /// nothing but a short stretch behind.
+    public let patience: Int
     private var left: [Float]
     private var right: [Float]
     private var head = 0            // next frame to read
@@ -65,6 +79,8 @@ public final class SoundRing {
     private var pushed = 0
     private var delivered = 0
     private var dry = 0
+    private var late = 0
+    private var overdueFor = 0      // frames handed out while past the catch-up line
     private var lastGave = 0
     private var restarts = 0
     private var lastStamp = 0
@@ -78,10 +94,15 @@ public final class SoundRing {
         return (lastStamp, restarts)
     }
 
-    /// Five seconds of room by default: a player can run well ahead.
-    public init(capacity: Int = 240000, seekTolerance: Int = 12000) {
+    /// Five seconds of room by default: a player can run well ahead. The
+    /// catch-up line is 20 ms at 48 kHz: past the clock's own jitter, under
+    /// a frame of picture. The patience is 100 ms: three of the deck's
+    /// ticks, which is longer than a player takes to truly start.
+    public init(capacity: Int = 240000, seekTolerance: Int = 12000, catchUp: Int = 960, patience: Int = 4800) {
         self.capacity = max(64, capacity)
         self.seekTolerance = max(0, seekTolerance)
+        self.catchUp = max(0, catchUp)
+        self.patience = max(0, patience)
         left = [Float](repeating: 0, count: self.capacity)
         right = [Float](repeating: 0, count: self.capacity)
         lock = .allocate(capacity: 1)
@@ -97,17 +118,18 @@ public final class SoundRing {
     }
 
     /// How the ring has done since it was made: frames dropped in, real
-    /// frames handed out, and frames that were due but had not arrived
-    /// (silence went out instead: a dropout, if it happens mid-cue).
-    public var tally: (pushed: Int, delivered: Int, dry: Int) {
+    /// frames handed out, frames that were due but had not arrived
+    /// (silence went out instead: a dropout, if it happens mid-cue), and
+    /// frames skipped to catch up with the clock.
+    public var tally: (pushed: Int, delivered: Int, dry: Int, late: Int) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-        return (pushed, delivered, dry)
+        return (pushed, delivered, dry, late)
     }
 
     /// Forgets everything waiting.
     public func flush() {
         os_unfair_lock_lock(lock)
-        head = 0; count = 0; hasData = false; lastGave = 0
+        head = 0; count = 0; hasData = false; lastGave = 0; overdueFor = 0
         os_unfair_lock_unlock(lock)
     }
 
@@ -164,10 +186,32 @@ public final class SoundRing {
     /// Takes up to `frames` frames out into the two buffers, but only
     /// frames belonging before file frame `due`. Whatever it does not give
     /// comes out as silence. Returns how many real frames it gave.
+    ///
+    /// When more than `frames` plus `catchUp` frames are due, and that has
+    /// gone on for `patience` frames, the ones past this call's share are
+    /// skipped, so what goes out is what is due now. Without that, a clock
+    /// that jumped ahead (a resume, a stall) would leave every call after
+    /// it that far behind.
     @discardableResult
     public func pop(left l: UnsafeMutablePointer<Float>, right r: UnsafeMutablePointer<Float>, frames: Int, due: Int) -> Int {
         guard frames > 0 else { return 0 }
         os_unfair_lock_lock(lock)
+        var behind = false
+        if hasData && count > 0 {
+            let overdue = due - headFrame - frames
+            if overdue > catchUp {
+                if overdueFor >= patience {
+                    let skip = min(overdue, count)
+                    head = (head + skip) % capacity
+                    count -= skip
+                    headFrame += skip
+                    late += skip
+                    overdueFor = 0
+                } else {
+                    behind = true
+                }
+            }
+        }
         let wanted = hasData ? max(0, min(frames, due - headFrame)) : 0
         let n = min(wanted, count)
         var done = 0
@@ -185,6 +229,7 @@ public final class SoundRing {
         // Counted once per gap, not once per call while the gap lasts.
         if wanted > n && (n > 0 || lastGave > 0) { dry += wanted - n }
         lastGave = n
+        overdueFor = behind ? overdueFor + n : 0
         os_unfair_lock_unlock(lock)
         if n < frames {
             l.advanced(by: n).update(repeating: 0, count: frames - n)

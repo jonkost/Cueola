@@ -48,6 +48,63 @@ final class SoundRingTests: XCTestCase {
         XCTAssertEqual(pop(ring, 2, due: 4).left, [3, 4])
     }
 
+    func testOverdueSoundIsSkippedToCatchUp() {
+        // Each call hands out 2 frames; 3 or more past that is overdue, and
+        // the ring puts up with it for 4 frames before skipping.
+        let ring = SoundRing(capacity: 64, catchUp: 2, patience: 4)
+        push(ring, (1...20).map(Float.init), at: 0)
+        XCTAssertEqual(pop(ring, 2, due: 2).left, [1, 2])
+        // The clock jumps 4 frames ahead (a resume re-anchored the player):
+        // 6 are due, this call can give 2, so 4 are overdue: past the line.
+        // For the first 4 frames the ring carries on, behind.
+        XCTAssertEqual(pop(ring, 2, due: 8).left, [3, 4])
+        XCTAssertEqual(pop(ring, 2, due: 10).left, [5, 6])
+        XCTAssertEqual(ring.tally.late, 0, "not yet: the jump may be the clock settling")
+        // Still 4 behind: the patience is used up, so the overdue frames go.
+        let after = pop(ring, 2, due: 12)
+        XCTAssertEqual(after.left, [11, 12], "the frames due now, not the ones left behind")
+        XCTAssertEqual(ring.tally.late, 4)
+        XCTAssertEqual(ring.tally.dry, 0, "skipped frames are not a dropout")
+        // Back in step: the next call carries straight on.
+        XCTAssertEqual(pop(ring, 2, due: 14).left, [13, 14])
+        XCTAssertEqual(ring.tally.late, 4)
+    }
+
+    func testShortLivedJumpIsNotSkipped() {
+        // A clock noted "moving" at GO runs ahead until the player truly
+        // starts; the next tick puts it right. Nothing may be skipped.
+        let ring = SoundRing(capacity: 64, catchUp: 2, patience: 4)
+        push(ring, (1...20).map(Float.init), at: 0)
+        XCTAssertEqual(pop(ring, 2, due: 2).left, [1, 2])
+        XCTAssertEqual(pop(ring, 2, due: 8).left, [3, 4], "behind, but carrying on")
+        XCTAssertEqual(pop(ring, 2, due: 10).left, [5, 6])
+        // The tick corrects the clock: 8 is due, 6 handed out, in step.
+        XCTAssertEqual(pop(ring, 2, due: 8).left, [7, 8])
+        XCTAssertEqual(ring.tally.late, 0)
+        // A later jump starts the count again from nothing.
+        XCTAssertEqual(pop(ring, 2, due: 16).left, [9, 10])
+        XCTAssertEqual(pop(ring, 2, due: 18).left, [11, 12])
+        XCTAssertEqual(ring.tally.late, 0)
+        XCTAssertEqual(pop(ring, 2, due: 20).left, [19, 20])
+        XCTAssertEqual(ring.tally.late, 6)
+        // A jump within the line is never skipped: the ring just stays a
+        // little behind, as before.
+        let small = SoundRing(capacity: 64, catchUp: 2, patience: 0)
+        push(small, (1...12).map(Float.init), at: 0)
+        XCTAssertEqual(pop(small, 2, due: 2).left, [1, 2])
+        XCTAssertEqual(pop(small, 2, due: 6).left, [3, 4])
+        XCTAssertEqual(small.tally.late, 0)
+        // Overdue with less waiting than the jump: what is there goes, and
+        // the rest is counted dry like any sound the player never sent.
+        let thin = SoundRing(capacity: 64, catchUp: 2, patience: 0)
+        push(thin, [1, 2, 3], at: 0)
+        XCTAssertEqual(pop(thin, 2, due: 2).left, [1, 2])
+        let gone = pop(thin, 2, due: 20)
+        XCTAssertEqual(gone.got, 0)
+        XCTAssertEqual(thin.tally.late, 1)
+        XCTAssertEqual(thin.available, 0)
+    }
+
     func testSeekStartsOver() {
         let ring = SoundRing(capacity: 64, seekTolerance: 10)
         push(ring, [1, 2, 3], at: 0)

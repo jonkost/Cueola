@@ -12,19 +12,31 @@ extension TestSnapshot {
         func tally(_ lane: Int) -> String {
             let t = engine.cueSound.lanes[lane].ring.tally
             let st = engine.cueSound.lanes[lane].ring.stamps
-            return "in \(t.pushed) out \(t.delivered) dry \(t.dry) stamp \(st.last) restarts \(st.restarts)"
+            return "in \(t.pushed) out \(t.delivered) dry \(t.dry) late \(t.late) stamp \(st.last) restarts \(st.restarts)"
         }
         func meter() -> String { String(format: "%.2f / %.2f", engine.cueMeter.left, engine.cueMeter.right) }
+        /// Where in the file the lane's ring stands: frames handed out plus
+        /// frames skipped to catch up.
+        func place(_ lane: Int) -> Int {
+            let t = engine.cueSound.lanes[lane].ring.tally
+            return t.delivered + t.late
+        }
+        /// Where each lane's ring stood when its cue went, so the lag counts
+        /// this cue's sound only, not every cue the lane ever played.
+        var goneAt: [Int: Int] = [:]
+        func markGo(_ lane: Int) { goneAt[lane] = place(lane) }
         /// How far the lane's sound is behind the player's own position, in
         /// milliseconds; below zero means ahead.
-        func lag(_ lane: Int) -> String {
-            let out = Double(engine.cueSound.lanes[lane].ring.tally.delivered) / 48000
+        func lagMs(_ lane: Int) -> Double {
+            let out = Double(place(lane) - (goneAt[lane] ?? 0)) / 48000
             let at = engine.soundPosition(lane: lane) ?? 0
-            return String(format: "lag %.0f ms", (at - out) * 1000)
+            return (at - out) * 1000
         }
+        func lag(_ lane: Int) -> String { String(format: "lag %.0f ms", lagMs(lane)) }
         var pausedAt = 0
         var stoppedAt = 0
         var standbyAt = 0
+        var lagBeforePause = 0.0
         return [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -48,6 +60,7 @@ extension TestSnapshot {
                 engine.replaceShow(cues: [applause, tone, bars, still], pads: [], banks: [], multiTrigger: nil)
                 engine.audio.cueFirstChannel = 2
                 note("a channels 3 and 4 picked: engine on=\(engine.cueSound.isOn) note=\(engine.cueSound.note)")
+                markGo(2)
                 engine.go()
             }),
             (0.5, {
@@ -59,9 +72,11 @@ extension TestSnapshot {
             (0.5, {
                 note("a3 half a second on, lane 3 handed out \(engine.cueSound.lanes[3].ring.tally.delivered - standbyAt) frames while the tone only stood by (must be 0)")
                 note("b applause (44.1 kHz mono): \(engine.soundRoutes); lane 2 \(tally(2)) \(lag(2)); meter \(meter())")
+                markGo(3)
                 engine.go()
             }),
             (1.0, {
+                lagBeforePause = lagMs(3)
                 note("c tone (48 kHz stereo): \(engine.soundRoutes); lane 3 \(tally(3)) \(lag(3)); lane 2 now \(tally(2)); meter \(meter())")
                 engine.togglePause()
             }),
@@ -75,7 +90,11 @@ extension TestSnapshot {
                 engine.togglePause()
             }),
             (0.6, {
-                note("e2 resumed: \(engine.soundRoutes); lane 3 \(tally(3)) \(lag(3))")
+                // After a resume the sound must sit where it sat before the
+                // pause (within 15 ms), not a frame or two behind for good.
+                let drift = lagMs(3) - lagBeforePause
+                note("e2 resumed: \(engine.soundRoutes); lane 3 \(tally(3)) \(lag(3)); \(String(format: "%.0f", drift)) ms later than at c: \(abs(drift) <= 15 ? "PASS" : "FAIL")")
+                markGo(0)
                 engine.go()
             }),
             (1.0, {
@@ -98,6 +117,7 @@ extension TestSnapshot {
                 // the cue must park, not play under a PAUSED status.
                 engine.audio.cueFirstChannel = 2
                 engine.standbyID = engine.cues[0].id
+                markGo(2)
                 engine.go()
                 engine.togglePause()
                 note("h GO then Pause at once on the engine path: status=\(engine.status.rawValue)")
