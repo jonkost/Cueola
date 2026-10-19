@@ -73,7 +73,7 @@ final class Deck {
 
     /// Where the cue ends: its trim out point, or the end of the file.
     var end: Double? {
-        if let out = cue?.trimOut { return out }
+        if let out = endAt { return out }
         guard let d = player.currentItem?.duration, d.isNumeric else { return nil }
         return d.seconds
     }
@@ -980,7 +980,11 @@ final class Engine: ObservableObject {
             let sameLane = next.kind.hasPicture == cue.kind.hasPicture
             if !sameLane { endAction(deck, cue) }
             standbyID = nextArmed(after: next)?.id ?? next.id
-            fire(next, from: "Follow")
+            let result = fire(next, from: "Follow")
+            // A Follow that cannot take over now (its file is missing, or it
+            // has a pre-wait) must not leave this clip rolling past its out
+            // point: it ends the way its own setting says.
+            if sameLane, !result.ok || pending != nil { endAction(deck, cue); refresh() }
             return
         }
         endAction(deck, cue)
