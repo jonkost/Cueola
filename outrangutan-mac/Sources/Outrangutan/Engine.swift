@@ -66,6 +66,11 @@ final class Deck {
         return t.isFinite ? t : 0
     }
 
+    /// The trim out point this deck was loaded with. The stop at the out
+    /// point is set once, at load, so the clock reads the same point: a
+    /// trim changed while the cue is on air counts from its next GO.
+    private var endAt: Double?
+
     /// Where the cue ends: its trim out point, or the end of the file.
     var end: Double? {
         if let out = cue?.trimOut { return out }
@@ -129,7 +134,9 @@ final class Deck {
             }
         }
         player.replaceCurrentItem(with: item)
+        endAt = nil
         if let out = cue.trimOut, out > cue.trimIn {
+            endAt = out
             let at = NSValue(time: CMTime(seconds: out, preferredTimescale: 600))
             tokens.append(player.addBoundaryTimeObserver(forTimes: [at], queue: .main, using: ended))
         }
@@ -290,6 +297,7 @@ final class Deck {
         player.pause()
         player.replaceCurrentItem(with: nil)
         cue = nil
+        endAt = nil
         held = false
         fadingOut = false
         viaLane = false
@@ -962,7 +970,8 @@ final class Engine: ObservableObject {
         if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
             // The next cue on the same lane takes over on its own. On the
             // other lane, this one does its end action first.
-            if next.kind.hasPicture != cue.kind.hasPicture { endAction(deck, cue) }
+            let sameLane = next.kind.hasPicture == cue.kind.hasPicture
+            if !sameLane { endAction(deck, cue) }
             standbyID = nextArmed(after: next)?.id ?? next.id
             fire(next, from: "Follow")
             return
@@ -995,8 +1004,9 @@ final class Engine: ObservableObject {
         stillHeld = true
         if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
             standbyID = nextArmed(after: next)?.id ?? next.id
-            fire(next, from: "Follow")
-            return
+            // A refused Follow (the file is missing) leaves the still to its
+            // own end action.
+            if fire(next, from: "Follow").ok { return }
         }
         if cue.endAction == .black {
             let slot = stillSlot
