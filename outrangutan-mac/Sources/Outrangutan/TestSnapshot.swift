@@ -1092,6 +1092,7 @@ enum TestSnapshot {
         um.groupsByEvent = false
         func step(_ body: () -> Void) { um.beginUndoGrouping(); body(); um.endUndoGrouping() }
         func list() -> String { engine.cues.map { "\($0.name)(\(Int($0.volume * 100)))" }.joined(separator: ", ") }
+        func pads() -> String { engine.pads.pads.map(\.name).joined(separator: ", ") }
         func undo(_ label: String) { let name = um.undoActionName; um.undo(); note("\(label): undid \u{201C}\(name)\u{201D} -> [\(list())]") }
         return [
             (0.5, {
@@ -1125,6 +1126,22 @@ enum TestSnapshot {
                 step { engine.update(engine.cues[0].id) { $0.name = "Renamed" } }
                 um.undo()
                 note("n undo the rename: [\(list())]")
+                // A bed loops; the wrong pad is cleared and the slip undone:
+                // the bed keeps playing, and only the cleared pad reloads.
+                step { engine.pads.add(urls: [media.appendingPathComponent("demo-rimshot.wav")]) }
+                let hornID = engine.pads.pads[0].id, rimID = engine.pads.pads[1].id
+                step { engine.pads.update(hornID) { $0.loop = true } }
+                engine.pads.fire(hornID)
+                step { engine.pads.clear(rimID) }
+                note("p cleared the rimshot while the horn loops: pads [\(pads())], horn sounding = \(engine.pads.sounding[hornID] != nil)")
+                um.undo()
+                note("q undo: pads [\(pads())], horn still sounding = \(engine.pads.sounding[hornID] != nil), rimshot \(engine.pads.length(rimID) == nil ? "waits for quiet" : "loaded")")
+                engine.pads.stopAll()
+            }),
+            (0.5, {
+                let rimID = engine.pads.pads[1].id
+                note("r once quiet, the rimshot is \(engine.pads.length(rimID) == nil ? "not loaded" : "loaded") and plays: \(engine.pads.fire(rimID).ok)")
+                engine.pads.stopAll()
                 step { engine.add(urls: [media.appendingPathComponent("bars-4x3.mp4")]) }
                 engine.replaceShow(cues: engine.cues, pads: engine.pads.pads, banks: engine.pads.banks, multiTrigger: nil)
                 note("o opening a show clears undo: can undo = \(um.canUndo)")

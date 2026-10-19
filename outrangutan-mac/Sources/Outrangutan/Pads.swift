@@ -491,24 +491,50 @@ final class PadBoard: ObservableObject {
     }
 
     /// Puts back an earlier set of pads (Undo). Settings changes apply to
-    /// the pads as they are; a change of sounds rebuilds the board.
+    /// the pads as they are. Only the pads whose sound changed are
+    /// reloaded: a pad that came back after Clear Pad, or one whose file
+    /// changed; a trim change loads for the next hit. Every other pad,
+    /// sounding or not, is left alone, so undoing a slip never cuts a bed.
     func restore(banks old: [PadBank], pads oldPads: [Pad]) {
-        let sameSounds = oldPads.map { "\($0.id)|\($0.path)|\($0.trimIn)|\($0.trimOut ?? -1)" }
-            == pads.map { "\($0.id)|\($0.path)|\($0.trimIn)|\($0.trimOut ?? -1)" }
-        guard sameSounds else {
-            let current = currentBankID
-            replace(banks: old, pads: oldPads, multiTrigger: nil)
-            if banks.contains(where: { $0.id == current }) { currentBankID = current }
-            return
+        let now = Dictionary(pads.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var rebuild: [Pad] = []
+        for pad in oldPads {
+            let current = now[pad.id]
+            if current?.path != pad.path || channels[pad.id] == nil {
+                // A new or different sound: this pad's sound path is rebuilt.
+                stop(pad.id)
+                reloads[pad.id]?.cancel()
+                channels[pad.id] = nil
+                rebuild.append(pad)
+            } else if current?.trimIn != pad.trimIn || current?.trimOut != pad.trimOut {
+                reloadSoon(pad)
+            }
+        }
+        for pad in pads where now[pad.id] != nil && !oldPads.contains(where: { $0.id == pad.id }) {
+            stop(pad.id)
+            reloads[pad.id]?.cancel()
+            channels[pad.id] = nil
         }
         banks = old
         pads = oldPads
+        if !rebuild.isEmpty {
+            if sounding.isEmpty {
+                var added = false
+                for pad in rebuild where channel(for: pad, rewire: false) != nil { added = true }
+                if added { rewire() }
+            } else {
+                // Wiring a sound path in restarts the pads' engine, which
+                // would cut the sounding pads: it waits until they stop.
+                pendingLoad = true
+            }
+        }
         for pad in oldPads {
             guard let ch = channels[pad.id] else { continue }
             ch.setSound(eq: pad.eq, comp: pad.comp)
             if !fader.isRunning("pad-" + pad.id) { ch.gainMixer.outputVolume = Float(pad.gain) }
         }
         if !banks.contains(where: { $0.id == currentBankID }) { currentBankID = banks[0].id }
+        if let id = selectedPadID, now[id] != nil, !oldPads.contains(where: { $0.id == id }) { selectedPadID = nil }
     }
 
     func addSlot() {
