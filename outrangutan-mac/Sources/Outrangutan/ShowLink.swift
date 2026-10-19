@@ -42,6 +42,12 @@ final class ShowLink: ObservableObject {
     /// When the live line last brought a message (this Mac's clock, in
     /// milliseconds). 0 while it is down.
     private var streamAliveAt: Double = 0
+    /// The lean watch (playback parts only) is for instructors; when the
+    /// cloud says no, the whole record is watched instead.
+    private var streamLean = true
+    /// A read newer than the line: checked again a moment later before the
+    /// line is called dead, since the line's own copy is usually just behind.
+    private var missedCheck: Timer?
     private var streamNoted = false
     /// When reads started failing (milliseconds), while they are failing.
     private var failingSince: Double = 0
@@ -121,6 +127,8 @@ final class ShowLink: ObservableObject {
         streamAliveAt = 0
         streamDeliveredAt = 0
         streamNoted = false
+        streamLean = true
+        missedCheck?.invalidate(); missedCheck = nil
         startPolling()
         startStream()
         startHeartbeat()
@@ -205,7 +213,7 @@ final class ShowLink: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 do {
-                    try await self.store.listen(code: showCode) { [weak self] message in
+                    try await self.store.listen(code: showCode, lean: self.streamLean) { [weak self] message in
                         guard let self, self.code == showCode else { return }
                         self.onStreamMessage(message)
                     }
@@ -216,6 +224,15 @@ final class ShowLink: ObservableObject {
                     guard !Task.isCancelled, self.code == showCode else { return }
                     failures += 1
                     let e = error as? CloudError
+                    if self.streamLean && (e?.refused == true || e?.permission == true) {
+                        // The lean watch is a listing the cloud allows only
+                        // instructors (or a shape it will not take): watch
+                        // the whole record instead, at once.
+                        self.streamLean = false
+                        self.engine.log.add(.link, "The cloud would not open the lean live line (\(e?.message ?? "")). Watching the whole show record instead.")
+                        failures = 0
+                        continue
+                    }
                     if e?.refused == true {
                         if self.store === self.cloud {
                             self.engine.log.add(.link, "The cloud has no live line for \(showCode) (\(e?.message ?? "")). Reading it five times a second instead.")
@@ -255,6 +272,22 @@ final class ShowLink: ObservableObject {
     /// without saying so (the Mac moved to another access point, say, and
     /// the old socket just sits there). Read five times a second again and
     /// open a new line now, instead of after the old one's long silence.
+    /// A read is ahead of the line. The line's own copy of that change is
+    /// usually a few hundred milliseconds behind the read, so wait a moment;
+    /// if the line still has not caught up, it is dead.
+    private func noteMissed(_ when: Double) {
+        guard missedCheck == nil, streamIsAlive else { return }
+        let t = Timer(timeInterval: 1.5, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.missedCheck = nil
+                if self.streamDeliveredAt < when { self.reopenStream() }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        missedCheck = t
+    }
+
     private func reopenStream() {
         guard streamIsAlive, Self.now - streamReopenedAt > 5000 else { return }
         streamReopenedAt = Self.now
@@ -309,7 +342,7 @@ final class ShowLink: ObservableObject {
             lastApplied = when
             // A read newer than anything the line has delivered means the
             // line is no longer carrying changes.
-            if !fromLine, streamDeliveredAt > 0, when > streamDeliveredAt { reopenStream() }
+            if !fromLine, streamDeliveredAt > 0, when > streamDeliveredAt { noteMissed(when) }
         }
         if !joined {
             joined = true

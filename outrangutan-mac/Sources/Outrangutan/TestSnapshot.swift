@@ -858,13 +858,15 @@ enum TestSnapshot {
                 let reads = fake.readCount, lines = fake.listenCount
                 let before = engine.pictureCue?.name ?? "-"
                 fake.set(["outrangutan", "command"], command("cue", cueId: "og_s1"))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) {
+                // The read lands within 2 s; the line gets 1.5 s more to catch
+                // up (its copy is usually just behind) before it is reopened.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) {
                     let picture = engine.pictureCue?.name ?? "-", opened = fake.listenCount - lines
-                    note("k the line went quiet: picture before = \(before), 2.3 s later = \(picture) (Still); reads in 2.3 s = \(fake.readCount - reads), lines opened = \(opened) (1; the new line answers at once in this pretend cloud, so reads slow down again): \(verdict(picture == "Still" && opened == 1))")
+                    note("k the line went quiet: picture before = \(before), 4.2 s later = \(picture) (Still); reads in 4.2 s = \(fake.readCount - reads), lines opened = \(opened) (1; the new line answers at once in this pretend cloud, so reads slow down again): \(verdict(picture == "Still" && opened == 1))")
                     note("   log: " + engine.log.entries.suffix(3).map(\.text).joined(separator: " / "))
                 }
             }),
-            (2.5, { fake.mute = false; engine.allStop() }),
+            (4.5, { fake.mute = false; engine.allStop() }),
             (0.5, {
                 // The Wi-Fi blinks: the open line fails with a plain error.
                 // The app must say so once, read five times a second while
@@ -2277,7 +2279,7 @@ final class FakeRecordStore: ShowRecordStore {
         for (path, value) in updates { set(path, FirestoreValue.decode(FirestoreValue.encode(value))) }
     }
 
-    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
+    func listen(code: String, lean: Bool, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
         guard pushes else { throw CloudError(message: "no live line in this test", refused: true) }
         listenCount += 1
         onMessage(["targetChange": ["targetChangeType": "ADD"]])

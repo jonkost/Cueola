@@ -46,7 +46,9 @@ protocol ShowRecordStore: AnyObject {
     /// Keeps a line open and hands over every message the cloud sends
     /// about the show, until the cloud closes the line. A store with no
     /// live line throws a refusal at once.
-    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws
+    /// `lean` asks for only the playback parts (a query the cloud allows
+    /// instructors); false watches the whole record (any signed-in person).
+    func listen(code: String, lean: Bool, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws
 }
 
 /// Signs in and reads and writes the show's shared record over plain web
@@ -140,13 +142,14 @@ final class CloudClient: ShowRecordStore {
     /// change, and hands each message over as it arrives. Returns when the
     /// cloud closes the line (it does now and then, on purpose); throws when
     /// the line fails or the cloud will not open one.
-    func listen(code: String, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
+    func listen(code: String, lean: Bool, onMessage: @escaping @MainActor ([String: Any]) -> Void) async throws {
         var request = URLRequest(url: URL(string: CloudConfig.documentsBase + ":listen")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + (try await freshToken()), forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject:
-            ListenRequest.body(project: CloudConfig.projectId, code: code, fields: ["outrangutan", "fixRequests"]))
+        request.httpBody = try JSONSerialization.data(withJSONObject: lean
+            ? ListenRequest.body(project: CloudConfig.projectId, code: code, fields: ["outrangutan", "fixRequests"])
+            : ListenRequest.documentBody(project: CloudConfig.projectId, code: code))
         let bytes: URLSession.AsyncBytes, response: URLResponse
         do {
             (bytes, response) = try await stream.bytes(for: request)

@@ -94,6 +94,16 @@ public enum ListenRequest {
         ]
     }
 
+    /// Asks for the whole show record every time it changes: a plain
+    /// document watch. The cloud's rules judge it as one read (any signed-in
+    /// person), where the query above counts as a listing (instructors
+    /// only). It carries the whole record, rundown and all, so the query is
+    /// tried first.
+    public static func documentBody(project: String, code: String) -> [String: Any] {
+        let documents = "projects/\(project)/databases/(default)/documents"
+        return ["addTarget": ["targetId": 1, "documents": ["documents": [documents + "/sessions/" + code]]]]
+    }
+
     /// A message carrying the show: its fields (in the cloud's written
     /// form) and when it was written. nil for any other message.
     public static func document(in message: [String: Any]) -> (fields: Any?, updateTime: String?)? {
