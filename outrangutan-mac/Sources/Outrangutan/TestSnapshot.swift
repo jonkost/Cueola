@@ -261,7 +261,23 @@ enum TestSnapshot {
                 picture(InspectorView(engine: engine), size: CGSize(width: 340, height: 520), to: dir.appendingPathComponent("trim-cue.png"), store: store)
                 picture(PadInspectorView(board: engine.pads), size: CGSize(width: 340, height: 620), to: dir.appendingPathComponent("trim-pad.png"), store: store)
             }),
-            (1.0, {}),
+            (1.0, {
+                // Dragging In across 90 seconds inside one second: the list
+                // asks for a new picture at every second crossed, but only
+                // the last one is made and kept.
+                let id = engine.cues[0].id
+                Thumbnails.attempts = 0
+                for t in 0...90 {
+                    engine.update(id) { $0.trimIn = Double(t) }
+                    _ = Thumbnails.shared.image(for: engine.cues[0])
+                }
+            }),
+            (1.5, {
+                let path = engine.cues[0].path
+                let keys = Thumbnails.shared.images.keys.filter { $0.hasPrefix(path + "@") }.sorted()
+                let tries = Thumbnails.attempts
+                note("a In dragged 0 to 90 in one second: frames read \(tries), kept \(keys.count) (\(keys.map { $0.components(separatedBy: "@").last ?? "" }.joined(separator: ", "))): \(tries <= 2 && keys.count <= 2 && keys.contains(path + "@90") ? "PASS" : "FAIL")")
+            }),
         ]
         case "undo": steps = undoSteps(engine: engine, note: note)
         case "meter": steps = [
@@ -1180,6 +1196,26 @@ enum TestSnapshot {
             (0.7, {
                 let a = engine.monitor.debugOpacity(.a), b = engine.monitor.debugOpacity(.b)
                 note("   after the Fade: A \(a == nil ? "hidden" : "showing"), B \(b == nil ? "hidden" : "showing"), status \(engine.status.rawValue): \(a == nil && b == nil ? "PASS" : "FAIL")")
+                // A cue list picture that cannot be made (a sound file saved
+                // with a video's name) is tried once, not on every redraw of
+                // the list while a video is on air.
+                let fake = dir.appendingPathComponent("Voice track.mp4")
+                try? FileManager.default.removeItem(at: fake)
+                try? FileManager.default.copyItem(at: media.appendingPathComponent("demo-applause.wav"), to: fake)
+                let voice = Cue(name: "Voice track (really a .wav)", path: fake.path, kind: .video, wireID: Cue.newWireID(offsetMs: 5))
+                let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 6))
+                engine.replaceShow(cues: [voice, bars], pads: [], banks: [], multiTrigger: nil)
+                Thumbnails.attempts = 0
+                _ = Thumbnails.shared.image(for: voice)
+                engine.standbyID = bars.id
+                engine.go()
+            }),
+            (2.0, {
+                let voice = engine.cues[0]
+                for _ in 0..<10 { _ = Thumbnails.shared.image(for: voice) }
+                let tries = Thumbnails.attempts
+                note("8 a picture that cannot be made, asked for over 2 s on air and 10 more times: tried \(tries) time(s): \(tries == 1 ? "PASS" : "FAIL")")
+                engine.allStop()
             }),
         ]
     }

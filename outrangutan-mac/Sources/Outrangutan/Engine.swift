@@ -1335,6 +1335,7 @@ final class Engine: ObservableObject {
         cues = newCues
         standbyID = newCues.first { $0.armed }?.id ?? newCues.first?.id
         pads.replace(banks: banks, pads: newPads, multiTrigger: multiTrigger)
+        Thumbnails.shared.showReplaced()
         notice = nil
     }
 
