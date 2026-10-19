@@ -158,6 +158,7 @@ enum TestSnapshot {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
                 let bars = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
                 engine.replaceShow(cues: [bars], pads: [], banks: [], multiTrigger: nil)
+                engine.outputs[0].screen = "Pretend Projector"
                 engine.openOutput()
                 engine.go()
             }),
@@ -168,6 +169,13 @@ enum TestSnapshot {
                 engine.screensChanged(real)
                 note("b it is unplugged mid-show: status \(engine.status.rawValue), output shows \(engine.outputsShowing())")
                 note("   notice: \(engine.notice ?? "-")")
+                // The lid opens (the control screen's frame changes): the
+                // projector is still missing, so the notice stays.
+                engine.screensChanged(real, force: true)
+                note("   after an unrelated screen change: notice \(engine.notice?.contains("screen was disconnected") == true ? "stays PASS" : "gone FAIL")")
+                engine.screensChanged(real + ["Pretend Projector"])
+                note("   after the projector returns: notice \(engine.notice == nil ? "gone PASS" : "stays FAIL")")
+                engine.screensChanged(real)
             }),
             (1.0, {
                 let live = engine.liveState()

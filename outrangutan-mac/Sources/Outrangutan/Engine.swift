@@ -571,7 +571,14 @@ final class Engine: ObservableObject {
                 notice = "\(config.label)'s screen was disconnected. It is a window for now and goes back when the screen returns."
             }
         }
-        if gone.isEmpty && notice?.contains("screen was disconnected") == true { notice = nil }
+        // The notice stays as long as an open output's picked screen is
+        // still missing and the output sits as a window: a lid opening or a
+        // third screen appearing must not say the projector is back.
+        let stillMissing = outputs.contains { config in
+            guard openOutputs.contains(config.id), let screen = config.screen else { return false }
+            return !now.contains(screen) && window(config.id).placement.hasPrefix("a window")
+        }
+        if !stillMissing && notice?.contains("screen was disconnected") == true { notice = nil }
     }
 
     /// Stands by the cue that was on air when the app closed. With a point
