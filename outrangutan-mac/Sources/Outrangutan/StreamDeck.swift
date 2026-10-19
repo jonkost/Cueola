@@ -718,9 +718,21 @@ final class HIDDeckFinder {
             onNote("   skipped: this deck is already open")
             return
         }
-        let result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+        // Seized, so no other program can drive the keys at the same time.
+        // When the Mac will not allow that, the deck is opened shared and the
+        // log says so: the keys still work, but the Elgato app or KeyWi Bird
+        // could fight over the pictures.
+        var result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+        if result != kIOReturnSuccess {
+            let seizeError = result
+            result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            if result == kIOReturnSuccess {
+                onNote("   could not take the deck for this app alone (error \(String(format: "0x%08x", seizeError))); opened shared. "
+                       + "If the keys fight or go dark, quit the Elgato Stream Deck app and disconnect the deck in KeyWi Bird.")
+            }
+        }
         guard result == kIOReturnSuccess else {
-            onProblem("A Stream Deck is plugged in but another program holds it (error \(String(format: "0x%08x", result))). "
+            onProblem("A Stream Deck is plugged in but could not be opened (error \(String(format: "0x%08x", result))). "
                       + "Quit the Elgato Stream Deck app, or disconnect the deck in KeyWi Bird, then plug the deck in again.")
             return
         }
