@@ -460,6 +460,9 @@ final class Engine: ObservableObject {
     private var stillTimer: Timer?
     private var stillEndsAt: Date?
     private var stillLeft: Double?          // seconds left while paused
+    /// A still on its way out under a dissolve: its layer, where it shows,
+    /// and its level when it started leaving, so Fade can take it down too.
+    private var stillOut: (slot: PictureSlot, views: [OutputView], level: Double)?
 
     // A cue waiting out its pre-wait
     private var pending: (cue: Cue, at: Date, timer: Timer)?
@@ -731,7 +734,10 @@ final class Engine: ObservableObject {
         guard pictureDeck != nil || soundDeck != nil || stillCue != nil else { return stopEverything() }
         if fader.isRunning("all") { return }
         if paused { paused = false; for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.resume() } }
-        let decks = [pictureDeck, soundDeck].compactMap { $0 }
+        // Every deck with a cue on it, not just the one on air: under a
+        // dissolve the outgoing picture is still showing underneath, and
+        // must fade with the rest instead of coming back through.
+        let decks = (videoDecks + soundDecks).filter { $0.cue != nil && !$0.isPreloaded }
         let startPicture = decks.map { $0.pictureLevel }, startSound = decks.map { $0.soundLevel }
         let startStill = stillLevel
         decks.forEach { fader.cancel($0.name) }
@@ -741,6 +747,7 @@ final class Engine: ObservableObject {
             for (i, d) in decks.enumerated() {
                 d.pictureLevel = startPicture[i] * v
                 d.soundLevel = startSound[i] * v
+        let leaving = stillOut
                 self.apply(d)
             }
             self.stillLevel = startStill * v
@@ -752,6 +759,7 @@ final class Engine: ObservableObject {
         masterGain = min(1.2, max(0, value))
         [pictureDeck, soundDeck].compactMap { $0 }.forEach(apply)
         pads.setMaster(masterGain)
+            if let leaving { leaving.views.forEach { $0.setOpacity(leaving.slot, Float(leaving.level * v)) } }
         save()
         onTransport?()
     }
@@ -919,6 +927,7 @@ final class Engine: ObservableObject {
                 self?.stillLevel = v; self?.applyStill()
             }
         } else {
+        if stillOut?.slot == slot { stillOut = nil }
             fader.cancel("still")
             applyStill()
         }
@@ -956,7 +965,10 @@ final class Engine: ObservableObject {
             fader.cancel("still")
             if seconds > 0 {
                 fader.run("still-out-\(oldSlot.rawValue)", from: 1, to: 1, seconds: seconds, apply: { _ in },
-                          done: { oldViews.forEach { $0.hide(oldSlot) } })
+                          done: { [weak self] in
+                              oldViews.forEach { $0.hide(oldSlot) }
+                              if self?.stillOut?.slot == oldSlot { self?.stillOut = nil }
+                          })
             } else {
                 oldViews.forEach { $0.hide(oldSlot) }
             }
@@ -968,11 +980,13 @@ final class Engine: ObservableObject {
     /// A video or sound reached its end or its trim out point. Matches
     /// handleEnded in the web app.
     private func reachedEnd(_ deck: Deck) {
+            let oldLevel = stillLevel
         guard let cue = deck.cue, !deck.held else { return }
         if cue.loop {
             deck.rewindAndPlay()
             onClipStart?(cue, playLength(cue))
             return
+                stillOut = (oldSlot, oldViews, oldLevel)
         }
         if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
             // The next cue on the same lane takes over on its own. On the
@@ -1477,6 +1491,7 @@ final class Engine: ObservableObject {
     /// deck, a little later for a setting change (a slider drag changes a
     /// cue many times a second, and the player must not reload on each one).
     /// With `restart` the wait begins again on every call, so a run of quick
+        stillOut = nil
     /// moves ends in one load when the moves stop.
     private func scheduleStandbyPreload(after seconds: Double = 0, restart: Bool = false) {
         if !restart, let t = preloadTimer, t.fireDate.timeIntervalSinceNow <= seconds { return }

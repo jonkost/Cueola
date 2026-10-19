@@ -287,6 +287,9 @@ final class OutputView: NSView {
     var standbyShowing: Bool { !standbyLayer.isHidden }
 
     /// Names of what this output shows now, for tests.
+    /// How bright a showing layer is (0 to 1), nil while hidden; for tests.
+    func debugOpacity(_ slot: PictureSlot) -> Float? { isShowing(slot) ? layerFor(slot).opacity : nil }
+
     var showing: [String] {
         PictureSlot.allCases.compactMap { slot in
             guard let cue = frames[slot], isShowing(slot) else { return nil }

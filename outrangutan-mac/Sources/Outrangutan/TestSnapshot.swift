@@ -1152,7 +1152,27 @@ enum TestSnapshot {
                 let r = engine.pads.fire(pad?.id ?? "")
                 note("6 a loaded pad whose file is gone: file there = \(pad?.fileIsThere ?? true), hit: \(r.ok ? "played" : r.reason)")
             }),
-            (0.6, { engine.pads.stopAll() }),
+            (0.6, {
+                engine.pads.stopAll()
+                // Fade during a dissolve: the outgoing picture fades too,
+                // instead of showing through at full strength.
+                let a = Cue(name: "Video A", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 3))
+                var b = Cue(name: "Video B, dissolve 3 s", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 4))
+                b.xfade = 3
+                engine.replaceShow(cues: [a, b], pads: [], banks: [], multiTrigger: nil)
+                engine.go()
+            }),
+            (0.5, { engine.go() }),            // B dissolves over A for 3 s
+            (1.0, { engine.fadeStopAll() }),   // Fade, 1 s into the dissolve
+            (0.5, {
+                let a = engine.monitor.debugOpacity(.a), b = engine.monitor.debugOpacity(.b)
+                func text(_ v: Float?) -> String { v.map { String(format: "%.2f", $0) } ?? "hidden" }
+                note("7 half way through Fade under a dissolve: A \(text(a)), B \(text(b)): A fading too \(a != nil && a! < 0.9 ? "PASS" : "FAIL")")
+            }),
+            (0.7, {
+                let a = engine.monitor.debugOpacity(.a), b = engine.monitor.debugOpacity(.b)
+                note("   after the Fade: A \(a == nil ? "hidden" : "showing"), B \(b == nil ? "hidden" : "showing"), status \(engine.status.rawValue): \(a == nil && b == nil ? "PASS" : "FAIL")")
+            }),
         ]
     }
 
