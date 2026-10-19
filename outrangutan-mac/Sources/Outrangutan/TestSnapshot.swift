@@ -1306,6 +1306,7 @@ enum TestSnapshot {
             try? data.write(to: url)
             try? fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: url.path)
         }
+        let away = dir.appendingPathComponent("Shared clips (away)", isDirectory: true)
         return [
             (0.5, {
                 try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -1359,6 +1360,16 @@ enum TestSnapshot {
                 note("g the real bytes landed: cues [\(names())]; Preallocated (new time) and Cloud clip (same time, tried again after \(WatchFolder.retestAfter) looks) joined, each still said once: \(verdict(names().contains("Preallocated") && names().contains("Cloud clip") && said("Preallocated.mp4\u{201D} in the watched folder would not open") == 1 && said("Cloud clip.mp4\u{201D} in the watched folder would not open") == 1))")
                 let twice = engine.cues.filter { $0.name == "Arriving clip" }.count
                 note("h a clip written over: \(twice) cues named Arriving clip, lengths \(lengths("Arriving clip")), said changed \(said("has changed")) time(s) (it and Early clip): \(verdict(twice == 2 && said("has changed") == 2))")
+                // The folder goes away: renamed, or its disk unplugged.
+                try? fm.moveItem(at: folder, to: away)
+            }),
+            (1.5, {
+                note("i the folder gone: missing \(watch.missing), said \(said("cannot be found")) time(s), still watching \(watch.folder != nil): \(verdict(watch.missing && said("cannot be found") == 1 && watch.folder != nil))")
+                picture(GeneralSettings(watch: watch), size: CGSize(width: 560, height: 470), to: dir.appendingPathComponent("watch-missing.png"))
+            }),
+            (1.0, { try? fm.moveItem(at: away, to: folder) }),
+            (1.5, {
+                note("j the folder back: missing \(watch.missing), said \(said("\u{201D} is back")) time(s): \(verdict(!watch.missing && said("\u{201D} is back") == 1))")
                 engine.log.entries.filter { $0.kind == .file }.forEach { note("   log: \($0.line)") }
             }),
             (1.0, { watch.stop(); WatchFolder.every = 2; WatchFolder.retestAfter = 15 }),

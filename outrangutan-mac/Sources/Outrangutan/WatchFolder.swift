@@ -13,11 +13,15 @@ import SwiftUI
 /// file that would not open is said in the Show Log and tried again when it
 /// changes, and now and then meanwhile (a cloud file can finish downloading
 /// without its size or time changing). A file written over after it joined
-/// is a new file: it joins again, beside the old cue.
+/// is a new file: it joins again, beside the old cue. A folder that cannot
+/// be found (a share that mounts after login, a folder renamed mid-show) is
+/// said in the log once, and watched again as soon as it is back.
 final class WatchFolder: ObservableObject {
     @Published private(set) var folder: URL?
     @Published var soundsToPads: Bool { didSet { save() } }
     @Published private(set) var lastAdded: String?
+    /// True while the watched folder cannot be read: not mounted yet, renamed or gone.
+    @Published private(set) var missing = false
 
     /// What a file looked like at one look: the same file again, or a new one
     /// under the same name.
@@ -43,7 +47,9 @@ final class WatchFolder: ObservableObject {
         self.engine = engine
         let d = UserDefaults.standard
         soundsToPads = !Self.off && d.bool(forKey: "watch.soundsToPads")
-        if !Self.off, let path = d.string(forKey: "watch.folder"), FileManager.default.fileExists(atPath: path) {
+        // The folder is kept even when it is not there yet (a share or cloud
+        // drive that mounts after login): the first look says so in the log.
+        if !Self.off, let path = d.string(forKey: "watch.folder") {
             folder = URL(fileURLWithPath: path, isDirectory: true)
             seen = Set(d.stringArray(forKey: "watch.seen") ?? [])
             start()
@@ -54,10 +60,11 @@ final class WatchFolder: ObservableObject {
     /// it now, or only ones that arrive from here on.
     func watch(_ url: URL, takeWhatIsThere: Bool) {
         folder = url
-        seen = takeWhatIsThere ? [] : Set(Self.mediaFiles(in: url).map(\.lastPathComponent))
+        seen = takeWhatIsThere ? [] : Set((Self.mediaFiles(in: url) ?? []).map(\.lastPathComponent))
         stamps = [:]
         growing = [:]
         broken = [:]
+        missing = false
         save()
         start()
         engine.log.add(.file, "Watching the folder \u{201C}\(url.lastPathComponent)\u{201D} for new media")
@@ -70,6 +77,7 @@ final class WatchFolder: ObservableObject {
         folder = nil
         seen = []
         stamps = [:]
+        missing = false
         save()
     }
 
@@ -81,7 +89,7 @@ final class WatchFolder: ObservableObject {
         panel.prompt = "Watch"
         panel.message = "Pick a folder. New videos, sounds and stills that land in it join the show."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let already = Self.mediaFiles(in: url).count
+        let already = (Self.mediaFiles(in: url) ?? []).count
         var take = false
         if already > 0 {
             let a = NSAlert()
@@ -110,7 +118,7 @@ final class WatchFolder: ObservableObject {
         guard let folder, !engine.locked, !looking else { return }
         looking = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let found: [(url: URL, stamp: Stamp, placeholder: Bool)] = Self.mediaFiles(in: folder).map { url in
+            let found: [(url: URL, stamp: Stamp, placeholder: Bool)]? = Self.mediaFiles(in: folder)?.map { url in
                 let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey])
                 let placeholder = v?.ubiquitousItemDownloadingStatus.map { $0 != .current && $0 != .downloaded } ?? false
                 return (url, Stamp(size: v?.fileSize ?? 0, modified: v?.contentModificationDate), placeholder)
@@ -119,9 +127,21 @@ final class WatchFolder: ObservableObject {
         }
     }
 
-    private func consider(_ found: [(url: URL, stamp: Stamp, placeholder: Bool)], in scanned: URL) {
+    /// `found` is nil when the folder could not be read.
+    private func consider(_ found: [(url: URL, stamp: Stamp, placeholder: Bool)]?, in scanned: URL) {
         looking = false
         guard folder == scanned else { return }
+        guard let found else {
+            if !missing {
+                missing = true
+                engine.log.add(.file, "The watched folder \u{201C}\(scanned.lastPathComponent)\u{201D} cannot be found. It is watched again when it is back.")
+            }
+            return
+        }
+        if missing {
+            missing = false
+            engine.log.add(.file, "The watched folder \u{201C}\(scanned.lastPathComponent)\u{201D} is back")
+        }
         for (url, stamp, placeholder) in found {
             let name = url.lastPathComponent
             guard !checking.contains(name) else { continue }
@@ -197,9 +217,11 @@ final class WatchFolder: ObservableObject {
         return true
     }
 
-    static func mediaFiles(in folder: URL) -> [URL] {
-        let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isRegularFileKey],
-                                                                   options: [.skipsHiddenFiles])) ?? []
+    /// The media files in a folder, or nil when the folder cannot be read
+    /// (not mounted yet, renamed or gone).
+    static func mediaFiles(in folder: URL) -> [URL]? {
+        guard let items = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isRegularFileKey],
+                                                                        options: [.skipsHiddenFiles]) else { return nil }
         return items.filter { url in
             (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true && Cue.make(from: url) != nil
         }
@@ -223,6 +245,10 @@ struct WatchFolderSection: View {
             if let folder = watch.folder {
                 LabeledContent("Watching") {
                     Text(folder.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                }
+                if watch.missing {
+                    Text("The folder cannot be found right now. It is watched again when it is back.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 Toggle("Sounds become pads", isOn: $watch.soundsToPads)
                 HStack {
