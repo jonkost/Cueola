@@ -65,6 +65,11 @@ final class ObsClient: ObservableObject {
     private var seq = 0
     private var wanted = false
     private var retry: Timer?
+    /// Every 10 seconds the app pings OBS. A link that goes quiet (Wi-Fi
+    /// off on the other Mac, with no goodbye) would otherwise stay
+    /// "Connected" for minutes while every cue's OBS step is lost.
+    private var keepalive: Timer?
+    private var pongDue = false
     private static var off: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
 
     init() {
@@ -76,6 +81,7 @@ final class ObsClient: ObservableObject {
     func connect() {
         wanted = true
         retry?.invalidate(); retry = nil
+        stopKeepalive()
         task?.cancel(with: .goingAway, reason: nil)
         guard let url = URL(string: "ws://\(host.trimmingCharacters(in: .whitespaces)):\(port)") else {
             status = .failed("That address does not look right.")
@@ -91,6 +97,7 @@ final class ObsClient: ObservableObject {
     func disconnect() {
         wanted = false
         retry?.invalidate(); retry = nil
+        stopKeepalive()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         status = .off
@@ -137,9 +144,37 @@ final class ObsClient: ObservableObject {
         }
     }
 
+    /// Pings OBS every 10 seconds. If the last ping never got its pong, the
+    /// link is dead: drop it, so the usual "Lost the connection to OBS" line
+    /// and the retry run instead of a silent half-open socket.
+    private func startKeepalive(_ t: URLSessionWebSocketTask) {
+        stopKeepalive()
+        keepalive = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            guard let self, self.task === t else { return }
+            if self.pongDue {
+                t.cancel()
+                self.dropped(closeCode: 0)
+                return
+            }
+            self.pongDue = true
+            t.sendPing { [weak self] error in
+                DispatchQueue.main.async {
+                    guard let self, self.task === t else { return }
+                    if error == nil { self.pongDue = false } else { t.cancel(); self.dropped(closeCode: 0) }
+                }
+            }
+        }
+    }
+
+    private func stopKeepalive() {
+        keepalive?.invalidate(); keepalive = nil
+        pongDue = false
+    }
+
     private func dropped(closeCode: Int) {
         let was = status
         task = nil
+        stopKeepalive()
         // 4009: OBS turned the password down. Trying again will not help.
         if closeCode == 4009 {
             wanted = false
@@ -172,6 +207,7 @@ final class ObsClient: ObservableObject {
         case 2:   // Identified
             status = .connected
             onLog?(.link, "Connected to OBS")
+            if let t = task { startKeepalive(t) }
             request("GetSceneList")
             request("GetRecordStatus")
             request("GetStreamStatus")
@@ -216,7 +252,16 @@ final class ObsClient: ObservableObject {
     private func send(_ object: [String: Any]) {
         guard let t = task, let data = try? JSONSerialization.data(withJSONObject: object),
               let text = String(data: data, encoding: .utf8) else { return }
-        t.send(.string(text)) { _ in }
+        // A send that fails means the link is gone: drop it now rather than
+        // keep saying "Connected" while cue actions vanish.
+        t.send(.string(text)) { [weak self] error in
+            guard error != nil else { return }
+            DispatchQueue.main.async {
+                guard let self, self.task === t else { return }
+                t.cancel()
+                self.dropped(closeCode: 0)
+            }
+        }
     }
 
     /// OBS's password proof: base64(sha256(base64(sha256(password + salt)) + challenge)).

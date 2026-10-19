@@ -281,6 +281,10 @@ Connect. Then in a cue's Inspector (Cue tab, OBS):
 
 The password stays on this Mac, in the app's settings.
 
+The app pings OBS every 10 seconds. A link that stops answering (Wi-Fi off
+on the other Mac, with no goodbye) is dropped within about 20 seconds,
+logged as lost, and tried again every 5 seconds.
+
 ## Program preview and scopes
 
 Under the transport sits a strip with the **program preview** (a live copy

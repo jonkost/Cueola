@@ -2494,6 +2494,7 @@ final class FakeObs {
         self.password = password
         self.note = note
         let ws = NWProtocolWebSocket.Options()
+        ws.autoReplyPing = true   // the real OBS answers the app's keepalive pings
         let params = NWParameters.tcp
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         params.requiredInterfaceType = .loopback
