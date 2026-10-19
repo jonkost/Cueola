@@ -11,6 +11,9 @@ struct CheckItem: Identifiable {
     let title: String
     var detail = ""
     var fix: (label: String, action: () -> Void)?
+    /// The fix opens another sheet (Connect), so Show Check must go first:
+    /// a window shows one sheet at a time.
+    var fixClosesCheck = false
 }
 
 enum ShowCheck {
@@ -30,12 +33,23 @@ enum ShowCheck {
                                    detail: names + (lostCues.count > 3 ? ", and more" : "") + (lostCues.count == 1 ? ". It was moved or deleted." : ". They were moved or deleted."),
                                    fix: ("Stand By the First", { engine.standbyID = first })))
         }
-        let lostPads = engine.pads.pads.filter { !$0.fileIsThere || engine.pads.length($0.id) == nil }
+        let lostPads = engine.pads.pads.filter { !$0.fileIsThere }
+        // A pad added while another pad sounds waits to load until the pads
+        // are quiet (Pads never restarts its engine under a music bed). That
+        // pad is fine: it is a wait, not a problem.
+        let waitingPads = engine.pads.pads.filter { $0.fileIsThere && engine.pads.length($0.id) == nil }
         if !engine.pads.pads.isEmpty {
-            items.append(lostPads.isEmpty
-                ? CheckItem(level: .good, title: "Every pad is loaded", detail: ShowFiles.count(engine.pads.pads.count, "pad"))
-                : CheckItem(level: .problem, title: "\(ShowFiles.count(lostPads.count, "pad")) won't play",
-                            detail: lostPads.prefix(3).map(\.name).joined(separator: ", ") + ": the file is missing or would not load."))
+            if lostPads.isEmpty && waitingPads.isEmpty {
+                items.append(CheckItem(level: .good, title: "Every pad is loaded", detail: ShowFiles.count(engine.pads.pads.count, "pad")))
+            }
+            if !lostPads.isEmpty {
+                items.append(CheckItem(level: .problem, title: "\(ShowFiles.count(lostPads.count, "pad")) won't play",
+                                       detail: lostPads.prefix(3).map(\.name).joined(separator: ", ") + ": the file is missing or would not load."))
+            }
+            if !waitingPads.isEmpty {
+                items.append(CheckItem(level: .warning, title: "\(ShowFiles.count(waitingPads.count, "pad")) \(waitingPads.count == 1 ? "is" : "are") still loading",
+                                       detail: waitingPads.prefix(3).map(\.name).joined(separator: ", ") + ": \(waitingPads.count == 1 ? "it plays" : "they play") once the other pads stop."))
+            }
         }
         if engine.standbyCue == nil && !engine.cues.isEmpty {
             items.append(CheckItem(level: .warning, title: "Nothing is standing by", detail: "GO does nothing until a cue stands by.",
@@ -57,7 +71,7 @@ enum ShowCheck {
         } else {
             items.append(CheckItem(level: .warning, title: "\(closed.map(\.label).joined(separator: ", ")) \(closed.count == 1 ? "is" : "are") closed",
                                    detail: "Pictures on a closed output go nowhere.",
-                                   fix: ("Open All Outputs", { engine.openOutput() })))
+                                   fix: ("Open All Outputs", { closed.forEach { engine.openOutput($0.id) } })))
         }
         if screens.count < 2 {
             items.append(CheckItem(level: .warning, title: "Only one screen is connected",
@@ -113,12 +127,25 @@ enum ShowCheck {
         } else {
             items.append(CheckItem(level: .warning, title: "Not connected to a show",
                                    detail: "Only this Mac's own keys run it. Connect to take fires from the rundown and KeyWi Bird.",
-                                   fix: ("Connect\u{2026}", { NotificationCenter.default.post(name: .showConnect, object: nil) })))
+                                   fix: ("Connect\u{2026}", { NotificationCenter.default.post(name: .showConnect, object: nil) }),
+                                   fixClosesCheck: true))
         }
         let usesObs = engine.cues.contains { $0.obs.action != .none || !$0.obsTriggerScene.isEmpty }
         if usesObs && !obs.isConnected {
             items.append(CheckItem(level: .warning, title: "Cues use OBS, but OBS is not connected",
                                    fix: ("Connect OBS", { obs.connect() })))
+        }
+        // A scene renamed or deleted in OBS: the cue's switch would fail on
+        // air, and a cue waiting for that scene would never fire.
+        if obs.isConnected && !obs.scenes.isEmpty {
+            for (i, cue) in engine.cues.enumerated() {
+                var wanted = [cue.obs.action == .scene ? cue.obs.scene : "", cue.obsTriggerScene].filter { !$0.isEmpty }
+                if wanted.count == 2 && wanted[0] == wanted[1] { wanted.removeLast() }
+                for scene in wanted where !obs.scenes.contains(scene) {
+                    items.append(CheckItem(level: .warning, title: "Cue \(i + 1) uses OBS scene \u{201C}\(scene)\u{201D}, which OBS does not have",
+                                           detail: "\(cue.name): pick the scene again in the Inspector, or rename it back in OBS."))
+                }
+            }
         }
 
         // Last: the lock.
@@ -170,7 +197,17 @@ struct ShowCheckView: View {
                     }
                     Spacer()
                     if let fix = item.fix {
-                        Button(fix.label) { fix.action(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refresh() } }
+                        Button(fix.label) {
+                            if item.fixClosesCheck {
+                                // Dismiss first, then the fix: the Connect sheet
+                                // can only come up once this one has gone.
+                                dismiss()
+                                DispatchQueue.main.async { fix.action() }
+                            } else {
+                                fix.action()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refresh() }
+                            }
+                        }
                             .buttonWidth(150)
                     }
                 }

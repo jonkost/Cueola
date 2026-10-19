@@ -354,7 +354,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `screens`: a pretend projector connects and is unplugged while a video
   plays; the video keeps playing and the output lands as a window.
 - `check`: Show Check with planted problems (a missing file, closed
-  outputs, an unplugged sound device, OBS off), then two fixes pressed.
+  outputs, an unplugged sound device, OBS off), then two fixes pressed;
+  Open All Outputs leaves an output that is already open where it is.
 - `record`: a pretend microphone records onto a pad; a second take with
   the same name gets its own file.
 - `trim`: pictures of the trim bar for a video cue and a pad.

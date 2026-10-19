@@ -1399,6 +1399,11 @@ final class Engine: ObservableObject {
 
     func openOutput(_ id: Int) {
         guard let config = outputs.first(where: { $0.id == id }) else { return }
+        // Already open: leave its window alone. Opening it again would tear
+        // the window down and build a new one under the picture on air, and
+        // snap a windowed output back to the middle of the screen. A screen
+        // change moves it through outputsChanged and screensChanged instead.
+        if openOutputs.contains(id), window(id).isOpen { return }
         window(id).open(on: config.screen, title: config.label)
         if !openOutputs.contains(id) { log.add(.output, "\(config.label) opened", from: source) }
         openOutputs.insert(id)

@@ -81,7 +81,7 @@ enum TestSnapshot {
         case "timing": steps = timingSteps(engine: engine, note: note, state: state, snap: snap)
         case "pads": steps = padSteps(engine: engine, link: link, dir: dir, note: note, state: state)
         case "outputs": steps = outputSteps(engine: engine, note: note, state: state, snap: snap)
-        case "fixes": steps = fixSteps(engine: engine, files: files, dir: dir, note: note)
+        case "fixes": steps = fixSteps(engine: engine, link: link, files: files, dir: dir, note: note)
         case "multi": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
@@ -207,8 +207,21 @@ enum TestSnapshot {
                 engine.locked = false
                 engine.audio.cueDevice = "unplugged-interface-uid"
                 picture(ShowCheckView(engine: engine, link: link), size: CGSize(width: 560, height: 560), to: dir.appendingPathComponent("show-check.png"))
+                // Open All Outputs with Output 1 already open and Output 2
+                // closed: Output 1 keeps its window where it was.
+                func win1() -> NSWindow? { NSApp.windows.first { $0.contentView is OutputView && $0.title == "Output 1" } }
+                engine.addOutput()
+                if let w = win1() { w.setFrameOrigin(NSPoint(x: 20, y: 20)) }
+                let before = win1().map { "\(ObjectIdentifier($0).hashValue) at \(Int($0.frame.origin.x)),\(Int($0.frame.origin.y))" } ?? "no window"
+                for item in ShowCheck.run(engine: engine, link: link, obs: ObsClient.shared) where item.fix?.label == "Open All Outputs" { item.fix?.action() }
+                let after = win1().map { "\(ObjectIdentifier($0).hashValue) at \(Int($0.frame.origin.x)),\(Int($0.frame.origin.y))" } ?? "no window"
+                note("c Open All Outputs with Output 1 open and Output 2 closed: Output 1 kept its window and place = \(before == after); open = \(engine.openOutputs.sorted())")
+                engine.closeOutput(2)
+                engine.removeOutput(2)
             }),
-            (1.0, { engine.audio.cueDevice = nil; engine.closeOutput(1) }),
+            (1.0, {
+                engine.audio.cueDevice = nil; engine.closeOutput(1)
+            }),
         ]
         case "record": steps = [
             (0.5, {
@@ -377,7 +390,7 @@ enum TestSnapshot {
             (1.2, {}),
         ]
         case "watch": steps = watchSteps(engine: engine, watch: watch, dir: dir, note: note)
-        case "obs": steps = obsSteps(engine: engine, dir: dir, note: note)
+        case "obs": steps = obsSteps(engine: engine, link: link, dir: dir, note: note)
         case "key": steps = keySteps2(engine: engine, scopes: scopes, dir: dir, note: note, snap: snap)
         case "scopes": steps = scopeSteps(engine: engine, scopes: scopes, dir: dir, note: note, state: state, snap: snap)
         case "listen": steps = listenSteps(engine: engine, link: link, note: note)
@@ -1113,9 +1126,13 @@ enum TestSnapshot {
     private static let testUndo = UndoManager()
 
     /// The reviewer's findings, each played out.
-    @MainActor private static func fixSteps(engine: Engine, files: ShowFiles, dir: URL, note: @escaping (String) -> Void) -> Steps {
+    @MainActor private static func fixSteps(engine: Engine, link: ShowLink, files: ShowFiles, dir: URL, note: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
         func still(_ n: String, _ i: Int) -> Cue { Cue(name: n, path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: i)) }
+        @MainActor func padCheck() -> String {
+            ShowCheck.run(engine: engine, link: link, obs: ObsClient.shared).filter { $0.title.contains("pad") }
+                .map { "[\($0.level)] \($0.title)" }.joined(separator: "; ")
+        }
         return [
             (0.5, {
                 var video = Cue(name: "Video, dissolve 1 s", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 9))
@@ -1141,11 +1158,14 @@ enum TestSnapshot {
                 note("2 bed still sounding after a new pad arrived: \(engine.pads.sounding[engine.pads.pads[0].id] != nil)")
                 let r = engine.pads.fire(new?.id ?? "")
                 note("   the new pad right away: \(r.ok ? "played" : r.reason)")
+                // Show Check calls the waiting pad a wait, not a problem.
+                note("   Show Check says: " + padCheck())
             }),
             (3.0, {
                 let new = engine.pads.pads.first { $0.name == "demo-rimshot" }
                 let r = engine.pads.fire(new?.id ?? "")
                 note("   once the bed ended, the new pad: \(r.ok ? "played" : r.reason)")
+                note("   Show Check says: " + padCheck())
                 // An output whose picked screen is missing.
                 engine.outputs[0].screen = "A screen that is not here"
             }),
@@ -1412,7 +1432,7 @@ enum TestSnapshot {
         }
     }
 
-    @MainActor private static func obsSteps(engine: Engine, dir: URL, note: @escaping (String) -> Void) -> Steps {
+    @MainActor private static func obsSteps(engine: Engine, link: ShowLink, dir: URL, note: @escaping (String) -> Void) -> Steps {
         let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../../../demo-media").standardized
         let obs = ObsClient.shared
@@ -1451,12 +1471,23 @@ enum TestSnapshot {
                 note("e cue 3 started recording: OBS recording = \(obs.recording)")
                 engine.log.entries.filter { $0.from == "OBS" }.forEach { note("   log: \($0.line)") }
                 engine.allStop()
+                // Show Check names a cue's scene that OBS no longer has.
+                @MainActor func obsItems() -> String {
+                    ShowCheck.run(engine: engine, link: link, obs: obs).filter { $0.title.contains("OBS") }
+                        .map { "[\($0.level)] \($0.title)" }.joined(separator: "; ")
+                }
+                note("f Show Check with every scene in OBS: \(obsItems().isEmpty ? "nothing about OBS" : obsItems())")
+                engine.cues[0].obs.scene = "Gone"
+                engine.cues[1].obsTriggerScene = "Gone too"
+                note("g after cue 1's scene and cue 2's trigger scene were renamed in OBS: \(obsItems())")
+                engine.cues[0].obs.scene = "Tight"
+                engine.cues[1].obsTriggerScene = "Break"
                 obs.disconnect()
             }),
             // With OBS closed, a cue's OBS step is skipped, and the log says so.
             (0.3, { engine.standbyID = engine.cues[2].id; engine.go() }),
             (0.5, {
-                note("f GO on cue 3 with OBS disconnected: recording = \(obs.recording); the OBS log line(s) since:")
+                note("h GO on cue 3 with OBS disconnected: recording = \(obs.recording); the OBS log line(s) since:")
                 engine.log.entries.filter { $0.from == "OBS" }.suffix(1).forEach { note("   log: \($0.line)") }
                 engine.allStop()
             }),
