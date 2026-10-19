@@ -1981,7 +1981,27 @@ enum TestSnapshot {
                 let live = engine.liveState()
                 note("k the recovered cue after another ran first: \(live.name) at \(String(format: "%.1f", live.offset ?? 0)) s (should be near its in point of \(String(format: "%.1f", engine.cues[0].trimIn)), not 30)")
                 engine.allStop()
-                state("l done")
+                // The crash note during a pre-wait: the waiting cue is noted.
+                engine.update(engine.cues[0].id) { $0.preWait = 5 }
+                engine.standbyID = engine.cues[0].id
+                engine.go()
+            }),
+            (1.5, {
+                let noted = engine.lastRecoveryPoint?.wireID ?? "-"
+                note("l crash note 1.5 s into a 5 s pre-wait: \(noted) \(noted == engine.cues[0].wireID ? "PASS" : "FAIL")")
+                engine.allStop()
+                // A still with a sound bed under it: the note is the still.
+                engine.add(urls: [media.appendingPathComponent("demo-applause.wav")])
+                engine.standbyID = engine.cues[1].id
+                engine.go()
+                engine.standbyID = engine.cues.last!.id
+                engine.go()
+            }),
+            (1.5, {
+                let noted = engine.lastRecoveryPoint?.wireID ?? "-"
+                note("m crash note with a still and a bed on air: \(noted) \(noted == engine.cues[1].wireID ? "PASS" : "FAIL") (picture \(engine.pictureCue?.name ?? "-"), sound \(engine.soundCue?.name ?? "-"))")
+                engine.allStop()
+                state("n done")
             }),
         ]
     }

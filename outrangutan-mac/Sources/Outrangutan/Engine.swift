@@ -1684,10 +1684,13 @@ final class Engine: ObservableObject {
     private func noteRecoveryPoint() {
         guard Date().timeIntervalSince(lastRecoveryWrite) >= 1 else { return }
         lastRecoveryWrite = Date()
-        let deck = [pictureDeck, soundDeck].compactMap { $0 }.first { !$0.held && $0.cue != nil }
-        if let deck, let cue = deck.cue, let wire = cue.wireID {
-            RecoveryPoint(wireID: wire, name: cue.name, offset: deck.current).save()
-            recoveryNoted = true
+        // The picture first (a video, then a still), then a sound, then a
+        // cue waiting out its pre-wait: the program picture is what the
+        // show must get back, not the music bed under it.
+        func playing(_ d: Deck?) -> Deck? { d.flatMap { !$0.held && $0.cue != nil ? $0 : nil } }
+        let point: RecoveryPoint?
+        if let deck = playing(pictureDeck), let cue = deck.cue, let wire = cue.wireID {
+            point = RecoveryPoint(wireID: wire, name: cue.name, offset: deck.current)
         } else if let still = stillCue, let wire = still.wireID {
             RecoveryPoint(wireID: wire, name: still.name, offset: 0).save()
             recoveryNoted = true
@@ -1727,6 +1730,9 @@ final class Engine: ObservableObject {
         ShowStore.save(ShowFile(cues: cues, outputs: outputs, audio: audio, masterGain: masterGain,
                                 pads: pads.pads, banks: pads.banks, multiTrigger: pads.multiTrigger,
                                 standbyText: standbyText.isEmpty ? nil : standbyText))
+    /// What the crash note last said, for test mode (which never writes it).
+    private(set) var lastRecoveryPoint: RecoveryPoint?
+
     }
 
     // MARK: Outputs and sound
