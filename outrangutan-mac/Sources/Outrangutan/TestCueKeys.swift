@@ -55,6 +55,13 @@ extension TestSnapshot {
                 let byPart = GoToCueView.matches("card", in: engine.cues).map(\.name)
                 let none = GoToCueView.matches("zebra", in: engine.cues)
                 note("6 go to cue: 3 -> \(byNumber) \(byNumber == ["Applause bed"] ? "PASS" : "FAIL"); 'bars 4x3' -> \(byWords) \(byWords == ["Bars 4x3"] ? "PASS" : "FAIL"); 'card' -> \(byPart) \(byPart == ["Title card"] ? "PASS" : "FAIL"); 'zebra' -> \(none.count) \(none.isEmpty ? "PASS" : "FAIL")")
+                // A number that is nobody's cue number still searches names;
+                // Return with an empty box stands by nothing.
+                let year = Cue(name: "2024 Highlights", path: engine.cues[1].path, kind: .still, wireID: Cue.newWireID(offsetMs: 9))
+                let byYear = GoToCueView.matches("2024", in: engine.cues + [year]).map(\.name)
+                let empty = GoToCueView.standByTarget("  ", in: engine.cues)
+                let typed = GoToCueView.standByTarget("3", in: engine.cues)?.name
+                note("6b '2024' -> \(byYear) \(byYear == ["2024 Highlights"] ? "PASS" : "FAIL"); empty box stands by \(empty?.name ?? "nothing") \(empty == nil ? "PASS" : "FAIL"); '3' stands by \(typed ?? "-") \(typed == "Applause bed" ? "PASS" : "FAIL")")
             }),
             (0.3, {
                 // The hotkey rides in a show file and comes back.

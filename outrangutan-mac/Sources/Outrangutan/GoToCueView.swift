@@ -10,6 +10,7 @@ struct GoToCueView: View {
     @FocusState private var typing: Bool
 
     private var matches: [Cue] { Self.matches(text, in: engine.cues) }
+    private var blank: Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -36,7 +37,7 @@ struct GoToCueView: View {
             }
             .frame(height: 220)
             HStack {
-                Text(matches.isEmpty ? (text.isEmpty ? "Every cue is listed. Type to narrow it down." : "No cue matches.") : "Return stands by the first match.")
+                Text(blank ? "Every cue is listed. Type to narrow it down." : (matches.isEmpty ? "No cue matches." : "Return stands by the first match."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -44,7 +45,7 @@ struct GoToCueView: View {
                 Button("Stand By") { standBy() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(ActionStyle(prominent: true))
-                    .disabled(matches.isEmpty)
+                    .disabled(blank || matches.isEmpty)
             }
             .buttonWidth(120)
         }
@@ -56,21 +57,33 @@ struct GoToCueView: View {
 
     private func number(of cue: Cue) -> Int { (engine.cues.firstIndex { $0.id == cue.id } ?? 0) + 1 }
 
+    /// Return with nothing typed just closes the sheet: it must never move
+    /// the standby to cue 1 because every cue is listed.
     private func standBy() {
-        guard let cue = matches.first else { return }
+        if blank { dismiss(); return }
+        guard let cue = Self.standByTarget(text, in: engine.cues) else { return }
         engine.standbyID = cue.id
         dismiss()
     }
 
+    /// The cue Return stands by: the first match, or none when the box is
+    /// empty or nothing matches.
+    static func standByTarget(_ text: String, in cues: [Cue]) -> Cue? {
+        if text.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
+        return matches(text, in: cues).first
+    }
+
     /// The cues that fit what was typed: a number picks that cue first
-    /// (then cues whose number starts with it); words match the name.
+    /// (then cues whose number starts with it); words match the name. A
+    /// number that is nobody's cue number is searched as a word too, so
+    /// "2024" still finds "2024 Highlights".
     static func matches(_ text: String, in cues: [Cue]) -> [Cue] {
         let t = text.trimmingCharacters(in: .whitespaces).lowercased()
         if t.isEmpty { return cues }
         if let n = Int(t) {
             let exact = (n >= 1 && n <= cues.count) ? [cues[n - 1]] : []
             let starts = cues.enumerated().filter { i, _ in String(i + 1).hasPrefix(t) && i + 1 != n }.map(\.element)
-            return exact + starts
+            if !(exact.isEmpty && starts.isEmpty) { return exact + starts }
         }
         let words = t.split(separator: " ").map(String.init)
         return cues.filter { cue in
