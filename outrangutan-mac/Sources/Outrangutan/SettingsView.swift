@@ -158,7 +158,7 @@ struct SoundSettings: View {
             } header: {
                 Text("Cue sound")
             } footer: {
-                Text("Sound cues, and the sound of videos whose output has no sound device of its own. On an audio interface, cue sound can take its own pair, for its own fader on the board. A change of pair takes effect with the next cue.")
+                Text("Sound cues, and the sound of videos whose output has no sound device of its own. On an audio interface, cue sound can take its own pair, for its own fader on the board. A change of device or pair waits for the cue on air to finish, then takes effect with the next cue.")
                     .foregroundStyle(.secondary)
             }
             Section {

@@ -1521,6 +1521,9 @@ final class Engine: ObservableObject {
         d.views = []
         if pictureDeck === d { pictureDeck = nil }
         if soundDeck === d { soundDeck = nil }
+        // A cue device or pair picked while this cue played through the
+        // engine takes effect now that no cue is on that path.
+        if cueRouteWaits, !laneBusy { applySoundRoutes() }
         scheduleStandbyPreload()
     }
 
@@ -2009,6 +2012,14 @@ final class Engine: ObservableObject {
 
     private var padsRoute: (device: String?, channel: Int)?
     private var cueRoute: (device: String?, channel: Int)?
+    /// True while a new cue device or pair waits for the cue on the engine
+    /// path to finish; `clearDeck` applies it then.
+    private(set) var cueRouteWaits = false
+
+    /// True while a cue on air plays its sound through the cue sound engine.
+    private var laneBusy: Bool {
+        (videoDecks + soundDecks).contains { $0.viaLane && $0.cue != nil && !$0.isPreloaded }
+    }
 
     /// Sends the pads and cue sound where Settings says, but only the part
     /// that changed: re-routing stops sounding pads and restarts the cue
@@ -2021,6 +2032,14 @@ final class Engine: ObservableObject {
         // A pair other than 1 and 2 with the engine off means it would not
         // start last time: picking it again is a fresh try.
         if cueRoute == nil || cueRoute! != (audio.cueDevice, audio.cueFirstChannel) || (audio.cueFirstChannel > 0 && !cueSound.isOn) {
+            // Moving the engine to another device or pair restarts it and
+            // drops the sound its lanes hold, up to a few seconds of it. A
+            // cue on air through the engine would go silent for that long,
+            // so the move waits until no cue is on that path (Settings says
+            // the change takes effect with the next cue). Back to 1 and 2
+            // is the exception: the cue comes out of its player at once.
+            if audio.cueFirstChannel > 0, cueSound.isOn, laneBusy { cueRouteWaits = true; return }
+            cueRouteWaits = false
             cueSound.setOutput(device: audio.cueDevice, firstChannel: audio.cueFirstChannel)
             cueRoute = (audio.cueDevice, audio.cueFirstChannel)
             if !cueSound.isOn {
@@ -2028,6 +2047,9 @@ final class Engine: ObservableObject {
                 // their players again, at their level.
                 for d in videoDecks + soundDecks where d.viaLane { d.leaveLane(); apply(d) }
             }
+        } else {
+            // Picked back to where the engine already is: nothing waits.
+            cueRouteWaits = false
         }
     }
 }

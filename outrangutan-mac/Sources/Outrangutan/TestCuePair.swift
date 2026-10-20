@@ -36,6 +36,7 @@ extension TestSnapshot {
         var pausedAt = 0
         var stoppedAt = 0
         var standbyAt = 0
+        var dryBefore = 0
         var lagBeforePause = 0.0
         return [
             (0.5, {
@@ -155,6 +156,25 @@ extension TestSnapshot {
             (1.0, {
                 note("j3 a second on: status=\(engine.status.rawValue) showing \(engine.outputsShowing()); \(engine.soundRoutes)")
                 engine.allStop()
+            }),
+            (0.3, {
+                // Another pair picked while a cue plays through the engine:
+                // the engine must not move (that drops the sound its lane
+                // holds) until the cue is off air.
+                engine.standbyID = engine.cues[0].id
+                markGo(2)
+                engine.go()
+            }),
+            (0.5, {
+                dryBefore = engine.cueSound.lanes[2].ring.tally.dry
+                engine.audio.cueFirstChannel = 4
+                note("k pair changed to 5 and 6 mid-cue: waits=\(engine.cueRouteWaits) engine on \(engine.cueSound.note); \(engine.soundRoutes)")
+            }),
+            (0.5, {
+                let dry = engine.cueSound.lanes[2].ring.tally.dry - dryBefore
+                note("k2 half a second on: lane 2 \(tally(2)) \(lag(2)); silent frames since the change \(dry): \(dry == 0 && engine.cueRouteWaits ? "PASS" : "FAIL")")
+                engine.allStop()
+                note("k3 after All Stop the pair applies: waits=\(engine.cueRouteWaits) engine on \(engine.cueSound.note): \(!engine.cueRouteWaits && engine.cueSound.note.contains("5 and 6") ? "PASS" : "FAIL")")
             }),
             (0.3, {
                 // The Sound settings, with channels 3 and 4 picked on a Mac
