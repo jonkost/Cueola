@@ -64,6 +64,12 @@ enum ShowCheck {
                                        detail: "\u{201C}\(name)\u{201D} is missing. Plug it in, or pick another screen in Settings, Outputs."))
             }
         }
+        // Two open outputs on one screen: only the one on top shows.
+        let onScreen = Dictionary(grouping: engine.outputs.filter { engine.outputScreen($0.id) != nil }, by: { engine.outputScreen($0.id)! })
+        for (screen, shared) in onScreen.sorted(by: { $0.key < $1.key }) where shared.count > 1 {
+            items.append(CheckItem(level: .problem, title: "\(shared.map(\.label).joined(separator: " and ")) are on the same screen",
+                                   detail: "Only the one on top shows on \u{201C}\(screen)\u{201D}. Pick a screen for each in Settings, Outputs."))
+        }
         let closed = engine.outputs.filter { !engine.openOutputs.contains($0.id) }
         if closed.isEmpty {
             items.append(CheckItem(level: .good, title: engine.outputs.count == 1 ? "The output is open" : "Every output is open",

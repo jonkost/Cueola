@@ -54,7 +54,12 @@ enum TestSnapshot {
         guard let folder = ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] else { return }
         let dir = URL(fileURLWithPath: folder, isDirectory: true)
         var log: [String] = []
-        func note(_ line: String) { log.append(line) }
+        // Saved after every note, so a crash mid-scenario keeps what was
+        // seen before it.
+        func note(_ line: String) {
+            log.append(line)
+            try? log.joined(separator: "\n").write(to: dir.appendingPathComponent("test-log.txt"), atomically: true, encoding: .utf8)
+        }
 
         func snap(_ name: String) {
             for window in NSApp.windows where window.isVisible {
@@ -2314,6 +2319,19 @@ enum TestSnapshot {
             }),
             (0.4, { engine.identifyOutputs() }),
             (0.4, { snap("o-5-identify") }),
+            (0.1, {
+                // Both outputs have no screen picked: each takes its own
+                // place. On a one-screen Mac both are windows, and that is
+                // the only time their places may match.
+                let apart = engine.debugPlacement(1) != engine.debugPlacement(2)
+                note("5a two outputs with no screen picked: Output 1 \(engine.debugPlacement(1)); Output 2 \(engine.debugPlacement(2)); apart = \(apart) (\(NSScreen.screens.count) screen(s)) \(apart || NSScreen.screens.count < 2 ? "PASS" : "FAIL")")
+                // A name typed in Settings keeps the window: a new one
+                // would blink the program screen on every letter.
+                let before = engine.debugWindowNumber(1)
+                for letter in ["P", "Pr", "Pro"] { engine.outputs[0].label = letter }
+                note("5b the name typed over an open output: same window = \(engine.debugWindowNumber(1) == before ? "PASS" : "FAIL")")
+                engine.outputs[0].label = "Program"
+            }),
             (0.1, {
                 // A pair this output does not have (7 and 8 on a two-channel
                 // output) goes to 1 and 2, and the note says so.

@@ -23,27 +23,56 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
     var isOpen: Bool { window?.isVisible ?? false }
     /// Where the output is now, in words, for the show log.
     private(set) var placement = "closed"
+    /// The screen this output fills edge to edge; nil while it is a window
+    /// or closed. Other outputs with no picked screen keep off it.
+    private(set) var fullScreenOn: String?
+    /// The window's number, for test mode: it must not change when an
+    /// output is placed again where it already is.
+    var debugWindowNumber: Int { window?.windowNumber ?? -1 }
+
+    /// The screen with the control window (the one with the toolbar). The
+    /// main window is no guide: it is nil while another app is in front,
+    /// and it can be the Multiview or Settings on some other screen.
+    static var controlScreen: NSScreen? {
+        NSApp.windows.first { $0.toolbar != nil }?.screen ?? NSScreen.screens.first
+    }
 
     /// Opens the output on the named screen, or moves it there if it is
-    /// already open.
-    func open(on screenName: String?, title: String = "Outrangutan Output") {
-        let control = NSApp.mainWindow?.screen ?? NSScreen.main
+    /// already open. With no screen picked it takes the first screen that
+    /// is not the control screen and not in `avoiding` (screens other
+    /// outputs hold), or a window when none is free. An output that is
+    /// already where it belongs keeps its window: a new one would blink
+    /// the screen and snap a moved window back to the middle.
+    func open(on screenName: String?, title: String = "Outrangutan Output", avoiding: Set<String> = []) {
+        let control = Self.controlScreen
         // A picked screen that is missing never falls back to some other
         // screen: that could be another output's screen. It opens as a
         // window instead, until the screen is back.
         let target = screenName != nil
             ? NSScreen.screens.first { $0.localizedName == screenName }
-            : NSScreen.screens.first { $0 != control }
+            : NSScreen.screens.first { $0 != control && !avoiding.contains($0.localizedName) }
+        let own = target.flatMap { $0 != control ? $0 : nil }
+
+        if let win = window, own?.localizedName == fullScreenOn {
+            // Same place as before: keep the window, follow the screen's
+            // size, keep the title current.
+            if let screen = own { win.setFrame(screen.frame, display: true) }
+            else { win.title = title }
+            if !win.isVisible { win.orderFront(nil) }
+            return
+        }
+        window?.delegate = nil
         window?.orderOut(nil)
 
         let win: NSWindow
-        if let screen = target, screen != control {
+        if let screen = own {
             // Its own screen: edge to edge, above the menu bar.
             win = NSWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             win.level = .screenSaver
             win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             win.setFrame(screen.frame, display: true)
             placement = "full screen on \u{201C}\(screen.localizedName)\u{201D}"
+            fullScreenOn = screen.localizedName
         } else {
             // Same screen as the controls: a normal window you can move and size.
             let frame = NSRect(x: 0, y: 0, width: 960, height: 540)
@@ -54,6 +83,7 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
             win.contentAspectRatio = NSSize(width: 16, height: 9)
             win.center()
             placement = "a window on this screen"
+            fullScreenOn = nil
         }
         win.isReleasedWhenClosed = false
         win.backgroundColor = .black
@@ -66,10 +96,14 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
         window?.delegate = nil
         window?.orderOut(nil)
         window = nil
+        fullScreenOn = nil
+        placement = "closed"
     }
 
     func windowWillClose(_ notification: Notification) {
         window = nil
+        fullScreenOn = nil
+        placement = "closed"
         onClose?()
     }
 

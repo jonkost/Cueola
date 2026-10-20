@@ -569,7 +569,7 @@ final class Engine: ObservableObject {
         for name in gone { log.add(.problem, "Screen \u{201C}\(name)\u{201D} was disconnected") }
         for name in back { log.add(.output, "Screen \u{201C}\(name)\u{201D} connected") }
         for config in outputs where openOutputs.contains(config.id) {
-            window(config.id).open(on: config.screen, title: config.label)
+            window(config.id).open(on: config.screen, title: config.label, avoiding: screensTaken(except: config.id))
             let placed = window(config.id).placement
             log.add(.output, "\(config.label) is now \(placed)")
             if placed.hasPrefix("a window") && !gone.isEmpty {
@@ -661,6 +661,20 @@ final class Engine: ObservableObject {
 
     /// Where an output is placed, for tests.
     func debugPlacement(_ id: Int) -> String { windows[id]?.placement ?? "closed" }
+    /// The number of an output's window, for tests.
+    func debugWindowNumber(_ id: Int) -> Int { windows[id]?.debugWindowNumber ?? -1 }
+
+    /// The screen an open output fills edge to edge, or nil.
+    func outputScreen(_ id: Int) -> String? { openOutputs.contains(id) ? windows[id]?.fullScreenOn : nil }
+
+    /// Screens an output with no picked screen must keep off: the ones
+    /// other outputs picked, and the ones other open outputs fill now. Two
+    /// outputs on one screen would hide each other.
+    private func screensTaken(except id: Int) -> Set<String> {
+        var taken = Set(outputs.filter { $0.id != id }.compactMap(\.screen))
+        for other in outputs where other.id != id { if let on = outputScreen(other.id) { taken.insert(on) } }
+        return taken
+    }
 
     /// Moves the standby up or down the list (the arrow keys). Picking what
     /// stands by is not an edit, so it works while locked.
@@ -1416,9 +1430,14 @@ final class Engine: ObservableObject {
         // snap a windowed output back to the middle of the screen. A screen
         // change moves it through outputsChanged and screensChanged instead.
         if openOutputs.contains(id), window(id).isOpen { return }
-        window(id).open(on: config.screen, title: config.label)
+        window(id).open(on: config.screen, title: config.label, avoiding: screensTaken(except: id))
         if !openOutputs.contains(id) { log.add(.output, "\(config.label) opened", from: source) }
         openOutputs.insert(id)
+        // No screen picked and none free (the others are taken): say so,
+        // instead of covering another output in silence.
+        if config.screen == nil, window(id).fullScreenOn == nil, NSScreen.screens.count > 1 {
+            notice = "\(config.label) has no free screen. It is a window for now. Pick its screen in Settings, Outputs."
+        }
         onTransport?()
     }
 
@@ -1959,7 +1978,7 @@ final class Engine: ObservableObject {
         scheduleStandbyPreload()
         // Move open windows to a newly picked screen, and keep titles current.
         for config in outputs where openOutputs.contains(config.id) {
-            window(config.id).open(on: config.screen, title: config.label)
+            window(config.id).open(on: config.screen, title: config.label, avoiding: screensTaken(except: config.id))
         }
         onTransport?()
     }
