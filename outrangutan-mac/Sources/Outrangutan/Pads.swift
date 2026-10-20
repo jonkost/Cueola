@@ -761,6 +761,12 @@ final class PadChannel {
     @discardableResult
     func play(_ buffer: AVAudioPCMBuffer, loop: Bool, ended: @escaping () -> Void) -> Bool {
         guard engine.isRunning else { return false }
+        // The sound device must be handing the engine its turns ("IO cycles").
+        // A Mac just woken, or a USB interface that has gone quiet, says it
+        // is running and then throws on play, in a way Swift cannot catch,
+        // and the app dies. So the hit is refused instead, and the board
+        // says so.
+        guard engine.outputNode.lastRenderTime?.isSampleTimeValid == true else { return false }
         let i = voiceIndex(for: buffer.format)
         guard engine.outputConnectionPoints(for: voices[i], outputBus: 0).isEmpty == false else { return false }
         let v = voices[i]
