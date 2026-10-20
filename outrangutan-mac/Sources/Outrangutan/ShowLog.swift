@@ -155,7 +155,13 @@ struct ShowLogView: View {
                         }
                         .width(min: 90, ideal: 140, max: 220)
                     }
-                    .onChange(of: log.entries.count) { _, _ in
+                    // Keyed on the newest line, not the count: once the log is full
+                    // (ShowLog.most) every add drops the oldest line, so the count
+                    // stops changing while new lines keep landing at the bottom.
+                    .onChange(of: log.entries.last?.id) { _, _ in
+                        if let last = shown.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                    .onAppear {
                         if let last = shown.last { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
                 }
