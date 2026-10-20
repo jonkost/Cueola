@@ -144,6 +144,14 @@ struct KeySettings: View {
         }
         .formStyle(.grouped)
         .onDisappear(perform: stopRecording)
+        // Clicking another window (the control window, say) while a key
+        // button waits puts the button back. The next key then runs the
+        // show instead of being taken as the new key.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            guard keys.recording != nil, let window = note.object as? NSWindow,
+                  window.identifier?.rawValue.contains("Settings") == true else { return }
+            stopRecording()
+        }
     }
 
     /// A pad whose hotkey is also a show key: the show key wins.
@@ -161,6 +169,11 @@ struct KeySettings: View {
         keys.recording = action
         watcher = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard keys.recording == action else { return event }
+            // A key meant for another window is never the new key.
+            if let window = event.window, window.identifier?.rawValue.contains("Settings") != true {
+                stopRecording()
+                return event
+            }
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
                 keys.set(action, to: KeyMap.Key(event: event))
             }
