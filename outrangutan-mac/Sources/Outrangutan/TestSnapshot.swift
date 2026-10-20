@@ -1751,10 +1751,13 @@ enum TestSnapshot {
                 note("c pressed again: GOs=\(gos())")
                 state("c")
                 midi.learning = true
+                // 90 teaches it, 70 ends the teaching touch, 64 rides: the
+                // fader never has to reach zero to wake up.
                 midi.pretend(0xB0, 7, 90)
-                midi.pretend(0xB0, 7, 0)
+                midi.pretend(0xB0, 7, 70)
                 midi.pretend(0xB0, 7, 64)
-                note("d fader learned as \(midi.router.map["cc:0:7"]?.action.label ?? "-"); set to 64 of 127: gain \(String(format: "%.2f", engine.masterGain))")
+                let faderOk = abs(engine.masterGain - 64.0 / 127.0) < 0.001
+                note("d fader learned as \(midi.router.map["cc:0:7"]?.action.label ?? "-"); 90 then 70 then 64 of 127, no zero: gain \(String(format: "%.2f", engine.masterGain)) \(faderOk ? "ok" : "FAIL: fader stayed dead")")
                 midi.learning = true
                 midi.pretend(0x90, 62, 100)
                 midi.set("n:0:62", action: .cue)

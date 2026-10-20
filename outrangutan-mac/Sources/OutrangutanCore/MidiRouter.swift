@@ -9,7 +9,8 @@ public struct MidiBinding: Codable, Equatable {
     /// The cue or pad id, for "cue" and "pad".
     public var ref: String
     /// Just learned: stays silent until the control that taught it is let go,
-    /// so the very touch that learned it never fires anything.
+    /// so the very touch that learned it never fires anything. A button is
+    /// let go on its release; a fader is let go on its very next move.
     public var pending: Bool
 
     public init(action: Action, ref: String = "", pending: Bool = false) {
@@ -65,7 +66,10 @@ public struct MidiRouter {
         }
         guard var m = map[key] else { return .none }
         if m.pending {
-            if release { m.pending = false; map[key] = m }
+            // A fader has no release: the next value after the one that
+            // taught it ends the teaching touch, so it rides from there
+            // instead of staying dead until it is pulled to zero.
+            if release || type == 0xB0 { m.pending = false; map[key] = m }
             if type == 0xB0 { ccEdge[key] = d2 }
             return .none
         }

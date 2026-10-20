@@ -38,9 +38,10 @@ final class MidiRouterTests: XCTestCase {
         r.learning = true
         XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 64), .learned("cc:0:7"))
         XCTAssertEqual(r.map["cc:0:7"]?.action, .master)
-        XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 30), .none, "silent until let go")
-        XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 0), .none)
+        XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 30), .none, "the touch that taught it is still silent")
+        // The next move rides, without the fader ever reaching zero.
         XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 127), .master(1))
+        XCTAssertEqual(r.handle(status: 0xB0, d1: 7, d2: 0), .master(0))
     }
 
     func testOtherMessagesAreIgnored() {
