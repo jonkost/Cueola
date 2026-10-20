@@ -73,7 +73,7 @@ struct InspectorView: View {
                 }
             }
             InspectorRow("Fire on GO") { Toggle("", isOn: bind(cue, \.armed)).labelsHidden().toggleStyle(.switch) }
-                .help("Off: GO skips this cue. The rundown and the deck can still fire it.")
+                .help("Off: GO moves past this cue when it is next in line. If it is the one standing by, GO still fires it. The rundown and the deck can still fire it.")
             InspectorRow("Hotkey") {
                 Picker("Hotkey", selection: Binding(get: { live(cue).hotkey }, set: { engine.setHotkey(cue.id, $0) })) {
                     Text("None").tag("")
