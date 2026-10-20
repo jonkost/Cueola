@@ -273,7 +273,7 @@ struct PadTile: View {
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard !board.locked, let url = urls.first(where: PadBoard.isSound) else { return false }
-            board.assign(url: url, slot: pad.slot)
+            board.assign(url: url, slot: pad.slot, bank: pad.bank)
             return true
         } isTargeted: { dropTargeted = $0 }
         .help("Click to play. Drop a sound here to replace it.")
@@ -320,6 +320,8 @@ struct EmptyPadTile: View {
 /// Every setting for the selected pad, one group at a time.
 struct PadInspectorView: View {
     @ObservedObject var board: PadBoard
+    // Watched so the Hotkey list's show-key notes follow Settings, Keys.
+    @ObservedObject private var keys = KeyMap.shared
     @AppStorage("inspector.padTab") private var tab = "pad"
 
     private let tabs = [
@@ -370,11 +372,19 @@ struct PadInspectorView: View {
             InspectorRow("Hotkey") {
                 Picker("Hotkey", selection: bind(pad, \.key)) {
                     Text("None").tag("")
-                    ForEach(PadBoard.keys, id: \.self) { Text($0.uppercased()).tag($0) }
+                    ForEach(PadBoard.keys, id: \.self) { Text($0.uppercased() + Self.showKeyNote($0)).tag($0) }
                 }
-                .labelsHidden().frame(width: 90)
+                .labelsHidden().frame(width: 150)
             }
+            .help("A key that hits this pad from anywhere. A show key (GO, Pause, Stop, Fade, All Stop) wins over it.")
         }
+    }
+
+    /// A key a show key holds, said in the list itself: the show key wins,
+    /// so a pad given that key would never sound from the keyboard.
+    static func showKeyNote(_ k: String) -> String {
+        if let action = KeyMap.Action.allCases.first(where: { KeyMap.shared.key($0).padName == k }) { return " (show key: \(action.label))" }
+        return ""
     }
 
     @ViewBuilder
@@ -449,7 +459,7 @@ struct PadInspectorView: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio]
         panel.prompt = "Use"
-        if panel.runModal() == .OK, let url = panel.url { board.assign(url: url, slot: pad.slot) }
+        if panel.runModal() == .OK, let url = panel.url { board.assign(url: url, slot: pad.slot, bank: pad.bank) }
     }
 }
 

@@ -385,12 +385,15 @@ final class PadBoard: ObservableObject {
 
     // MARK: Editing
 
-    /// Puts a sound file on a pad slot of the current bank.
-    func assign(url: URL, slot: Int) {
-        guard let bank = currentBank else { return }
+    /// Puts a sound file on a pad slot of the current bank, or of the bank
+    /// named: a pad found by search can belong to a bank that is not on
+    /// screen, and Replace… or a drop on it must land on that pad.
+    func assign(url: URL, slot: Int, bank: String? = nil) {
+        let bankID = bank ?? currentBankID
+        guard banks.contains(where: { $0.id == bankID }) else { return }
         willChange?("Load Pad", nil)
         let name = url.deletingPathExtension().lastPathComponent
-        if let i = pads.firstIndex(where: { $0.bank == bank.id && $0.slot == slot }) {
+        if let i = pads.firstIndex(where: { $0.bank == bankID && $0.slot == slot }) {
             stop(pads[i].id)
             channels[pads[i].id] = nil
             pads[i].path = url.path
@@ -398,7 +401,7 @@ final class PadBoard: ObservableObject {
             channel(for: pads[i])
             selectedPadID = pads[i].id
         } else {
-            var pad = Pad(id: Pad.newID(offsetMs: slot), slot: slot, bank: bank.id, name: name, path: url.path, key: nextFreeKey())
+            var pad = Pad(id: Pad.newID(offsetMs: slot), slot: slot, bank: bankID, name: name, path: url.path, key: nextFreeKey())
             pad.color = PadBoard.palette[slot % PadBoard.palette.count]
             pads.append(pad)
             channel(for: pad)

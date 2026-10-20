@@ -376,9 +376,10 @@ enum TestSnapshot {
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
         case "stage": steps = stageSteps(engine: engine, link: link, files: files, scopes: scopes, note: note)
-        case "padsearch": steps = [
+        case "padsearch":
+            let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
+            steps = [
             (0.5, {
-                let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
                 let b1 = PadBank(id: "bk_1", name: "Show open"), b2 = PadBank(id: "bk_2", name: "Game segment")
                 func pad(_ n: Int, _ bank: String, _ name: String, _ file: String, _ emoji: String) -> Pad {
                     var p = Pad(id: Pad.newID(offsetMs: n), slot: n % 4, bank: bank, name: name, path: media.appendingPathComponent(file).path, key: "")
@@ -392,7 +393,20 @@ enum TestSnapshot {
                 picture(PadBoardView(board: engine.pads, startSearch: "horn"), size: CGSize(width: 760, height: 420), to: dir.appendingPathComponent("pad-search.png"))
                 picture(PadBoardView(board: engine.pads, startSearch: "kazoo"), size: CGSize(width: 760, height: 420), to: dir.appendingPathComponent("pad-search-none.png"))
             }),
-            (1.2, {}),
+            (1.2, {
+                // Replace… on a search hit from Bank 2 while Bank 1 is on
+                // screen: the new file lands on Bank 2's pad, never Bank 1's.
+                let board = engine.pads
+                board.currentBankID = "bk_1"
+                guard let hit = board.pads.first(where: { $0.bank == "bk_2" && $0.slot == 0 }),
+                      let was = board.pads.first(where: { $0.bank == "bk_1" && $0.slot == 0 }) else { note("replace: pads missing: FAIL"); return }
+                board.assign(url: media.appendingPathComponent("sfx-ding.wav"), slot: hit.slot, bank: hit.bank)
+                let b1 = board.pads.first { $0.bank == "bk_1" && $0.slot == 0 }
+                let b2 = board.pads.first { $0.bank == "bk_2" && $0.slot == 0 }
+                let ok = b1?.path == was.path && b2?.path.hasSuffix("sfx-ding.wav") == true && board.selectedPadID == hit.id
+                note("Replace on Bank 2's search hit with Bank 1 showing: Bank 1 slot 0 is \(b1?.name ?? "gone"), Bank 2 slot 0 is \(b2?.name ?? "gone"): \(ok ? "PASS" : "FAIL")")
+            }),
+            (0.5, {}),
         ]
         case "watch": steps = watchSteps(engine: engine, watch: watch, dir: dir, note: note)
         case "obs": steps = obsSteps(engine: engine, link: link, dir: dir, note: note)
@@ -1853,13 +1867,21 @@ enum TestSnapshot {
             NSApp.postEvent(e, atStart: false)
         }
         func gos() -> Int { engine.log.entries.filter { $0.kind == .cue }.count }
+        func stops() -> Int { engine.log.entries.filter { $0.kind == .stop }.count }
         func keyList() -> String { KeyMap.Action.allCases.map { "\($0.label)=\(keys.name($0))" }.joined(separator: " ") }
+        var hornID = ""
+        var stopsBefore = 0
         return [
             (1.0, {
                 let a = Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID())
                 let b = Cue(name: "Still", path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: 1))
                 let c = Cue(name: "Bars 4x3", path: media.appendingPathComponent("bars-4x3.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 2))
-                engine.replaceShow(cues: [a, b, c], pads: [], banks: [], multiTrigger: nil)
+                // One pad with no key yet, for the show-key clash at the end.
+                let bank = PadBank(id: "bk_keys", name: "Bank 1")
+                let horn = Pad(id: Pad.newID(), slot: 0, bank: bank.id, name: "Air horn",
+                               path: media.appendingPathComponent("demo-airhorn.wav").path, key: "")
+                hornID = horn.id
+                engine.replaceShow(cues: [a, b, c], pads: [horn], banks: [bank], multiTrigger: true)
                 note("a standard keys: \(keyList())")
                 keys.set(.go, to: KeyMap.Key(code: 36, name: "Return"))
                 note("b GO moved to Return: \(keyList())")
@@ -1913,6 +1935,23 @@ enum TestSnapshot {
                 NSApp.endModalSession(session)
                 panel.orderOut(nil)
                 note("j Space under a file panel (app-modal, seen \(modal)): GOs \(before) -> \(gos()): \(modal && gos() == before ? "PASS" : "FAIL")")
+            }),
+            (0.3, {
+                // A pad given a key a show key holds: the pad's Hotkey list
+                // says so, and the key runs the show key, never the pad.
+                keys.set(.stop, to: KeyMap.Key(code: 18, name: "1"))
+                engine.pads.update(hornID) { $0.key = "1" }
+                let said = PadInspectorView.showKeyNote("1")
+                note("k Stop moved to 1 and the pad given key 1; the pad's Hotkey list says 1\(said): \(said == " (show key: Stop)" ? "PASS" : "FAIL")")
+                stopsBefore = stops()
+                press(18, "1")
+            }),
+            (0.4, {
+                let sounding = engine.pads.sounding[hornID] != nil
+                note("l pressing 1: Stop ran \(stops() - stopsBefore) time(s), pad sounding \(sounding): \(stops() == stopsBefore + 1 && !sounding ? "PASS" : "FAIL")")
+                keys.resetAll()
+                note("m keys back to standard, the note is gone: 1\(PadInspectorView.showKeyNote("1")): \(PadInspectorView.showKeyNote("1").isEmpty ? "PASS" : "FAIL")")
+                engine.allStop()
             }),
         ]
     }
