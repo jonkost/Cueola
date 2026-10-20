@@ -17,6 +17,8 @@ final class PreviewPlayer: ObservableObject {
     private var cue: Cue?
     private var loopToken: Any?
     private var endToken: NSObjectProtocol?
+    /// How many times a video file was opened; for test mode.
+    private(set) var loads = 0
 
     init() {
         player.isMuted = true
@@ -25,12 +27,19 @@ final class PreviewPlayer: ObservableObject {
 
     /// Loads the standby cue. The same file again only refreshes its
     /// framing and name, so a slider drag in the Inspector does not reload.
+    /// A trim drag keeps the open file too: the parked frame moves to the
+    /// new in point, and a roll stops, instead of the file being opened
+    /// again on every tick of the drag.
     func show(_ cue: Cue?) {
-        if let cue, let old = self.cue, cue.id == old.id, cue.path == old.path, cue.kind == old.kind,
-           cue.trimIn == old.trimIn, cue.trimOut == old.trimOut {
+        if let cue, let old = self.cue, cue.id == old.id, cue.path == old.path, cue.kind == old.kind {
+            let trimmed = cue.trimIn != old.trimIn || cue.trimOut != old.trimOut
             self.cue = cue
             caption = cue.name
             surface.picture.restyle(cue.kind.holds ? .s1 : .a, cue)
+            if trimmed, cue.kind == .video {
+                if rolling { stopRoll() }
+                else { player.seek(to: CMTime(seconds: cue.trimIn, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+            }
             return
         }
         stopRoll()
@@ -44,6 +53,7 @@ final class PreviewPlayer: ObservableObject {
         caption = cue.name
         switch cue.kind {
         case .video:
+            loads += 1
             player.replaceCurrentItem(with: AVPlayerItem(url: cue.url))
             player.seek(to: CMTime(seconds: cue.trimIn, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
             surface.picture.showVideo(player, in: .a, cue: cue, opacity: 1)

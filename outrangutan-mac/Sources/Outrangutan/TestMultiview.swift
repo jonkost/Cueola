@@ -52,6 +52,16 @@ extension TestSnapshot {
             }),
             (0.3, {
                 note("7 stopped: preview \(preview.describe); back at 2.0 s: \(preview.seconds == 2 ? "PASS" : "FAIL")")
+                // A trim drag in the Inspector: twenty ticks, the file opened again never.
+                let before = preview.loads
+                for i in 1...20 {
+                    engine.updateAll([engine.cues[4].id], "Trim") { $0.trimIn = 2 + Double(i) * 0.1 }
+                    preview.show(engine.standbyCue)
+                }
+                note("8 trim in dragged 20 ticks to 4.0 s: file opened \(preview.loads - before) more times: \(preview.loads == before ? "PASS" : "FAIL")")
+            }),
+            (0.4, {
+                note("   preview \(preview.describe); parked at 4.0 s: \(preview.seconds == 4 ? "PASS" : "FAIL")")
                 // A short clip with no trim out rolls round at the end of the file.
                 engine.updateAll([engine.cues[4].id], "Trim") { $0.trimIn = 99; $0.trimOut = nil }
                 preview.show(engine.standbyCue)
@@ -59,12 +69,12 @@ extension TestSnapshot {
             }),
             (2.0, {
                 let t = preview.seconds
-                note("8 rolling from 99 s of a 100 s clip, 2 s later: preview \(preview.describe); went round (under 100 s, still rolling): \(t < 100 && preview.rolling ? "PASS" : "FAIL")")
+                note("9 rolling from 99 s of a 100 s clip, 2 s later: preview \(preview.describe); went round (under 100 s, still rolling): \(t < 100 && preview.rolling ? "PASS" : "FAIL")")
                 preview.toggleRoll()
                 engine.allStop()
             }),
             (0.5, {
-                state("9 after All Stop")
+                state("10 after All Stop")
                 note("   program box shows \(engine.multiviewProgram.visibleSlots.map { "\($0)" })")
             }),
         ]

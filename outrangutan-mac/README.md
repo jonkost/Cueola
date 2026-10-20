@@ -370,7 +370,8 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
   and back to channels 1 and 2 straight from the player.
 - `multiview`: the Multiview window with bars on air and a still on
   standby, the preview following the standby down the list, a preview
-  roll between trim points, and a picture of the window.
+  roll between trim points, a trim drag that keeps the file open, and a
+  picture of the window.
 - `duck`: a video's sound dipping 12 dB while a pad sounds, coming back
   after, staying put with ducking off, and dipping when it is switched on
   mid-pad.
