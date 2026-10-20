@@ -409,8 +409,14 @@ struct PadInspectorView: View {
                 TrimBar(url: pad.url, length: length, trimIn: bind(pad, \.trimIn),
                         trimOut: Binding(get: { live(pad).trimOut }, set: { v in board.update(pad.id) { $0.trimOut = v } }))
             }
-            NumberField(label: "Start at", value: bind(pad, \.trimIn), step: 0.1)
-            NumberField(label: "Stop at", value: Binding(get: { live(pad).trimOut ?? 0 }, set: { v in board.update(pad.id) { $0.trimOut = v > 0 ? v : nil } }), step: 0.1)
+            // A Start typed past Stop moves to just before it, and a Stop typed
+            // before Start to just after it, so neither throws the other away.
+            NumberField(label: "Start at", value: Binding(get: { live(pad).trimIn }, set: { v in
+                board.update(pad.id) { p in p.trimIn = p.trimOut.map { min(max(0, v), max(0, $0 - 0.1)) } ?? max(0, v) }
+            }), step: 0.1)
+            NumberField(label: "Stop at", value: Binding(get: { live(pad).trimOut ?? 0 }, set: { v in
+                board.update(pad.id) { p in p.trimOut = v > 0 ? max(v, p.trimIn + 0.1) : nil }
+            }), step: 0.1)
         }
     }
 
