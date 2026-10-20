@@ -2571,6 +2571,26 @@ enum TestSnapshot {
                 note("   writes so far: \(fake.writeCount), reads so far: \(fake.readCount)")
                 snap("link-12-end")
             }),
+            // A slow sign-in (bad Wi-Fi) must not join its code after
+            // Disconnect, or after a newer Connect with another code.
+            (0.1, {
+                link.signInForTest = { _, _, _ in try await Task.sleep(nanoseconds: 600_000_000) }
+                Task { await link.connect(username: "test", secret: "1234", instructor: false, code: "OLD1") }
+            }),
+            (0.2, {
+                note("13 Connect to OLD1 with a slow sign-in: phase=\(link.phase) message=\(link.message)")
+                link.leave()
+                note("   Disconnect while it signs in: phase=\(link.phase) code=\(link.code.isEmpty ? "-" : link.code)")
+            }),
+            (0.8, {
+                note("14 the slow sign-in finished after Disconnect: phase=\(link.phase) code=\(link.code.isEmpty ? "-" : link.code): \(link.phase == .off && link.code.isEmpty ? "PASS" : "FAIL")")
+                Task { await link.connect(username: "test", secret: "1234", instructor: false, code: "OLD1") }
+            }),
+            (0.2, { Task { await link.connect(username: "test", secret: "1234", instructor: false, code: "NEW2") } }),
+            (1.0, {
+                note("15 Connect to OLD1, then to NEW2 before its sign-in finished: phase=\(link.phase) code=\(link.code.isEmpty ? "-" : link.code): \(link.code == "NEW2" && link.phase != .off ? "PASS" : "FAIL")")
+                link.leave()
+            }),
         ]
     }
 }

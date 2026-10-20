@@ -36,6 +36,12 @@ final class ShowLink: ObservableObject {
     private let store: ShowRecordStore
     private let inbox: CommandInbox
     private var joined = false
+    /// Counts connects and disconnects. A sign-in that finishes after a
+    /// Disconnect, or after a newer Connect with another code, must not
+    /// join its old code: it checks this number has not moved on.
+    private var attempt = 0
+    /// Test mode stands in for the cloud sign-in (a slow one, for instance).
+    var signInForTest: ((_ user: String, _ secret: String, _ instructor: Bool) async throws -> Void)?
     private var pollTask: Task<Void, Never>?
     /// The live line: the cloud sends the show the moment it changes.
     private var streamTask: Task<Void, Never>?
@@ -102,16 +108,23 @@ final class ShowLink: ObservableObject {
         guard showCode.range(of: "^[A-Z0-9_.-]{3,24}$", options: .regularExpression) != nil else {
             return trouble("A show code is 3 to 24 letters or numbers.")
         }
+        attempt += 1
+        let mine = attempt
         phase = .connecting
         message = "Signing in"
         do {
             if !cloud.isSignedIn || !secret.isEmpty {
-                if instructor { try await cloud.signInInstructor(username: user, password: secret) }
+                if let signInForTest { try await signInForTest(user, secret, instructor) }
+                else if instructor { try await cloud.signInInstructor(username: user, password: secret) }
                 else { try await cloud.signInStudent(username: user, pin: secret) }
             }
         } catch {
+            // Disconnected, or connected again, while this sign-in ran:
+            // that newer wish wins, and this one says nothing.
+            guard mine == attempt else { return }
             return trouble(error.localizedDescription)
         }
+        guard mine == attempt else { return }
         join(code: showCode)
     }
 
@@ -136,6 +149,7 @@ final class ShowLink: ObservableObject {
 
     func leave(keepSignIn: Bool = false) {
         if !code.isEmpty { engine.log.add(.link, "Left \(code)") }
+        attempt += 1
         pollTask?.cancel()
         pollTask = nil
         streamTask?.cancel()
