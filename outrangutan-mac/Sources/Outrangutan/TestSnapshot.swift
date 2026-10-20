@@ -2331,7 +2331,15 @@ enum TestSnapshot {
                 for letter in ["P", "Pr", "Pro"] { engine.outputs[0].label = letter }
                 note("5b the name typed over an open output: same window = \(engine.debugWindowNumber(1) == before ? "PASS" : "FAIL")")
                 engine.outputs[0].label = "Program"
+                // Identify is up while the windowed output is resized: the
+                // box must follow the picture (see the picture after).
+                engine.identifyOutputs()
+                if let w = NSApp.windows.first(where: { $0.contentView is OutputView && $0.title == "Program" }) {
+                    var f = w.frame; f.size = CGSize(width: 480, height: 270)
+                    w.setFrame(f, display: true)
+                }
             }),
+            (0.5, { snap("o-5c-identify-resized") }),
             (0.1, {
                 // A pair this output does not have (7 and 8 on a two-channel
                 // output) goes to 1 and 2, and the note says so.

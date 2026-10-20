@@ -218,6 +218,7 @@ final class OutputView: NSView {
                 }
                 if let cue = frames[slot] { place(slot, cue) }
             }
+            if let box = identifyLayer { fitIdentify(box) }
         }
         updateStandby()
     }
@@ -346,33 +347,46 @@ final class OutputView: NSView {
     func identify(number: Int, label: String) {
         identifyLayer?.removeFromSuperlayer()
         let box = CALayer()
-        box.frame = bounds
         box.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
         box.zPosition = 10_000
-        let scale = window?.backingScaleFactor ?? 2
         let big = CATextLayer()
+        big.name = "number"
         big.string = "\(number)"
         big.font = NSFont.systemFont(ofSize: 10, weight: .bold)
-        big.fontSize = bounds.height * 0.45
         big.alignmentMode = .center
         big.foregroundColor = NSColor.white.cgColor
-        big.contentsScale = scale
-        big.frame = CGRect(x: 0, y: bounds.height * 0.3, width: bounds.width, height: bounds.height * 0.55)
         let name = CATextLayer()
+        name.name = "label"
         name.string = label
         name.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
-        name.fontSize = bounds.height * 0.07
         name.alignmentMode = .center
         name.foregroundColor = NSColor.white.cgColor
-        name.contentsScale = scale
-        name.frame = CGRect(x: 0, y: bounds.height * 0.16, width: bounds.width, height: bounds.height * 0.1)
         box.addSublayer(big)
         box.addSublayer(name)
+        fitIdentify(box)
         layer?.addSublayer(box)
         identifyLayer = box
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self, weak box] in
             box?.removeFromSuperlayer()
             if self?.identifyLayer === box { self?.identifyLayer = nil }
+        }
+    }
+
+    /// Sizes the Identify box and its words to the picture. Done again on
+    /// every layout, so an output moved to another screen or resized while
+    /// its number is up keeps the box over the whole picture.
+    private func fitIdentify(_ box: CALayer) {
+        let scale = window?.backingScaleFactor ?? 2
+        box.frame = bounds
+        for case let text as CATextLayer in box.sublayers ?? [] {
+            text.contentsScale = scale
+            if text.name == "number" {
+                text.fontSize = bounds.height * 0.45
+                text.frame = CGRect(x: 0, y: bounds.height * 0.3, width: bounds.width, height: bounds.height * 0.55)
+            } else {
+                text.fontSize = bounds.height * 0.07
+                text.frame = CGRect(x: 0, y: bounds.height * 0.16, width: bounds.width, height: bounds.height * 0.1)
+            }
         }
     }
 
