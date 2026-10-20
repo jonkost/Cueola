@@ -90,6 +90,9 @@ struct InspectorView: View {
             InspectorRow("Pad") {
                 Picker("Pad", selection: bind(cue, \.sfxPadId)) {
                     Text("None").tag("")
+                    // A pad that was cleared keeps its row, so the picker is
+                    // never blank and the operator sees why no pad fires.
+                    if let gone = stalePad(cue) { Text("A pad that was removed").tag(gone) }
                     ForEach(engine.pads.banks) { bank in
                         ForEach(engine.pads.pads.filter { $0.bank == bank.id }.sorted { $0.slot < $1.slot }) { pad in
                             Text("\(bank.name): \(pad.emoji.isEmpty ? "" : pad.emoji + " ")\(pad.name)").tag(pad.id)
@@ -186,6 +189,12 @@ struct InspectorView: View {
         InspectorSection(title: "Output") {
             InspectorRow("Shows on") {
                 Picker("Shows on", selection: bind(cue, \.output)) {
+                    // An output that was removed in Settings keeps its row:
+                    // the picker says where the cue plays instead of going
+                    // blank, and the cue keeps its number for an Undo.
+                    if let gone = staleOutput(cue) {
+                        Text("Output \(gone) (removed, plays on \(engine.outputs.first?.label ?? "Output 1"))").tag(gone)
+                    }
                     ForEach(engine.outputs) { Text($0.label).tag($0.id) }
                     Divider()
                     Text("Every output").tag(0)
@@ -355,6 +364,19 @@ struct InspectorView: View {
     // MARK: Fields
 
     private func live(_ cue: Cue) -> Cue { engine.cues.first { $0.id == cue.id } ?? cue }
+
+    /// The cue's output number when no output has it any more (it was removed
+    /// in Settings), so the picker can show a row for it.
+    private func staleOutput(_ cue: Cue) -> Int? {
+        let out = live(cue).output
+        return out != 0 && !engine.outputs.contains { $0.id == out } ? out : nil
+    }
+
+    /// The cue's pad id when that pad is gone, so the picker can show a row for it.
+    private func stalePad(_ cue: Cue) -> String? {
+        let id = live(cue).sfxPadId
+        return !id.isEmpty && engine.pads.pad(id: id) == nil ? id : nil
+    }
 
     private func bind<T>(_ cue: Cue, _ path: WritableKeyPath<Cue, T>) -> Binding<T> {
         Binding(
