@@ -156,10 +156,17 @@ struct InspectorView: View {
                 TrimBar(url: cue.url, length: length, trimIn: bind(cue, \.trimIn),
                         trimOut: Binding(get: { live(cue).trimOut }, set: { v in engine.update(cue.id) { $0.trimOut = v } }))
             }
-            NumberField(label: "Start at", value: bind(cue, \.trimIn), step: 0.1)
+            // The typed boxes keep the same 0.1 s gap the yellow handles do:
+            // a Start typed past Stop lands just before it, and a Stop typed
+            // before Start lands just after it. Neither throws Stop at away
+            // (the engine turns a Stop at or below Start into "play to the end").
+            NumberField(label: "Start at", value: Binding(
+                get: { live(cue).trimIn },
+                set: { v in engine.update(cue.id) { c in c.trimIn = c.trimOut.map { min(v, $0 - 0.1) } ?? v } }
+            ), step: 0.1)
             NumberField(label: "Stop at", value: Binding(
                 get: { live(cue).trimOut ?? 0 },
-                set: { v in engine.update(cue.id) { $0.trimOut = v > 0 ? v : nil } }
+                set: { v in engine.update(cue.id) { c in c.trimOut = v > 0 ? max(v, c.trimIn + 0.1) : nil } }
             ), step: 0.1)
             InspectorRow("Loop") { Toggle("", isOn: bind(cue, \.loop)).labelsHidden().toggleStyle(.switch) }
         }
