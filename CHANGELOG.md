@@ -35,6 +35,68 @@
   (docs/rules-additive-2026-10-17-grading.rules); until then each device
   keeps its own copy and the view says so.
 
+### Outrangutan for Mac: a show-day sweep of everything else (Oct 19 to 20)
+
+Ten reviewers each walked a show day through the parts the first review
+had not touched (the pads, the cue sound engine, show files, the watched
+folder, OBS, MIDI, screens, the log and printing, the rest of the engine,
+the Inspector), three skeptics judged every finding, and 58 held up.
+Forty-six fixes, one file at a time. The ones a show will feel:
+
+- **Sound after an unplug.** The pads and the cue sound engine go back to
+  the audio interface after it is unplugged and plugged in again. A pad
+  hit while the sound device is not yet handing the app its turns (a Mac
+  just woken, a quiet interface) is refused and said, instead of taking
+  the app down.
+- **Pads.** A sound already in memory plays even after its file is gone;
+  Undo reloads only the pad it touched and never cuts the others;
+  trimming a pad while it sounds no longer cuts it off; a channel pair
+  the device does not have goes to 1 and 2 and says so.
+- **Cue sound engine.** The sound catches up after a pause instead of
+  staying a frame or two behind; All Stop or Fade no longer leaves cue
+  sound stuck part way down after a stinger; picking another cue sound
+  device while a cue plays through the engine waits until it is off air.
+- **Fades and ends.** Under a dissolve the outgoing picture fades down
+  too; a fade out waits for the fade in and Pause holds it; a refused
+  Follow stops the clip at its out point; a trim changed on air does not
+  move it.
+- **Show files.** A save that fails is said under the clock and in the
+  Show Log; a show file that cannot be read is kept, not written over; a
+  clip that changes while the show is being saved is recorded at the
+  length really written; an opened show's media goes in one folder in
+  Movies, used again each time, and a failed open leaves no half-made
+  folder.
+- **Watched folder.** A folder that cannot be found is said in the log and
+  in Settings and watched again when it is back; a file is told apart by
+  its size and written-at time, so one that would not open is tried again;
+  a sound that finds no free pad becomes a cue.
+- **OBS.** The app pings OBS every ten seconds, so a link that goes quiet
+  is dropped and tried again; a skipped OBS step is said in the log; Show
+  Check names a cue's OBS scene that OBS no longer has.
+- **MIDI and keys.** A fader just learned wakes up on its next move; a pad
+  learned as a cue fires that cue while paused; a fader ride saves the
+  show once, not on every tick; a key button left waiting in Settings lets
+  go when you click another window; an Open or Save panel or an alert
+  gets the keys, not the show; a cue can never hold a show key.
+- **Screens and outputs.** An output already where it belongs keeps its
+  window; the control screen is the window with the toolbar, so an output
+  can never land over GO; two outputs with no screen picked take
+  different screens; the "screen was disconnected" notice stays until that
+  screen is back; the Identify number follows the picture; an output
+  closed with its red button is logged.
+- **Windows.** Go to Cue's Return with an empty box just closes the sheet;
+  a slow sign-in that finishes after Disconnect no longer joins its old
+  show; the Show Log keeps following new lines and opens at the newest;
+  the Inspector keeps a row for an output or pad that was removed, and a
+  Start typed past Stop no longer throws Stop away; recording stops on its
+  own when the microphone goes away; the cue list's right-click menu sits
+  on each row so cues can be dragged into a new order.
+
+The proof run happened on a Mac with its lid shut and asleep, so the
+video and sound checks could not run true. Still owed by Jon: the Xcode
+license, one scenario sweep with the lid open, and the rig checks (pull
+and replug the interface, a real OBS drop, the real deck).
+
 ### Outrangutan for Mac: a hardening round (Oct 17 to 19)
 
 Eight reviewers read the Oct 16 code with one lens each, three skeptics
