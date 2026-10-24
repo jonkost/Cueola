@@ -14,6 +14,13 @@ Cueola is a classroom TV-production app built by Jon, an instructor. Students us
 
 Jon locked this in on Oct 9, 2026. Every design question about the Mac app (outrangutan-mac/) is answered from Apple's macOS kit and Human Interface Guidelines, not sent to Jon. Open the kit, find the nearest Apple control or layout, and build to it: its sizes, corners, order of buttons, spacing and colors. The kit is Apple's macOS 27 UI Kit on Figma (link in the Claude memory, reference_apple_macos27_figma_kit); it opens in the built-in browser without a login. Where the kit has nothing (a show button bigger than any Apple control), scale the nearest Apple control up and keep its proportions. Nothing in the kit has square corners or a capsule push button at regular size, so neither does the app. Jon's one standing rule on top of the kit: buttons that belong together are the same size. Show Jon a real screenshot of the result; do not ask him to choose.
 
+## Vixel for Mac
+
+- Vixel is the suite's projection mapping app. The Mac app lives in `vixel-mac/`, set up like `outrangutan-mac/`.
+- The plan lives in `docs/vixel/`: `BRIEF.md` for everything, one `STEP_N.md` per build step, and `WORDS.md` for Vixel's new words (Jon approves them before they go into `docs/v3-glossary.md`).
+- The "Apple's kit decides the design" rule above covers `vixel-mac/` too.
+- The web checks below do not cover it. Run `./test.sh` and test mode (`VIXEL_SNAPSHOT`, see `vixel-mac/README.md`), look at the pictures, and let Jon try it on the real projector.
+
 ## What must never change without Jon saying so
 
 - The rundown is a table: rows across, one cell per department (Video, Audio, Playback, GFX, Lighting, Script), each cell with its two lines (READY and TAKE, or the department's own words). Simplify inside the cells, never the table.
