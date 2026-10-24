@@ -12,6 +12,11 @@ let package = Package(
             name: "VixelCore",
             path: "Sources/VixelCore"
         ),
+        .executableTarget(
+            name: "Vixel",
+            dependencies: ["VixelCore"],
+            path: "Sources/Vixel"
+        ),
         .testTarget(
             name: "VixelTests",
             dependencies: ["VixelCore"],
