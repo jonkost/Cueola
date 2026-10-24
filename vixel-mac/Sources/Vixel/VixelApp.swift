@@ -111,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if TestSnapshot.isOn { return TestSnapshot.run(stage: stage, output: output) }
         NSApp.activate(ignoringOtherApps: true)
         // Once the control window is up, put the output where it belongs.
-        DispatchQueue.main.async { self.output.place() }
+        output.placeWhenReady()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

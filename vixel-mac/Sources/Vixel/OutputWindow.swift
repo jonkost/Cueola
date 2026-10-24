@@ -72,6 +72,14 @@ final class OutputController: NSObject, ObservableObject, NSWindowDelegate {
         return found == control ? nil : found
     }
 
+    /// Opens the output once the control window is up. Until then Vixel
+    /// cannot tell which screen is the control screen, and could fill it.
+    func placeWhenReady(tries: Int = 40) {
+        let ready = NSApp.windows.contains { $0.toolbar != nil && $0.isVisible }
+        if ready || tries <= 0 { return place() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.placeWhenReady(tries: tries - 1) }
+    }
+
     /// Opens the output where it belongs, or moves it there.
     func place() {
         refreshScreens()
