@@ -2450,7 +2450,16 @@ test('the Notes switch shows or hides row notes in the rundown and in Live (Jon 
   const set = app.slice(app.indexOf('function setRowNotesShown('), app.indexOf('applyRowNotesShown();\nif (document.readyState'));
   assert.match(set, /localStorage\.setItem\(ROW_NOTES_PREF_KEY/);
   assert.doesNotMatch(set, /syncToFirestore|renderRundown|renderLive/);
-  assert.match(html, /:root\.row-notes-off :is\(\.cd-subnote,\.seg-notes-text,\.live-note,\.live-seg-note\)\{display:none\}/);
+  assert.match(html, /:root\.row-notes-off :is\(\.cd-subnote,\.seg-notes-text,\.live-note,\.live-seg-note\)\{display:none\}/);  // The note typed inside a cue ("Notes, for your crew") is drawn in the
+  // rundown cell, the Live cell and the Focus view, and the switch hides it
+  // in the two tables.
+  const cell = app.slice(app.indexOf('function getCueCell('), app.indexOf('function scriptLineCount('));
+  assert.match(cell, /if \(isEmpty && !note\)/);
+  assert.match(cell, /\$\{outBadge\}\$\{cueNoteHTML\(note\)\}/);
+  const liveCell = app.slice(app.indexOf('function liveCellForBeat('), app.indexOf('function cueWords('));
+  assert.match(liveCell, /\$\{cueNoteHTML\(note\)\}/);
+  assert.match(app, /\$\{lines\}\$\{outBadge\}\$\{cueNoteHTML\(cueNoteText\(d\)\)\}/);
+  assert.match(html, /:root\.row-notes-off :is\(\.rd-table,\.live-grid\) \.cue-note-line\{display:none\}/);
 });
 
 for (const { name, run } of tests) {

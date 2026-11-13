@@ -8875,7 +8875,7 @@ function jogScrubHandleKey(e, phase) {
 const ROW_NOTES_PREF_KEY = 'cueola_row_notes';
 let rowNotesShown = (() => { try { return localStorage.getItem(ROW_NOTES_PREF_KEY) !== '0'; } catch { return true; } })();
 function rowNotesSwitchHTML(heading) {
-  return `<span class="th-with-switch"><span>${heading}</span><label class="row-notes-switch" data-tip="Show or hide the notes written on each row"><span>Notes</span><input type="checkbox" class="row-notes-toggle" ${rowNotesShown ? 'checked' : ''} onchange="setRowNotesShown(this.checked)" aria-label="Show row notes"></label></span>`;
+  return `<span class="th-with-switch"><span>${heading}</span><label class="row-notes-switch" data-tip="Show or hide the notes written on each row and in each cue"><span>Notes</span><input type="checkbox" class="row-notes-toggle" ${rowNotesShown ? 'checked' : ''} onchange="setRowNotesShown(this.checked)" aria-label="Show row notes"></label></span>`;
 }
 function applyRowNotesShown() {
   document.documentElement.classList.toggle('row-notes-off', !rowNotesShown);
@@ -9163,7 +9163,10 @@ function getCueCell(b, type) {
   const off = getCueOff(d);
   const scriptText = type === 'script' ? scriptCueText(d) : '';
   const isEmpty = !on && !off && (type !== 'script' || !scriptText) && !(type === 'playback' && d?.outCueId) && !((type === 'playback' || type === 'audio') && d?.outPadId);
-  if (isEmpty) {
+  // The note written in the cue editor ("Notes, for your crew"). A cue that
+  // holds only a note still shows as a cue, so the note is not lost from view.
+  const note = cueNoteText(d);
+  if (isEmpty && !note) {
     return `<button class="cue-add-btn" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')" data-tip="Add ${tc.label} cue"><span>+</span><span>${tc.label}</span></button>`;
   }
   // Each line carries the department's own word (READY / TAKE for video,
@@ -9177,8 +9180,15 @@ function getCueCell(b, type) {
   const outBadge = (type === 'playback' ? outrangutanCellBadge(d, b.id) : '') + ((type === 'playback' || type === 'audio') ? outrangutanSfxBadge(d) : '');
   return `<div class="cue-cell-filled" style="--cue-clr:${tc.color}" onclick="event.stopPropagation();openCueConfig(${b.id},'${type}')">
     <div class="cue-cell-icon" style="color:${tc.color}">${sfIcon(tc.symbol)}</div>
-    <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}</div>
+    <div class="cue-cell-info">${lines}${scriptMeta}${outBadge}${cueNoteHTML(note)}</div>
   </div>`;
+}
+
+// A cue's own note, written in the cue editor for the crew. The Notes switch
+// (rowNotesShown) shows or hides it in the rundown and in the Live grid.
+function cueNoteText(d) { return String(d?.notes || '').trim(); }
+function cueNoteHTML(note) {
+  return note ? `<div class="cue-note-line" data-tip="Note for the crew">${sfIcon('content.note')}<span>${esc(note)}</span></div>` : '';
 }
 
 function scriptLineCount(text) {
@@ -13869,7 +13879,8 @@ function liveCellForBeat(b, type, beatIdx) {
   const isScript = type === 'script';
   const scriptText = isScript ? scriptCueText(d) : '';
   const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
-  if (!on && !off && !scriptMeta && !(type === 'playback' && outrangutanCellLinked(d))) return `<div class="live-cue-empty">·</div>`;
+  const note = cueNoteText(d);
+  if (!on && !off && !scriptMeta && !note && !(type === 'playback' && outrangutanCellLinked(d))) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
   // bold, department-coloured action line. "Ready one… take one."
   // D11.4: linked playout rows carry the badge (cue name · ON AIR · live
@@ -13880,6 +13891,7 @@ function liveCellForBeat(b, type, beatIdx) {
     ${liveCueOperationLine('take', off, 'live-cue-go', `color:${tc.color}`, type)}
     ${outBadge}
     ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
+    ${cueNoteHTML(note)}
   </div>`;
 }
 
@@ -13953,7 +13965,7 @@ function focusCuesForBeat(b) {
     const outBadge = type === 'playback' ? outrangutanCellBadge(d, b.id) : '';
     return `<div class="lf-cue${goBtn ? ' lf-cue-has-go' : ''}" style="--cue-clr:${tc.color}">
       <div class="lf-cue-dept">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</div>
-      <div class="lf-cue-lines">${lines}${outBadge}</div>
+      <div class="lf-cue-lines">${lines}${outBadge}${cueNoteHTML(cueNoteText(d))}</div>
       ${goBtn}
     </div>`;
   }).join('') + `</div>`;

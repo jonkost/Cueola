@@ -8,6 +8,11 @@
   column heading. On shows the note written on each row, in full, under
   the row name. Off hides them. Each computer remembers its own choice;
   the notes themselves stay in the show.
+- **Cue notes now show.** The note typed inside a cue ("Notes, for your
+  crew") was saved but never drawn. It now shows inside that cue's cell in
+  the rundown, in Live and in Focus view, and the Notes switch hides it in
+  the rundown and the Live grid. A cue that holds only a note shows as a
+  cue.
 
 ### Jon's nine-item list (Nov 12)
 
