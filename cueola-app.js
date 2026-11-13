@@ -13547,6 +13547,8 @@ function toggleLivePrompterPanel() {
     setTimeout(() => focusTarget?.focus(), 0);
   }
   markResumeState();   // P7: Script Op open/closed is part of the resume snapshot
+  // The editor opens on the row that is on air.
+  if (livePrompterOpen) setTimeout(() => { try { renderTalentPositionIndicator(); followTalentInEditor(true); } catch {} }, 320);
 }
 
 let _livePanelResizeCleanup = null;
@@ -14004,6 +14006,12 @@ function renderLive() {
     return;
   }
   ensureLiveRunLedger();
+  // Follow rundown: a new row on air brings the Script Op editor along.
+  const onAirForFollow = liveActiveCueIndex();
+  if (onAirForFollow !== _followLastOnAir) {
+    _followLastOnAir = onAirForFollow;
+    setTimeout(() => { try { renderTalentPositionIndicator(); followTalentInEditor(true); } catch {} }, 60);
+  }
 
   document.getElementById('liveshow')?.classList.toggle('lf-on', liveFocusMode);
   updateLiveFocusToggle();
@@ -15453,8 +15461,24 @@ function renderTalentPositionIndicator() {
   // strip's position to 0 mid-scrub. Fold in the adopted-mirror recency.
   const hasTalent = _prompterHasRecentTalent()
     || (_talentMirrorSeenAt && (Date.now() - _talentMirrorSeenAt) < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000));
-  wrap.hidden = !hasTalent;
-  if (!hasTalent) { _lastTalentPosPct = -1; _talentReportedPct = null; _talentReportedPlaying = null; _talentHeldAtRow = null; _talentRowNum = null; _talentAhead = false; return; }
+  if (!hasTalent) {
+    _lastTalentPosPct = -1; _talentReportedPct = null; _talentReportedPlaying = null; _talentHeldAtRow = null; _talentRowNum = null; _talentAhead = false;
+    // No prompter screen linked: the strip stays up during the show, because
+    // Follow rundown works from the row that is on air, with or without one.
+    wrap.hidden = !liveRuntimeOn();
+    if (!wrap.hidden) {
+      const idleFill = document.getElementById('lsTalentPosFill');
+      const idleArrow = document.getElementById('lsTalentPosArrow');
+      const idleLabel = document.getElementById('lsTalentPosLabel');
+      if (idleFill) idleFill.style.width = '0%';
+      if (idleArrow) idleArrow.style.left = '0%';
+      if (idleLabel) idleLabel.textContent = 'Talent · no prompter screen linked';
+    }
+    _followTalentState = null;
+    followTalentInEditor(false);
+    return;
+  }
+  wrap.hidden = false;
   const pct = Number.isFinite(_talentReportedPct) ? Math.round(_talentReportedPct) : ptProgressPct();
   const renderKey = `${pct}:${_talentHeldAtRow ?? ''}:${_talentRowNum ?? ''}:${_talentAhead ? 1 : 0}`;
   if (renderKey === _lastTalentPosPct) return;
@@ -15476,14 +15500,93 @@ function renderTalentPositionIndicator() {
   const entry = _talentRegistryEntry();
   const left = entry && entry.rowLeftSec != null && !Number.isFinite(_talentHeldAtRow) ? ` · ${window.CueolaPrompterEngine.formatSeconds(entry.rowLeftSec)} left in row` : '';
   if (label) label.textContent = `Talent · ${rowNum ? 'row ' + rowNum + ' · ' : ''}${pct}%${holding}${left}`;
+  _followTalentState = { pct, rowNum };
+  followTalentInEditor(false);
+}
+
+// The Follow rundown switch under the Script Op editor. On: the editor keeps
+// the row that is ON AIR in view, so it moves with every TAKE, and inside
+// that row it tracks where the talent is reading. It waits while the
+// operator types or scrolls and picks up again a few seconds later. It used
+// to follow only the talent screen (no move when that screen was not
+// scrolling or not linked), stop for good once the editor had been clicked,
+// do nothing when it was switched back on, and land by percent, which fell
+// short of the row.
+const FOLLOW_HANDS_OFF_MS = 5000;
+const FOLLOW_PREF_KEY = 'cueola_scriptop_follow';
+let _followTalentState = null;      // { pct, rowNum } from the talent's last report
+let _followEditorTouchedAt = 0;     // last key, click or wheel in the editor
+let _followEditorWired = false;
+let _followResumeTimer = null;
+let _followLastOnAir = -2;          // the on-air row the editor last moved for
+function wireFollowEditor() {
+  if (_followEditorWired) return;
   const editor = document.getElementById('lsPrompterText');
   const follow = document.getElementById('lsTalentPosFollow');
-  if (editor && follow?.checked && document.activeElement !== editor && !livePrompterDraftDirty) {
-    const target = (editor.scrollHeight - editor.clientHeight) * pct / 100;
-    // Smooth follow: the old instant scrollTop assignment read as the editor
-    // jumping on every 2s heartbeat.
-    if (Math.abs(editor.scrollTop - target) > 24) editor.scrollTo({ top: target, behavior: 'smooth' });
+  if (!editor || !follow) return;
+  _followEditorWired = true;
+  try { if (localStorage.getItem(FOLLOW_PREF_KEY) === '0') follow.checked = false; } catch {}
+  const touched = () => {
+    _followEditorTouchedAt = Date.now();
+    clearTimeout(_followResumeTimer);
+    _followResumeTimer = setTimeout(() => followTalentInEditor(true), FOLLOW_HANDS_OFF_MS + 200);
+  };
+  ['keydown', 'input', 'pointerdown', 'wheel', 'touchmove'].forEach(type => editor.addEventListener(type, touched, { passive:true }));
+  follow.addEventListener('change', () => {
+    try { localStorage.setItem(FOLLOW_PREF_KEY, follow.checked ? '1' : '0'); } catch {}
+    if (follow.checked) { _followEditorTouchedAt = 0; followTalentInEditor(true); }
+  });
+}
+// How far down the editor a spot in its text sits, in pixels. A copy of the
+// editor's text styling in a hidden box gives the true height with wrapping.
+function editorPixelTopOf(editor, charIndex) {
+  if (charIndex <= 0) return 0;
+  const cs = getComputedStyle(editor);
+  const box = document.createElement('div');
+  ['fontFamily','fontSize','fontWeight','fontStyle','lineHeight','letterSpacing','tabSize'].forEach(k => { box.style[k] = cs[k]; });
+  box.style.cssText += ';position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;box-sizing:content-box;padding:0;border:0';
+  box.style.width = Math.max(40, editor.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0)) + 'px';
+  box.textContent = editor.value.slice(0, charIndex);
+  document.body.appendChild(box);
+  const top = box.offsetHeight;
+  box.remove();
+  return top;
+}
+function followTalentInEditor(force) {
+  wireFollowEditor();
+  const editor = document.getElementById('lsPrompterText');
+  const follow = document.getElementById('lsTalentPosFollow');
+  const talent = _followTalentState;
+  if (!editor || !follow?.checked || livePrompterDraftDirty) return;
+  if (Date.now() - _followEditorTouchedAt < FOLLOW_HANDS_OFF_MS) return;
+  const span = editor.scrollHeight - editor.clientHeight;
+  if (span <= 0) return;
+  // The rundown leads: the row that is on air. Off Live, the talent's row.
+  let rowNum = null;
+  try {
+    const onAir = liveRuntimeOn() ? liveActiveCueIndex() : -1;
+    if (onAir >= 0 && beats[onAir] && beats[onAir].style !== 'segment') rowNum = rowDisplayNumber(onAir);
+  } catch {}
+  if (rowNum == null && talent?.rowNum) rowNum = talent.rowNum;
+  // The talent's own spot counts only while the talent is on that same row.
+  const pct = talent && (rowNum == null || talent.rowNum === rowNum) ? talent.pct : null;
+  if (rowNum == null && pct == null) return;
+  let target = pct != null ? span * pct / 100 : 0;
+  // Keep the row in view: never above its heading, never past its end.
+  const text = editor.value || '';
+  const head = rowNum ? text.search(new RegExp('(^|\\n)\\[' + rowNum + '\\]')) : -1;
+  if (head < 0 && pct == null) return;
+  if (head >= 0) {
+    const headIndex = text[head] === '\n' ? head + 1 : head;
+    const rowTop = editorPixelTopOf(editor, headIndex);
+    const after = text.slice(headIndex + 1).search(/\n\[\d+\]/);
+    const rowEnd = after >= 0 ? editorPixelTopOf(editor, headIndex + 1 + after + 1) : editor.scrollHeight;
+    target = Math.min(Math.max(target, rowTop), Math.max(rowTop, rowEnd - editor.clientHeight));
   }
+  target = Math.max(0, Math.min(span, target));
+  // Smooth, and only for a real move: an instant jump on every heartbeat
+  // read as the editor twitching.
+  if (force || Math.abs(editor.scrollTop - target) > 24) editor.scrollTo({ top: target, behavior: 'smooth' });
 }
 
 async function sendToPrompter(isInit=false) {
