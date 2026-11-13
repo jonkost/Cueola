@@ -423,6 +423,7 @@ function refreshCallerPresenceState() {
   try { caller = isShowCaller(); } catch { caller = null; }
   renderShowCallerBadge();
   updateGoLiveButton();
+  try { renderCopilotBar(); } catch {}
   if (caller !== _lastCallerTruth) {
     _lastCallerTruth = caller;
     updateLiveGoControl();
@@ -488,7 +489,88 @@ function adoptControlGrant(grant) {
   const next = grant && grant.username ? grant : null;
   if (JSON.stringify(next) === JSON.stringify(sessionControlGrant)) return;
   sessionControlGrant = next;
+  // A director is named again: nothing is waiting to be handed back.
+  if (next) { _copilotReturnTo = null; _directorTakenFromMe = false; }
   _applyControlGrantHeldTransition();
+}
+
+// ── Co-pilot ────────────────────────────────────────────────────────────────
+// While a student directs, the instructor's Live screen rides along: it
+// follows every take and carries one Take over button. Take over makes the
+// instructor the director at once (the student's TAKE goes off) and
+// remembers who had the seat, so Hand back returns it with one press. It is
+// the same director hand-off the DIRECTOR chip does, just one press away.
+let _copilotReturnTo = null;       // { username, displayName, position } to hand back to
+let _directorTakenFromMe = false;  // this student was directing and an instructor took over
+function copilotCanAct() {
+  return Boolean(adminSession && window._firebaseReady && session.code && !session.isDemo && !session.isExpert && window._updateDoc);
+}
+function copilotBarModel() {
+  const onShow = Boolean(session.code) && !session.isDemo && !session.isExpert;
+  if (!onShow) return { state:'none' };
+  if (adminSession) {
+    const holder = sessionControlGrant;
+    if (holder?.username && !sessionControlGrantHeldByMe() && grantHolderPresent()) {
+      return { state:'copilot', name: holder.displayName || holder.username };
+    }
+    if (!holder && _copilotReturnTo?.username) {
+      return { state:'tookover', name: _copilotReturnTo.displayName || _copilotReturnTo.username };
+    }
+    return { state:'none' };
+  }
+  if (_directorTakenFromMe && !sessionControlGrant) return { state:'takenfrom' };
+  return { state:'none' };
+}
+function copilotTakeOver() {
+  const holder = sessionControlGrant;
+  if (!copilotCanAct() || !holder?.username) return;
+  const from = { username: holder.username, displayName: holder.displayName || holder.username, position: holder.position || '' };
+  // An instructor who was mirroring someone must not stay locked out of TAKE.
+  browsingSelf = false; followTarget = ''; followTargetId = '';
+  // The claim release rides along, so this window drives the deck at once.
+  window._updateDoc(window._doc(window._db, 'sessions', session.code), { controlGrant: null, busExecutor: null })
+    .then(() => {
+      _copilotReturnTo = from;
+      renderCopilotBar();
+      logShow('cue', `${session.userName || 'The instructor'} took over from ${from.displayName}`);
+      toast(`You are the director. ${from.displayName}'s TAKE is off.`, 5000);
+    })
+    .catch(err => toast(firebaseConnectionLabel(err, 'Taking over failed')));
+}
+function copilotHandBack() {
+  const to = _copilotReturnTo;
+  if (!copilotCanAct() || !to?.username) return;
+  grantRundownControl(to.username, to.displayName, to.position);
+}
+function copilotDismissHandBack() {
+  _copilotReturnTo = null;
+  renderCopilotBar();
+}
+let _copilotBarKey = '';
+function renderCopilotBar() {
+  const bar = document.getElementById('lsCopilotBar');
+  if (!bar) return;
+  const model = copilotBarModel();
+  const key = `${model.state}|${model.name || ''}`;
+  if (key === _copilotBarKey) return;
+  _copilotBarKey = key;
+  bar.hidden = model.state === 'none';
+  bar.dataset.state = model.state;
+  if (model.state === 'none') { bar.innerHTML = ''; return; }
+  const name = esc(model.name || '');
+  if (model.state === 'copilot') {
+    bar.innerHTML = `${sfIcon('action.profile')}
+      <span><strong>You are the co-pilot.</strong> ${name} is the director. Your screen follows every take.</span>
+      <button class="tbtn tbtn-live copilot-btn" type="button" onclick="copilotTakeOver()" data-tip="Become the director now. ${name}'s TAKE goes off.">Take over</button>`;
+  } else if (model.state === 'tookover') {
+    bar.innerHTML = `${sfIcon('marker.go')}
+      <span><strong>You took over from ${name}.</strong> TAKE is yours until you hand it back.</span>
+      <button class="tbtn copilot-btn" type="button" onclick="copilotHandBack()" data-tip="Make ${name} the director again">Hand back</button>
+      <button class="tbtn tbtn-ghost copilot-btn" type="button" onclick="copilotDismissHandBack()" data-tip="Stay the director and hide this bar">Keep it</button>`;
+  } else {
+    bar.innerHTML = `${sfIcon('state.info')}
+      <span><strong>Your instructor took over.</strong> Your TAKE is off. Keep following along. You are the director again when they hand it back.</span>`;
+  }
 }
 
 function _applyControlGrantHeldTransition() {
@@ -504,10 +586,12 @@ function _applyControlGrantHeldTransition() {
   } else if (!held && _heldControlGrantBefore) {
     // Say where it actually went: a regrant moves it to another student, a
     // revoke returns it to the instructors.
+    _directorTakenFromMe = !sessionControlGrant && !adminSession;
     toast(sessionControlGrant
       ? `${sessionControlGrant.displayName || sessionControlGrant.username} is the director now.`
-      : 'The instructor is the director again.');
+      : 'Your instructor took over. Your TAKE is off.', 6000);
   }
+  if (held) _directorTakenFromMe = false;
   _heldControlGrantBefore = held;
   // A window that just stopped calling the show (grant moved away, or a
   // grant went out while this admin was calling) hands its bus claim back.
@@ -2357,6 +2441,9 @@ function leaveSessionForFrontPage() {
   _lastAppliedClockTs = 0;
   sessionControlGrant = null;
   _heldControlGrantBefore = false;
+  _copilotReturnTo = null;
+  _directorTakenFromMe = false;
+  _copilotBarKey = '';
   _lastCallerTruth = null;
   _callerBadgeRenderKey = '';
   try { renderCallerBanner(); } catch (error) { containError('Caller banner', error); }
@@ -14496,6 +14583,7 @@ let _callerBannerDecks = 0;
 let _callerBannerDeckProbe = null;
 let _callerBannerDeckProbeAt = 0;
 function renderCallerBanner() {
+  try { renderCopilotBar(); } catch (error) { containError('Co-pilot bar', error); }
   const held = sessionControlGrantHeldByMe() && Boolean(session.code) && !session.isDemo && !session.isExpert;
   const lifecycle = liveSessionState().lifecycle;
   ['rdCallerBanner', 'lsCallerBanner'].forEach(id => {

@@ -572,6 +572,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .rd-caller-banner>.sf-symbol{flex:none;color:var(--accent);font-size:16px}
 .rd-caller-banner strong{font-weight:800}
 .rd-caller-banner .tbtn{margin-left:auto;min-height:30px;padding:5px 11px;font-size:12px}
+.ls-copilot-bar .copilot-btn{min-width:104px;justify-content:center}
+.ls-copilot-bar .copilot-btn + .copilot-btn{margin-left:0}
+.ls-copilot-bar[data-state="tookover"]{background:color-mix(in srgb,var(--red) 14%,var(--s2))}
+.ls-copilot-bar[data-state="tookover"]>.sf-symbol{color:var(--red)}
 .ls-info{grid-area:tools;min-width:0;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;justify-content:flex-end;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
 .ls-info::-webkit-scrollbar{display:none}
 .ls-clock{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;margin-right:2px;font-variant-numeric:tabular-nums}
@@ -5611,6 +5615,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <span class="sf-symbol" data-symbol="marker.go" aria-hidden="true"></span>
     <span><strong>You are the director.</strong> TAKE moves everyone to the next cue. <span class="rd-caller-banner-deck" hidden>Your Stream Deck works while you are director.</span></span>
   </div>
+  <!-- Co-pilot: the instructor riding along with a student director (Take over / Hand back), and the student's notice when the instructor has taken over. -->
+  <div class="rd-caller-banner ls-copilot-bar" id="lsCopilotBar" role="status" data-state="none" hidden></div>
   <div class="ls-overview" aria-label="Live show overview">
     <div class="ls-show-card ls-overview-show">
       <div class="ls-show-title" id="ls-show-title">Untitled Show</div>
