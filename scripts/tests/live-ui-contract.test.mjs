@@ -2459,7 +2459,14 @@ test('the Notes switch shows or hides row notes in the rundown and in Live (Jon 
   const liveCell = app.slice(app.indexOf('function liveCellForBeat('), app.indexOf('function cueWords('));
   assert.match(liveCell, /\$\{cueNoteHTML\(note\)\}/);
   assert.match(app, /\$\{lines\}\$\{outBadge\}\$\{cueNoteHTML\(cueNoteText\(d\)\)\}/);
-  assert.match(html, /:root\.row-notes-off :is\(\.rd-table,\.live-grid\) \.cue-note-line\{display:none\}/);
+  assert.match(html, /:root\.row-notes-off :is\(\.rd-table,\.live-grid\) \.cue-note-line\{display:none\}/);  // A cue that holds only a note still shows in Focus and keeps its column
+  // in the Live grid; the row pop-up shows cue notes; line breaks are kept.
+  const focus = app.slice(app.indexOf('function focusCuesForBeat('), app.indexOf('function renderLiveFocus('));
+  assert.match(focus, /\|\| cueNoteText\(d\)\);/);
+  assert.match(app, /outrangutanCellLinked\(d\)\)\|\|cueNoteText\(d\)\); \}\)\);\n  const showCols/);
+  const preview = app.slice(app.indexOf('function liveRowPreview('), app.indexOf('function liveCellForBeat('));
+  assert.match(preview, /\$\{cueNoteHTML\(cueNoteText\(d\)\)\}/);
+  assert.match(html, /\.cue-note-line\{[^}]*white-space:pre-wrap/);
 });
 
 for (const { name, run } of tests) {

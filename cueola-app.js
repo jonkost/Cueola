@@ -13826,6 +13826,7 @@ function liveRowPreview(idx) {
       <div style="font-size:10px;font-family:var(--mono);color:${tc.color};letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${sfIcon(tc.symbol)} ${tc.label}</div>
       ${liveCueOperationLine('ready', on, 'live-preview-cue-line', '', t)}
       ${liveCueOperationLine('take', off, 'live-preview-cue-line emphasized', '', t)}
+      ${cueNoteHTML(cueNoteText(d))}
       ${t==='script'&&scriptCueText(d)?`<div style="font-size:13px;line-height:1.7;color:var(--text);margin-top:8px;white-space:pre-wrap;border-top:1px solid transparent;padding:8px 10px;background:var(--s1);border-radius:8px">${esc(scriptCueText(d))}</div>`:''}
     </div>`;
   });
@@ -13941,14 +13942,14 @@ function liveCueOperationLine(operation, text, className='', style='', cueType='
 function focusCuesForBeat(b) {
   const filled = colOrder.filter(type => {
     const d = b.cues?.[type];
-    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)) || (type === 'playback' && outrangutanCellLinked(d)) || ((type === 'playback' || type === 'audio') && (d.outPadId || d.outPadName)));
+    return d && (getCueOn(d) || getCueOff(d) || (type === 'script' && scriptCueText(d)) || (type === 'playback' && outrangutanCellLinked(d)) || ((type === 'playback' || type === 'audio') && (d.outPadId || d.outPadName)) || cueNoteText(d));
   });
   if (!filled.length) return '<div class="lf-nocue">No cues on this row</div>';
   return `<div class="lf-cues">` + filled.map(type => {
     const d = b.cues[type], tc = CT[type];
     const on = getCueOn(d), off = getCueOff(d);
     let lines = '';
-    if (type === 'script') {
+    if (type === 'script' && scriptCueText(d)) {
       const text = scriptCueText(d);
       lines = `<div class="lf-cue-take">${sfIcon('content.script')} ${d.scriptType === 'Dialogue' ? 'Dialogue' : 'Script'} ready · ${scriptLineLabel(text)}</div>`;
     } else {
@@ -14147,7 +14148,7 @@ function renderLive() {
   const runner  = isFollowingSelf();
   const canJump = runner && isAdminShowCaller();
   // Only show department columns actually used in this show — no empty lanes.
-  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))||(type==='playback'&&outrangutanCellLinked(d))); }));
+  const usedCols = colOrder.filter(type => beats.some(b => { const d=b.cues?.[type]; return d && (getCueOn(d)||getCueOff(d)||(type==='script'&&scriptCueText(d))||(type==='playback'&&outrangutanCellLinked(d))||cueNoteText(d)); }));
   const showCols = usedCols.length ? usedCols : ['video'];
   let offsetSecs = 0;
   let html = `<div class="live-grid-wrap"><table class="live-grid">

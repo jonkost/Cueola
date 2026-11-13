@@ -13,6 +13,9 @@
   the rundown, in Live and in Focus view, and the Notes switch hides it in
   the rundown and the Live grid. A cue that holds only a note shows as a
   cue.
+- **Cue notes, the loose ends.** A cue that holds only a note now shows
+  in Focus view and keeps its column in the Live grid. The row pop-up in
+  Live shows cue notes too. A note typed on several lines keeps its lines.
 
 ### Jon's nine-item list (Nov 12)
 
