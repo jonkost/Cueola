@@ -94,7 +94,7 @@ test('every surface reads the department words from one table (2026-10-16)', () 
 test('old helper rows still render, none are generated (3.0)', () => {
   // helperFor/helperRole survive patch-sync: the buildBeatPatch whitelist
   // silently drops every beat field it does not list.
-  assert.match(app, /\['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'\]/);
+  assert.match(app, /\['style','info','notes','min','sec','done','color','disabled','helperFor','helperRole','_createdAt','_createdBy'\]/);
   // 3.0: no PREP/OUT generation and no guided-row checkboxes in the editor.
   assert.doesNotMatch(app, /syncPlaybackHelperRows|cc-guided-prep|cc-guided-out|ccGuidedRowsSection/);
   // Helper rows from older shows render with role tags in the builder table and the live grid.
@@ -550,7 +550,7 @@ test('controls never lie, never move, never silently refuse (D11.5)', () => {
   const activate = app.slice(app.indexOf('function activateLiveRundownRow('), app.indexOf('function detachIfFollowing('));
   assert.match(activate, /toast\('That row no longer exists\.'\)/);
   assert.match(activate, /Segment headers organize the rundown/);
-  assert.match(activate, /is disabled\. Enable it in the rundown/);
+  assert.match(activate, /is hidden\. Show it in the rundown/);
   const next = app.slice(app.indexOf('function lsNext('), app.indexOf('function rowLogLabel('));
   assert.match(next, /toast\('End of rundown\. There is no next cue\.'\)/);
   assert.match(app, /Live commands are paused\. The show screen is still settling/);

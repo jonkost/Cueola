@@ -385,6 +385,16 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cue-row{transition:background .12s,box-shadow .12s;cursor:pointer}
 .cue-row:nth-child(even){background:rgba(255,255,255,.01)}
 .cue-row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent);box-shadow:inset 0 0 0 1px transparent}.cue-row.is-done{opacity:.35}
+.cue-row-hidden td{background:transparent}
+.cue-row-hidden .cd-num,.cue-row-hidden .cd-hidden-name,.cue-row-hidden .cd-hidden-note{opacity:.5}
+.cd-hidden-line{display:flex;align-items:center;gap:10px;min-height:26px}
+.hidden-row-tag{flex:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:4px;background:var(--btn-fill-2);color:var(--text2)}
+.cd-hidden-name{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cd-hidden-note{font-size:12px;color:var(--text2);white-space:nowrap}
+.cd-hidden-show{flex:none;font-size:11px;padding:4px 10px}
+.ed-hide-row{align-items:flex-start;margin-top:14px}
+.ed-hide-text{display:flex;flex-direction:column;gap:2px}
+.ed-hide-text small{font-size:11px;font-weight:400;color:var(--text3);line-height:1.35}
 .cue-row.dragging{opacity:.4}.cue-row.drag-over{box-shadow:inset 0 2px 0 var(--accent)}
 
 .cd{padding:7px 7px;vertical-align:middle;font-size:11px;line-height:1.4}

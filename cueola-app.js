@@ -652,7 +652,12 @@ function ensureLiveRunLedger() {
   const expected = beats.map(liveBeatKey);
   const configured = state.runOrder || [];
   const changed = expected.length !== configured.length || expected.some((key, index) => key !== configured[index]);
-  if (changed) return liveSessionController.configureRunRows(beats, { preserve:true });
+  // A row hidden or shown since the last look changes what TAKE may land on.
+  const hiddenChanged = !changed && beats.some((b, index) => {
+    const entry = state.runLedger?.[expected[index]];
+    return !!entry && (entry.status === 'disabled') !== (b?.style === 'segment' || isHiddenBeat(b));
+  });
+  if (changed || hiddenChanged) return liveSessionController.configureRunRows(beats, { preserve:true });
   return state.runLedger || {};
 }
 
@@ -2362,7 +2367,12 @@ function leaveSessionForFrontPage() {
 // ─────────────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2,'0');
 
-function beatSecs(b) { return (Number(b?.min) || 0) * 60 + (Number(b?.sec) || 0); }
+// A hidden row stays in the rundown but is left out of the show: Live skips
+// it, the prompter and the printed rundown leave it out, and its time does
+// not count. It rides the row's `disabled` flag, which Live already skips.
+// The row keeps its number, so the rows after it never renumber.
+function isHiddenBeat(b) { return !!b && b.style !== 'segment' && (b.disabled === true || b.executionState === 'disabled'); }
+function beatSecs(b) { return isHiddenBeat(b) ? 0 : (Number(b?.min) || 0) * 60 + (Number(b?.sec) || 0); }
 
 function fmtDur(b) {
   if (!b) return '—';
@@ -6211,7 +6221,7 @@ function rundownBeatKey(beat) {
 
 function buildBeatPatch(before, after) {
   const patch = {};
-  ['style','info','notes','min','sec','done','color','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
+  ['style','info','notes','min','sec','done','color','disabled','helperFor','helperRole','_createdAt','_createdBy'].forEach(key => {
     if (!rundownValueEqual(before?.[key], after?.[key])) patch[key] = cloneRundownValue(after?.[key]);
   });
   const cuePatch = {};
@@ -8896,7 +8906,7 @@ function renderRundown() {
       _csi = b.id; _csLabel = b.info || 'Segment'; _csEnd = i;
       segChildCounts[b.id] = 0;
     } else if (_csi !== null) {
-      segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
+      if (!isHiddenBeat(b)) segChildCounts[_csi] = (segChildCounts[_csi]||0)+1;
       _csEnd = i;
     }
   });
@@ -8949,9 +8959,28 @@ function renderRundown() {
         <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
         <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
         <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" data-tip="Add row before">+ Before</button>
+        <button class="row-ea-btn row-ea-hide" onclick="event.stopPropagation();setRowHidden(${b.id},${isHiddenBeat(b) ? 'false' : 'true'})" data-tip="${isHiddenBeat(b) ? 'Put this row back in the show' : 'Keep this row here but leave it out of the show'}">${isHiddenBeat(b) ? 'Show' : 'Hide'}</button>
         <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
         <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" data-tip="Add row after">+ After</button>
       </div>` : '';
+    // A hidden row is one slim line: its number, its name and a way back.
+    if (isHiddenBeat(b)) {
+      html += `<tr class="cue-row cue-row-hidden${editMode?' edit-mode-row':''}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
+      <td class="cd cd-drag" data-tip="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
+      <td class="cd cd-num">${cueNum}</td>
+      <td class="cd cd-pad" colspan="${colOrder.length + 2}">
+        <div class="cd-hidden-line">
+          <span class="hidden-row-tag">HIDDEN</span>
+          <span class="cd-hidden-name">${esc(b.info||'—')}</span>
+          <span class="cd-hidden-note">Left out of the show</span>
+          <button type="button" class="row-ea-btn cd-hidden-show" onclick="event.stopPropagation();setRowHidden(${b.id},false)" data-tip="Put this row back in the show">Show row</button>
+        </div>
+        ${editActions}
+      </td>
+    </tr>`;
+      html += segmentAddRowHTML(i, segEndAt, colOrder);
+      return;
+    }
     const helperCls = isHelperBeat(b) ? ` rundown-row-helper helper-${b.helperRole}` : '';
     html += `<tr class="cue-row${editMode?' edit-mode-row':''}${helperCls}${rowTintClass(b)}" ${editMode?'draggable="true"':''} onclick="${editMode?'':'openEdit('+b.id+')'}" data-id="${b.id}">
       <td class="cd cd-drag" data-tip="${editMode?'Drag to reorder':'Enable edit mode to reorder'}"><span>${sfIcon('action.drag')}</span></td>
@@ -11151,11 +11180,37 @@ function openEdit(id) {
           <button class="chip ${editStyle==='timed'?'sel':''}" id="ed-s-timed" onclick="edSetStyle('timed',this)">${sfIcon('state.timed')} Timed</button>
           <button class="chip ${editStyle==='flex'?'sel':''}" id="ed-s-flex" onclick="edSetStyle('flex',this)">${sfIcon('state.flex')} Flex</button>
         </div></div>
-      ${rowTintChipsHTML(editColor)}`;
+      ${rowTintChipsHTML(editColor)}
+      <label class="flow-switch-row ed-hide-row"><input type="checkbox" id="ed-hidden" ${isHiddenBeat(b) ? 'checked' : ''}><span class="ed-hide-text"><b>Hide this row</b><small>It stays in the rundown. Live, the prompter, the printed rundown and the running time leave it out.</small></span></label>`;
   }
   document.getElementById('editFields').innerHTML = h;
   showOverlay('editOv');
   setRundownPresence(id);
+}
+
+// Hide a row or bring it back. The row that is ON AIR cannot be hidden, and
+// a show keeps at least one row to take.
+function rowCanBeHidden(b) {
+  if (!b || b.style === 'segment') return false;
+  const idx = beats.indexOf(b);
+  let onAir = false;
+  try {
+    const rec = liveShared.get();
+    onAir = (liveRuntimeOn() && idx === liveActiveCueIndex()) || (rec.showStartedAt > 0 && rec.idx === idx);
+  } catch {}
+  if (onAir) { toast('That row is ON AIR. Take another row first, then hide it.', 5000); return false; }
+  if (!beats.some(x => x !== b && x.style !== 'segment' && !isHiddenBeat(x))) { toast('A show needs at least one row that is not hidden.', 5000); return false; }
+  return true;
+}
+function setRowHidden(id, hidden) {
+  const b = beats.find(x => x.id === id);
+  if (!b || b.style === 'segment') return;
+  if (hidden && !rowCanBeHidden(b)) return;
+  b.disabled = !!hidden;
+  if (!hidden) delete b.executionState;
+  renderRundown(); syncToFirestore();
+  try { if (liveRuntimeOn()) renderLive(); } catch {}
+  toast(hidden ? 'Row hidden. It stays in the rundown and the show skips it.' : 'Row is back in the show.');
 }
 
 function edSetStyle(s, el) {
@@ -11194,6 +11249,11 @@ function saveEdit() {
     b.min = Math.floor(totalSec / 60);
     b.sec = totalSec % 60;
     if (editStyle && editStyle !== 'segment') b.style = editStyle;
+    const hideBox = document.getElementById('ed-hidden');
+    if (hideBox && hideBox.checked !== isHiddenBeat(b)) {
+      if (!hideBox.checked) { b.disabled = false; delete b.executionState; }
+      else if (rowCanBeHidden(b)) b.disabled = true;
+    }
   }
   hideOverlay('editOv');
   setRundownPresence(null);
@@ -13154,7 +13214,7 @@ function restartShowClock() {
   liveTimerStartMs = null;
   let restartIdx = beats.length ? 0 : -1;
   // Same as goLive: never park the live position on a leading segment marker
-  while (restartIdx >= 0 && restartIdx < beats.length && beats[restartIdx]?.style === 'segment') restartIdx++;
+  while (restartIdx >= 0 && restartIdx < beats.length && (beats[restartIdx]?.style === 'segment' || isHiddenBeat(beats[restartIdx]))) restartIdx++;
   if (restartIdx >= beats.length) restartIdx = beats.length ? beats.length - 1 : -1;
   let movedRoom = true;
   if (restartIdx >= 0) {
@@ -13903,6 +13963,7 @@ function renderLiveFocus() {
   if (rest.length) {
     html += `<div class="lf-up-lbl">Coming up</div><div class="lf-up">` + rest.map((b, j) => {
       const i = restStart + j;
+      if (isHiddenBeat(b)) return '';
       if (b.style === 'segment') {
         return `<div class="lf-up-seg">${esc(b.info || 'Segment')}</div>`;
       }
@@ -13975,6 +14036,7 @@ function renderLive() {
     const durSecs = beatSecs(b);
     const startStr = show.start ? clock(show.start, offsetSecs) : '—';
     offsetSecs += durSecs;
+    if (isHiddenBeat(b)) return;   // a hidden row is not part of the show
 
     if (b.style === 'segment') {
       const colSpan = 4 + showCols.length;
@@ -14198,7 +14260,7 @@ function jumpToLsCue(i, opts = {}) {
   // a jump (the row-preview "Cue here" ask) — that confirm IS the safety rail.
   if (isStandardShowCaller() && !opts.confirmed) return false;
   if (liveCueIsDisabled(i)) {
-    toast(`Row ${rowDisplayNumber(i)} is disabled and cannot go on air.`);
+    toast(`Row ${rowDisplayNumber(i)} is hidden. Show it in the rundown to put it on air.`);
     return false;
   }
   if (liveCueExecutionStatus(i) === 'failed') {
@@ -14236,7 +14298,7 @@ function activateLiveRundownRow(event, i) {
   // incident, not a UX choice.
   if (!Number.isFinite(i) || !beats[i]) { toast('That row no longer exists.'); return false; }
   if (beats[i]?.style === 'segment') { toast('Segment headers organize the rundown. They can\'t go on air.'); return false; }
-  if (liveCueIsDisabled(i)) { toast(`Row ${rowDisplayNumber(i)} is disabled. Enable it in the rundown to make it active.`); return false; }
+  if (liveCueIsDisabled(i)) { toast(`Row ${rowDisplayNumber(i)} is hidden. Show it in the rundown to put it on air.`); return false; }
   return jumpToLsCue(i);
 }
 
@@ -15566,7 +15628,7 @@ function patchScriptOpPrompterControls(region) {
 
 function scriptOpNextCueIndex() {
   let index = liveActiveCueIndex();
-  do { index += 1; } while (index < beats.length && beats[index]?.style === 'segment');
+  do { index += 1; } while (index < beats.length && (beats[index]?.style === 'segment' || isHiddenBeat(beats[index])));
   return index < beats.length ? index : -1;
 }
 
@@ -18621,7 +18683,7 @@ function liveActionsHTML(scope = 'lsq', disabled = false) {
   const punch = `poPunchInSeek('${scope}')`;
   const nextRowIdx = (() => {
     let i = liveActiveCueIndex();
-    do { i++; } while (i < beats.length && beats[i]?.style === 'segment');
+    do { i++; } while (i < beats.length && (beats[i]?.style === 'segment' || isHiddenBeat(beats[i])));
     return i < beats.length ? i : -1;
   })();
   const rowCue = `<div class="flow-control-section flow-control-rowcue">
@@ -20449,7 +20511,7 @@ function flowOpCueRow(which) {
     : Number.isFinite(Number(flowOpData?.prompter?.activeIdx)) ? Number(flowOpData.prompter.activeIdx) : 0;
   let idx = Math.max(0, Math.min(rows.length - 1, liveIdx));
   if (which === 'next') {
-    do { idx += 1; } while (idx < rows.length && rows[idx]?.style === 'segment');
+    do { idx += 1; } while (idx < rows.length && (rows[idx]?.style === 'segment' || isHiddenBeat(rows[idx])));
     if (idx >= rows.length) { flowOpSetStatus('That was the last row', true); return false; }
   }
   return flowOpSendControl(`seek_row_${rowDisplayNumber(idx, rows)}`);
@@ -27544,6 +27606,7 @@ function rundownPreviewTableHTML(snapshot=null) {
       return `<tr><td colspan="${columnCount}" style="background:#f4f5f7;font-weight:800;padding:8px 6px;font-size:10px;text-transform:uppercase;border-left:3px solid #4e5664">Segment ${segmentNum}: ${esc(b.info||'Untitled')}</td></tr>`;
     }
     pdfCueNum++;
+    if (isHiddenBeat(b)) return '';   // keeps its number, stays off the page
     const total = rundownFmtTotal(offsetSecs);
     const lead = `
       <td>${pdfCueNum}</td>
