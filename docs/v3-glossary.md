@@ -24,6 +24,8 @@ Brand names (Flowmingo, Outrangutan, Planda Bear, KeyWi Bird) stay as the titles
 | **Production Notes** | The shared message board for the crew. (A screen title, so it keeps its name.) | notes board, chat |
 | **Live** | The screen where you run the show. Button: "Open Live". Exit: "Back to rundown". | Go Live, Live Show, show screen, Live control, Live Rundown |
 | **director** | The one person whose TAKE moves everyone's ON AIR cue. | show caller, caller, CALLER, rundown control, operator, has the wheel, control grant |
+| **co-pilot** | The instructor riding along while a student is the director: sees every take and can press Take over. Hand back returns the seat. | shadow, supervisor, override, backup director |
+| **hidden row** | A row that stays in the rundown but is left out of the show. It keeps its number. Buttons: Hide, Show row. | disabled, skipped, floated, muted, off |
 | **STANDBY** | The next cue, shown automatically so everyone can get ready. Never a button. | READY, Ready, Set, Armed, Arm, PREP, PRE, TRACK, ROLL, Next, Coming up |
 | **TAKE** | The director's press that moves the STANDBY cue to ON AIR for everyone. | GO, Go, Advance, Next row, Next cue, Activate, Cue here |
 | **ON AIR** | The one cue happening right now. | Live (as a cue state), NOW, current, active, selected |

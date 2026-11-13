@@ -2,6 +2,35 @@
 
 ## Next release (not pushed yet)
 
+### Jon's nine-item list (Nov 12)
+
+- **Two new positions.** Lighting Director and Lighting Lead are in the
+  Planda Bear position list (and the dashboard's).
+- **Flowmingo Operator is now Teleprompter Operator.** Shows that already
+  assigned the old name read back with the new one.
+- **Export at the top of Planda Bear.** Export PDF Package and Preview sit
+  at the top of the page as well as the bottom.
+- **A row can be hidden.** Edit row has a Hide this row switch, and edit
+  mode has a Hide button on every row. A hidden row stays in the rundown as
+  one slim line marked HIDDEN with a Show row button. It keeps its number,
+  so the rows after it do not renumber. Live skips it, the prompter script
+  and the printed rundown leave it out, and its time does not count toward
+  the show. The row that is on air cannot be hidden.
+- **Download media in Production Notes.** One button downloads every
+  picture, sound and file from the notes and replies in one zip. An
+  enlarged picture has its own download button.
+- **Follow rundown works.** The switch under the Script Op script box now
+  keeps the row that is on air in view on every take, whether or not a
+  prompter screen is linked. It waits while you type or scroll and picks up
+  again five seconds later, catches up the moment it is switched back on,
+  and remembers on or off. It used to follow only the talent screen, stop
+  for good once the box had been clicked, and land short of the row.
+- **Co-pilot.** While a student is the director, the instructor's Live
+  screen shows a co-pilot strip and follows every take. Take over makes the
+  instructor the director at once and turns the student's TAKE off. Hand
+  back returns the seat to the same student. The student sees a notice that
+  the instructor took over.
+
 ### Grading view: one student at a time
 
 - **One student, one sheet.** An admin opens a student's grading view from
