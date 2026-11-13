@@ -6286,6 +6286,11 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       <label class="pb-quiet-switch" id="pbGearQuietRow" hidden><input type="checkbox" id="pbQuietSwitch" onchange="pbSetQuietLook(this.checked)"><span class="pb-quiet-switch-text"><b>Look in quietly</b><small>Open any page without showing up there or in the "Who worked on what" log. Ends when you switch it off or close Planda Bear.</small></span></label>
     </div>
     <div id="pbGroupBar" class="pb-group-bar" hidden></div>
+    <!-- The same two buttons as the bottom of the page, so nobody has to scroll to export. -->
+    <div class="paperwork-actions paperwork-actions-top">
+      <button class="btn-primary btn-export" onclick="exportPreProPackagePDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF Package</span></button>
+      <button class="btn-secondary" onclick="showPreProPackagePreview()">Preview</button>
+    </div>
     <div id="pbAssignmentsCard"></div>
     <button type="button" class="paperwork-card pb-notes-card" id="paperworkNotesBtn" data-pb-section="Production Notes" onclick="openPaperworkItem('production-notes')" aria-label="Production Notes">
       <div class="paperwork-card-num"><span class="sf-symbol" data-symbol="content.note" aria-hidden="true"></span></div>
