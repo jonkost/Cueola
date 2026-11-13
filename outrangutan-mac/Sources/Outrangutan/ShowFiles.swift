@@ -416,8 +416,11 @@ final class ShowFiles: ObservableObject {
             // The web gives every cue a color; its kind's own color means none was picked.
             let kindColor = ["video": "var(--video)", "audio": "var(--green)", "image": "var(--yellow)"][type]
             if let color = Wire.string(c["color"]), color != kindColor { cue.label = CueLabel(web: color) }
-            if kind == .video, let k = c["key"] as? [String: Any] {
-                cue.key.mode = KeyMode(rawValue: Wire.string(k["mode"]) ?? "") ?? .off
+            // A video keeps any key. A still keeps only an Alpha key (a
+            // see-through graphic over a color): it has no other kind.
+            if kind == .video || kind == .still, let k = c["key"] as? [String: Any] {
+                let mode = KeyMode(rawValue: Wire.string(k["mode"]) ?? "") ?? .off
+                cue.key.mode = (kind == .still && mode != .alpha) ? .off : mode
                 cue.key.color = NSColor(hex: Wire.string(k["color"]) ?? "")?.hexString ?? "#00B140"
                 cue.key.sim = min(1, max(0, Wire.number(k["sim"]) ?? 0.3))
                 cue.key.smooth = min(0.5, max(0, Wire.number(k["smooth"]) ?? 0.1))
