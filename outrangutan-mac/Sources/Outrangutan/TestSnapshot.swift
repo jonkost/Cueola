@@ -41,6 +41,9 @@ import SwiftUI
 ///   standby, the preview following the standby, and a preview roll.
 /// - "duck": a video's sound dipping while a pad sounds and coming back
 ///   after, and staying put with ducking off.
+/// - "library": the built-in Library made from nothing, every sound and
+///   graphic checked, a sound onto a pad, a graphic on air on chroma green,
+///   a show file saved and opened, and pictures of the Library window.
 enum TestSnapshot {
     static var isOn: Bool { ProcessInfo.processInfo.environment["OUTRANGUTAN_SNAPSHOT"] != nil }
     static var scenario: String { ProcessInfo.processInfo.environment["OUTRANGUTAN_SCENARIO"] ?? "transport" }
@@ -375,6 +378,7 @@ enum TestSnapshot {
         case "duck": steps = duckSteps(engine: engine, note: note)
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
+        case "library": steps = librarySteps(engine: engine, files: files, dir: dir, note: note, snap: snap)
         case "stage": steps = stageSteps(engine: engine, link: link, files: files, scopes: scopes, note: note)
         case "padsearch":
             let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

@@ -87,6 +87,7 @@ so a deck is either the Mac app's or KeyWi Bird's, never both.
 | Cue hotkeys and Go to Cue | Built | Not in the web app. A cue can have a key that fires it from anywhere (Inspector); the key shows on its row and rides in the show file. Go to Cue (Command-J) jumps the standby by number or name. |
 | Ducking | Built | Not in the web app. Settings, Sound: cue sound dips 6, 12 or 20 dB while any pad sounds (a music bed under a stinger) and comes back over about a second. |
 | A Stream Deck driven by the app | Built (Oct 16) | The deck on the playback Mac needs no browser. Keys show the cues by number, red on air and green standing by, and the pads with their emoji; a + gets a volume dial, a standby dial and the clock on the strip. Tried on a pretend deck in test mode, then on Jon's real deck on the playback Mac (Oct 16): it works. |
+| A built-in Library | Built (Nov 12) | Not in the web app. Window, Library (Option-Command-L, or the books button): 17 common sound effects the app makes itself from sine waves and noise (no recordings), with a play button to hear each, Add to SFX and Add to Cues; and three demo graphics for teaching a key (Lower Third, Bug, OTS), added as stills with an Alpha key over chroma green. |
 | Not possible on the web | Step 8 | SDI out through a Blackmagic card, NDI to the switcher, key and fill. Until the cards are in: OBS on the same Mac can capture the output window and send NDI. |
 
 ## How we test each step

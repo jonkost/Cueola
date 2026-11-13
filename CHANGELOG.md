@@ -30,6 +30,17 @@
   instructor the director at once and turns the student's TAKE off. Hand
   back returns the seat to the same student. The student sees a notice that
   the instructor took over.
+- **Outrangutan for Mac: a built-in Library.** The books button in the
+  toolbar (or Window, Library, Option-Command-L) opens it. Sounds holds 17
+  common effects: Applause, Ding, Buzzer, Ta-Da, Sad Trombone, Rimshot,
+  Drum Roll, Air Horn, Whoosh, Pop, Countdown Beeps, Doorbell, Phone Ring,
+  Clock Tick, Heartbeat, Crickets and a 1 kHz tone. The play button lets
+  you hear one first; Add to SFX puts it on the next empty pad, Add to Cues
+  on the cue list. The app makes the sounds itself, so they are not
+  recordings. Graphics holds three demo graphics for teaching a key: a
+  lower third, a bug and an OTS box. Each goes to air on chroma green for
+  the switcher to key, and the Inspector can change the color behind it.
+- **Outrangutan for Mac: a still's Alpha key survives Save and Open.**
 
 ### Grading view: one student at a time
 

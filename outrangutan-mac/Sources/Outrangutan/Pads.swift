@@ -428,6 +428,29 @@ final class PadBoard: ObservableObject {
         }
     }
 
+    /// Puts a sound from the built-in Library on the next empty pad of the
+    /// current bank, with its name and its picture. A sound made to loop
+    /// loops, and a second hit stops it. One step for Undo. Returns the
+    /// pad, or nil when the bank has no room left.
+    @discardableResult
+    func addFromLibrary(url: URL, name: String, emoji: String, loops: Bool) -> Pad? {
+        guard let bank = currentBank, Self.isSound(url),
+              let slot = (0..<PadBoard.padCountMax).first(where: { pad(bank: bank.id, slot: $0) == nil }) else { return nil }
+        willChange?("Add Pad", nil)
+        let saved = willChange
+        willChange = nil
+        defer { willChange = saved }
+        if slot >= bank.padCount, let i = banks.firstIndex(where: { $0.id == bank.id }) {
+            banks[i].padCount = min(PadBoard.padCountMax, slot + 1)
+        }
+        assign(url: url, slot: slot)
+        guard let i = pads.firstIndex(where: { $0.bank == bank.id && $0.slot == slot }) else { return nil }
+        pads[i].name = name
+        pads[i].emoji = emoji
+        if loops { pads[i].loop = true; pads[i].retrigger = .toggle }
+        return pads[i]
+    }
+
     func clear(_ id: String) {
         willChange?("Clear Pad", nil)
         stop(id)

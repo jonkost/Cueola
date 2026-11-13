@@ -18,6 +18,7 @@ struct HelpView: View {
             Topic(id: "build", title: "Build a Show", symbol: "film.stack", lines: [
                 "Drag videos, sounds and stills into the window, or click Add Media in the toolbar.",
                 "Add Matte makes a solid color picture: black, white, or a chroma green or blue.",
+                "The Library (the books button in the toolbar, or Window, Library, Option-Command-L) comes with the app: common sound effects, and three demo graphics for practicing a key: a lower third, a bug and an OTS box. Add to Cues puts a graphic in the cue list on chroma green, ready for the switcher to key.",
                 "A see-through PNG (a lower third) over a color: in the Inspector's Picture tab, set Key to Alpha and pick Chroma green or Chroma blue as the background. It fills the screen behind the picture, for a key downstream.",
                 "Drag cues up and down to change the order, or right-click and choose Move Up or Move Down (Option-Command-Up and Down). Command-D makes a copy of a cue.",
                 "The cue standing by is loaded ahead: GO shows its first frame at once. Open the outputs before the show so the picture path is warm too.",
@@ -46,6 +47,7 @@ struct HelpView: View {
                 "Click SFX in the toolbar (Command-2), or Both to see the pads beside the cues (Command-3; View, Layout stacks them instead). Drop sounds on the pads, or click an empty pad to pick one.",
                 "Click a pad, or press its key, to play it. Several at once lets pads play on top of each other.",
                 "Record puts a new sound from the microphone on the next empty pad.",
+                "No sounds of your own yet? Open the Library (Option-Command-L), click the play button to hear one, and Add to SFX puts it on the next empty pad.",
                 "The Inspector sets each pad's name, emoji, color, key, volume, EQ, fades and trim.",
                 "Banks are pages of pads. Search in the toolbar to find a pad in any bank.",
             ]),

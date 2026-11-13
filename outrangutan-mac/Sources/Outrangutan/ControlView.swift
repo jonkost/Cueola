@@ -62,6 +62,7 @@ struct ControlView: View {
     let scopes: Scopes
     @AppStorage("ui.monitor") private var showMonitor = true
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var thumbs = Thumbnails.shared
     @ObservedObject private var keys = KeyMap.shared
     @AppStorage("clock.24hour") private var clock24 = true
@@ -182,6 +183,8 @@ struct ControlView: View {
             Button { chooseFiles() } label: { Label("Add Media", systemImage: "plus") }
                 .help(inspectorShowsPads ? "Add sounds to the SFX pads" : "Add videos, sounds or stills to the cue list")
                 .disabled(engine.locked)
+            Button { openWindow(id: "library") } label: { Label("Library", systemImage: "books.vertical") }
+                .help("The sound effects and demo graphics that come with Outrangutan (Option-Command-L)")
             if tab == "cues" {
                 Menu {
                     Button("Black") { engine.addMatte(color: "#000000", name: "Black") }

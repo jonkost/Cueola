@@ -43,6 +43,7 @@ struct OutrangutanApp: App {
             CommandGroup(before: .windowList) {
                 OpenLogButton()
                 OpenMultiviewButton()
+                OpenLibraryButton()
                 Divider()
             }
         }
@@ -64,6 +65,14 @@ struct OutrangutanApp: App {
                 .frame(minWidth: 640, minHeight: 360)
         }
         .defaultSize(width: 1280, height: 720)
+
+        // The Library: the sound effects and demo graphics that come with
+        // the app (Window menu, Option-Command-L).
+        Window("Library", id: "library") {
+            LibraryView(engine: appDelegate.engine)
+                .frame(minWidth: 560, minHeight: 440)
+        }
+        .defaultSize(width: 700, height: 580)
 
         Settings {
             SettingsView(engine: appDelegate.engine, midi: appDelegate.midi, watch: appDelegate.watch, deck: appDelegate.deck)
@@ -321,6 +330,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(text.data(using: .utf8)!); try? h.close() }
             else { try? text.write(to: url, atomically: true, encoding: .utf8) }
         }
+        // The built-in Library's files are made the first time, quietly.
+        if !TestSnapshot.isOn { BuiltInLibrary.shared.prepare() }
         if TestSnapshot.isOn { return TestSnapshot.runIfAsked(engine: engine, link: link, files: files, midi: midi, scopes: scopes, watch: watch) }
         // OUTRANGUTAN_POKE: pretend the person resizes the window, from the
         // shell, to chase a layout crash. "900x600,1300x800" resizes the

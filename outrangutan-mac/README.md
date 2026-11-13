@@ -216,6 +216,33 @@ Switch to **Pads** above the list.
 Stop (S) stops cues but lets pads ring. Fade (F) fades pads too. All Stop
 (Esc) stops everything.
 
+## The Library
+
+The app comes with its own sound effects and demo graphics. Open it with
+the books button in the toolbar, or Window, Library (Option-Command-L).
+
+- **Sounds**: Applause, Ding, Buzzer, Ta-Da, Sad Trombone, Rimshot, Drum
+  Roll, Air Horn, Whoosh, Pop, Countdown Beeps, Doorbell, Phone Ring, Clock
+  Tick, Heartbeat, Crickets and Tone 1 kHz. Click the play button on a row
+  to hear it on this Mac's own sound output (it never goes through the
+  pads or a cue). **Add to SFX** puts the picked sounds on the next empty
+  pads of the bank that is showing; a double-click does the same. **Add to
+  Cues** adds them to the end of the cue list. Clock Tick, Heartbeat,
+  Crickets and the tone are made to loop: their pads loop, and a second
+  hit stops them.
+- **Graphics**: a Lower Third, a Bug and an OTS box, for teaching a key.
+  Each is a see-through picture, 1920 by 1080. **Add to Cues** adds it as a
+  still with Key set to Alpha over chroma green, so on air it is the
+  graphic on green, full screen, and the switcher keys the green out. The
+  Inspector's Key section changes the color behind it (chroma blue, or
+  black for a luma key).
+
+Nothing is downloaded and nothing is a recording: the app makes every
+sound from sine waves and noise, and draws every graphic, the first time
+it runs. The files live in
+`~/Library/Application Support/Outrangutan/Library`, and a show file
+carries its own copies like any other media.
+
 ## Connect it to a show
 
 Click the light in the bottom bar, or press Command-K.
@@ -401,6 +428,11 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `stillkey`: a see-through PNG (a lower third drawn by the test) standing
   over a chroma green background, then the key switched off on air; reads
   the real output pixels.
+- `library`: the built-in Library made from nothing in the test's own
+  folder: every sound checked (length, level, not silent, not clipped),
+  every graphic checked (see-through, no green in the art), a sound onto a
+  pad, a graphic on air on chroma green (reads the real output pixels), a
+  full bank, a show file saved and opened, and pictures of the Library.
 - `preload`: the cue standing by, loaded ahead: three GOs on a cue loaded
   ahead and three on one that was not, each timed from GO to the first
   frame on screen and to the picture moving, with the frames handed over
