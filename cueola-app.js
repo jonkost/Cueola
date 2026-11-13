@@ -25058,9 +25058,71 @@ async function pbDownloadNoteFile(fileId) {
   a.remove();
 }
 
+// Download media: every picture, sound and file in the notes and replies,
+// in one zip. One file downloads as itself.
+function pbAllNoteMedia() {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(plandaBearNotes) ? plandaBearNotes : []).forEach(n => (n.attachments || []).forEach(a => {
+    if (!a?.fileId || seen.has(a.fileId)) return;
+    seen.add(a.fileId);
+    out.push(a);
+  }));
+  return out;
+}
+let _pbMediaDownloadBusy = false;
+async function pbDownloadAllMedia() {
+  if (_pbMediaDownloadBusy) return;
+  const media = pbAllNoteMedia();
+  if (!media.length) { toast('No pictures, sound or files in the notes yet.'); return; }
+  if (media.length === 1) return pbDownloadNoteFile(media[0].fileId);
+  _pbMediaDownloadBusy = true;
+  const btn = document.getElementById('pbMediaBtn');
+  if (btn) btn.disabled = true;
+  try {
+    toast(`Gathering ${media.length} files…`, 6000);
+    await ptLoadLibrary('assets/vendor/jszip.min.js');
+    const zip = new JSZip();
+    const used = new Set();
+    let missed = 0;
+    for (const att of media) {
+      const dataUrl = await pbLoadNoteFile(att.fileId);
+      if (!dataUrl) { missed++; continue; }
+      // Two files with one name both make it into the zip.
+      const raw = String(att.name || 'file').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'file';
+      const dot = raw.lastIndexOf('.');
+      const stem = dot > 0 ? raw.slice(0, dot) : raw;
+      const ext = dot > 0 ? raw.slice(dot) : '';
+      let name = raw;
+      for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem} (${n})${ext}`;
+      used.add(name.toLowerCase());
+      zip.file(name, pbDataURLtoBlob(dataUrl));
+    }
+    const got = media.length - missed;
+    if (!got) { toast('Could not load the files. Check the connection and try again.', 6000); return; }
+    const blob = await zip.generateAsync({ type:'blob' });
+    const safe = (show.name || 'Show').replace(/[^\w \-]+/g, '').trim() || 'Show';
+    downloadBlobFile(blob, `${safe} notes media.zip`);
+    toast(missed
+      ? `Downloaded ${got} of ${media.length} files. ${missed} could not be loaded.`
+      : `Downloaded ${got} files in one zip.`, 6000);
+  } catch (error) {
+    containError('Notes media download', error);
+    toast('The download did not finish. Try again.', 6000);
+  } finally {
+    _pbMediaDownloadBusy = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+let _pbLightboxFileId = '';
+function pbDownloadLightboxImage() {
+  if (_pbLightboxFileId) pbDownloadNoteFile(_pbLightboxFileId);
+}
 async function pbOpenLightbox(fileId) {
   const dataUrl = await pbLoadNoteFile(fileId);
   if (!dataUrl) { toast('Image is still loading. Try again in a second.'); return; }
+  _pbLightboxFileId = fileId;
   const box = document.getElementById('pbLightbox');
   const img = document.getElementById('pbLightboxImg');
   if (!box || !img) return;

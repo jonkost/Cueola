@@ -2197,6 +2197,7 @@ button.pb-todo-check:hover{border-color:var(--green)}
 .pb-lightbox.on{display:flex}
 .pb-lightbox img{max-width:94vw;max-height:88vh;border-radius:12px;border: 1px solid transparent}
 .pb-lightbox-close{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border: 1px solid transparent;background:rgba(22,24,32,.78);color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .15s var(--ease),transform .15s var(--ease)}
+.pb-lightbox-dl{right:68px}
 .pb-lightbox-close:hover{background:rgba(64,68,86,.9);transform:scale(1.07)}
 .pb-lightbox-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:12px;font-family:var(--mono);letter-spacing:.04em;color:rgba(255,255,255,.65);pointer-events:none}
 @media(max-width:680px){
@@ -6655,6 +6656,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <button type="button" class="pb-chat-tool" id="pbBellBtn" onclick="pbToggleBrowserNotify()" aria-pressed="false"><span class="sf-symbol" data-symbol="notification.muted" aria-hidden="true"></span><span>Alerts off</span></button>
           <button type="button" class="pb-chat-tool" id="pbOwesBtn" onclick="pbOpenOwes()" hidden data-tip="Every open to-do and checklist item, by person"><span class="sf-symbol" data-symbol="content.checklist" aria-hidden="true"></span><span>Open items</span></button>
           <button type="button" class="pb-chat-tool" id="pbNotesGuideBtn" onclick="toggleProductionNotesGuide()"><span class="sf-symbol" data-symbol="action.guide" aria-hidden="true"></span><span>Tips</span></button>
+          <button type="button" class="pb-chat-tool" id="pbMediaBtn" onclick="pbDownloadAllMedia()" data-tip="Download every picture, sound and file in the notes"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span><span>Download media</span></button>
           <button type="button" class="pb-chat-tool export-action" onclick="exportProductionNotesPDF()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export PDF</span></button>
         </div>
       </div>
@@ -6717,6 +6719,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 </div>
 <div class="pb-lightbox" id="pbLightbox" onclick="pbCloseLightbox()">
   <button type="button" class="pb-lightbox-close" onclick="event.stopPropagation();pbCloseLightbox()" data-tip="Close (Esc)" aria-label="Close image preview"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+  <button type="button" class="pb-lightbox-close pb-lightbox-dl" onclick="event.stopPropagation();pbDownloadLightboxImage()" data-tip="Download this picture" aria-label="Download this picture"><span class="sf-symbol" data-symbol="action.download" aria-hidden="true"></span></button>
   <img id="pbLightboxImg" alt="Attachment preview">
   <span class="pb-lightbox-hint">Click anywhere or press Esc to close</span>
 </div>
