@@ -2400,6 +2400,48 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   assert.match(app, /window\.cueolaSurfaceBridge = \{/);
 });
 
+test('a hidden row stays in the rundown and out of the show (Jon 11/12)', () => {
+  // One flag, the one Live already skips, and it survives saving.
+  assert.match(app, /function isHiddenBeat\(b\) \{ return !!b && b\.style !== 'segment' && \(b\.disabled === true/);
+  assert.match(app, /function beatSecs\(b\) \{ return isHiddenBeat\(b\) \? 0 :/);
+  // The builder draws it as one slim line with a way back; Live and the
+  // printed rundown leave it out but it keeps its number.
+  assert.match(app, /cue-row cue-row-hidden/);
+  assert.match(app, /setRowHidden\(\$\{b\.id\},false\)/);
+  assert.match(app, /if \(isHiddenBeat\(b\)\) return;   \/\/ a hidden row is not part of the show/);
+  assert.match(app, /pdfCueNum\+\+;\n    if \(isHiddenBeat\(b\)\) return '';/);
+  // The row that is on air cannot be hidden, and Live relearns the rows.
+  assert.match(app, /That row is ON AIR\. Take another row first, then hide it\./);
+  assert.match(app, /const hiddenChanged = !changed && beats\.some/);
+});
+
+test('co-pilot: the instructor rides along and takes over in one press (Jon 11/12)', () => {
+  assert.match(html, /id="lsCopilotBar"[^>]*hidden/);
+  const model = app.slice(app.indexOf('function copilotBarModel()'), app.indexOf('function copilotTakeOver()'));
+  // Co-pilot only while a student director is connected; the hand-back offer
+  // only after a take over; the student's notice only for the student.
+  assert.match(model, /!sessionControlGrantHeldByMe\(\) && grantHolderPresent\(\)/);
+  assert.match(model, /state:'copilot'/);
+  assert.match(model, /state:'tookover'/);
+  assert.match(model, /state:'takenfrom'/);
+  const take = app.slice(app.indexOf('function copilotTakeOver()'), app.indexOf('function copilotHandBack()'));
+  // Taking over clears the director and releases the deck claim in one write.
+  assert.match(take, /\{ controlGrant: null, busExecutor: null \}/);
+  assert.match(take, /_copilotReturnTo = from/);
+  assert.match(app, /function copilotHandBack\(\) \{[\s\S]*?grantRundownControl\(to\.username, to\.displayName, to\.position\)/);
+  assert.match(app, /Your instructor took over\. Your TAKE is off\./);
+});
+
+test('Follow rundown keeps the on-air row in the Script Op editor (Jon 11/12)', () => {
+  assert.match(html, /id="lsTalentPosFollow" checked> Follow rundown</);
+  const follow = app.slice(app.indexOf('function followTalentInEditor('), app.indexOf('async function sendToPrompter('));
+  // The rundown leads; it waits for busy hands instead of for focus.
+  assert.match(follow, /liveRuntimeOn\(\) \? liveActiveCueIndex\(\) : -1/);
+  assert.match(follow, /Date\.now\(\) - _followEditorTouchedAt < FOLLOW_HANDS_OFF_MS/);
+  assert.doesNotMatch(follow, /document\.activeElement/);
+  assert.match(app, /if \(follow\.checked\) \{ _followEditorTouchedAt = 0; followTalentInEditor\(true\); \}/);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log('PASS', name);
