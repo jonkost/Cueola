@@ -2442,6 +2442,17 @@ test('Follow rundown keeps the on-air row in the Script Op editor (Jon 11/12)', 
   assert.match(app, /if \(follow\.checked\) \{ _followEditorTouchedAt = 0; followTalentInEditor\(true\); \}/);
 });
 
+test('the Notes switch shows or hides row notes in the rundown and in Live (Jon 11/13)', () => {
+  // One switch in the Name header of each table, drawn by the same helper.
+  assert.match(app, /<th class="col-info">\$\{rowNotesSwitchHTML\('Name'\)\}<\/th>/);
+  assert.match(app, /<th class="live-col-name">\$\{rowNotesSwitchHTML\('Row'\)\}<\/th>/);
+  // It is a view choice for this computer; nothing is written to the show.
+  const set = app.slice(app.indexOf('function setRowNotesShown('), app.indexOf('applyRowNotesShown();\nif (document.readyState'));
+  assert.match(set, /localStorage\.setItem\(ROW_NOTES_PREF_KEY/);
+  assert.doesNotMatch(set, /syncToFirestore|renderRundown|renderLive/);
+  assert.match(html, /:root\.row-notes-off :is\(\.cd-subnote,\.seg-notes-text,\.live-note,\.live-seg-note\)\{display:none\}/);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log('PASS', name);

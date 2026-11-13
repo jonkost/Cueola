@@ -2,6 +2,13 @@
 
 ## Next release (not pushed yet)
 
+### Row notes switch (Nov 13)
+
+- **A Notes switch on the rundown and in Live.** It sits in the Name
+  column heading. On shows the note written on each row, in full, under
+  the row name. Off hides them. Each computer remembers its own choice;
+  the notes themselves stay in the show.
+
 ### Jon's nine-item list (Nov 12)
 
 - **Two new positions.** Lighting Director and Lighting Lead are in the

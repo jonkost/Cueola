@@ -406,7 +406,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .edit-mode-row .cd-drag>span{opacity:1}
 .cd-num{font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center}
 
-.cd-subnote{font-size:10px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cd-subnote{font-size:11px;color:var(--text2);line-height:1.3;margin-top:2px;overflow-wrap:anywhere}
+/* Row notes switch (the Notes slider in the Name header of the rundown and of Live). Off hides the note under every row name. */
+.th-with-switch{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.row-notes-switch{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--text3);cursor:pointer;user-select:none;--sw-w:26px;--sw-h:16px}
+.row-notes-switch:has(input:checked){color:var(--text2)}
+:root.row-notes-off :is(.cd-subnote,.seg-notes-text,.live-note,.live-seg-note){display:none}
 
 /* Type badge */
 
@@ -5559,7 +5564,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <tr class="rd-head">
             <th class="col-drag"></th>
             <th class="col-num">#</th>
-            <th class="col-info">Name</th>
+            <th class="col-info"><span class="th-with-switch"><span>Name</span><label class="row-notes-switch" data-tip="Show or hide the notes written on each row"><span>Notes</span><input type="checkbox" class="row-notes-toggle" checked onchange="setRowNotesShown(this.checked)" aria-label="Show row notes"></label></span></th>
             <th class="col-time">Start / Dur</th>
             <th class="col-cue u-c-video"><span class="sf-symbol" data-symbol="department.video" aria-hidden="true"></span> Video</th>
             <th class="col-cue u-c-green"><span class="sf-symbol" data-symbol="department.audio" aria-hidden="true"></span> Audio</th>
@@ -7736,7 +7741,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=e6d0cf71a8"></script>
+<script src="cueola-app.js?v=5a4a0ad9e0"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

@@ -8869,6 +8869,26 @@ function jogScrubHandleKey(e, phase) {
 // ─────────────────────────────────────────────────────────────
 // RUNDOWN RENDERING
 // ─────────────────────────────────────────────────────────────
+// Row notes switch: the Notes slider in the Name header of the rundown and of
+// Live. It shows or hides the note written under each row name. It is a view
+// choice for this computer only; the notes themselves stay in the show.
+const ROW_NOTES_PREF_KEY = 'cueola_row_notes';
+let rowNotesShown = (() => { try { return localStorage.getItem(ROW_NOTES_PREF_KEY) !== '0'; } catch { return true; } })();
+function rowNotesSwitchHTML(heading) {
+  return `<span class="th-with-switch"><span>${heading}</span><label class="row-notes-switch" data-tip="Show or hide the notes written on each row"><span>Notes</span><input type="checkbox" class="row-notes-toggle" ${rowNotesShown ? 'checked' : ''} onchange="setRowNotesShown(this.checked)" aria-label="Show row notes"></label></span>`;
+}
+function applyRowNotesShown() {
+  document.documentElement.classList.toggle('row-notes-off', !rowNotesShown);
+  document.querySelectorAll('.row-notes-toggle').forEach(box => { if (box.checked !== rowNotesShown) box.checked = rowNotesShown; });
+}
+function setRowNotesShown(on) {
+  rowNotesShown = on !== false;
+  try { localStorage.setItem(ROW_NOTES_PREF_KEY, rowNotesShown ? '1' : '0'); } catch {}
+  applyRowNotesShown();
+}
+applyRowNotesShown();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyRowNotesShown);
+
 function toggleEditMode() {
   editMode = !editMode;
   const btn = document.getElementById('editModeBtn');
@@ -8900,7 +8920,7 @@ function renderTableHeaders() {
     return `<th class="col-cue${type==='script'?' col-script-c':''}" style="color:${m.color}" data-col="${type}">${sfIcon(m.symbol)} ${m.label}</th>`;
   }).join('');
   const dragCol = editMode ? `<th class="col-drag" data-tip="Drag rows to reorder">${sfIcon('action.drag')}</th>` : '<th class="col-drag"></th>';
-  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">Name</th><th class="col-time">Start / Dur</th>${dynCols}`;
+  thead.innerHTML = `${dragCol}<th class="col-num">#</th><th class="col-info">${rowNotesSwitchHTML('Name')}</th><th class="col-time">Start / Dur</th>${dynCols}`;
 }
 
 function colDragStart(e, type) {
@@ -14122,7 +14142,7 @@ function renderLive() {
     <thead><tr>
       <th class="live-col-num">#</th>
       <th class="live-col-status">State</th>
-      <th class="live-col-name">Row</th>
+      <th class="live-col-name">${rowNotesSwitchHTML('Row')}</th>
       <th class="live-col-time">Time</th>
       ${showCols.map(type=>`<th class="${type==='script'?'live-col-script':'live-col-cue'}" style="color:${CT[type].color}">${sfIcon(COL_META[type].symbol)} ${COL_META[type].label}</th>`).join('')}
     </tr></thead><tbody>`;
