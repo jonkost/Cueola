@@ -4042,11 +4042,21 @@ const ROLE_POSITION_OPTIONS = [
   'Guest',
   'Talent',
   'Script Runner',
-  'Flowmingo Operator',
+  'Teleprompter Operator',
+  'Lighting Director',
+  'Lighting Lead',
   'Safety Lead',
   'Runner',
   'Crew',
 ];
+
+// Positions that were renamed. A show saved under the old words reads back
+// with the new ones, so the list and the people already assigned agree.
+const RENAMED_POSITIONS = { 'flowmingo operator': 'Teleprompter Operator' };
+function currentPositionName(name) {
+  const text = String(name || '').trim();
+  return RENAMED_POSITIONS[text.toLowerCase()] || text;
+}
 
 let assignmentProfiles = [];
 // Every live profile from the last hydration (not just this session's): the
@@ -4299,7 +4309,7 @@ function normalizeRoleAssignment(row={}, options=null, catalog=null) {
     if (matches.length === 1) profileId = model?.profileIdFor?.(matches[0]) || matches[0].profileId || '';
   }
   const profile = assignmentProfileById(profileId);
-  const position = String(row.position || row.positionLabel || row.role || '').trim();
+  const position = currentPositionName(row.position || row.positionLabel || row.role);
   const positionId = String(row.positionId || (position ? model?.positionIdFor?.(position) : '') || '').trim();
   const rowIds = Array.isArray(row.paperworkIds) ? row.paperworkIds.map(String) : [];
   // Rows carrying canonical ids skip the fuzzy keyword remap (see
@@ -4345,8 +4355,8 @@ function getRoleAssignments() {
 // added, alphabetical. Stored on the session's prePro doc so every device
 // on the code sees the same list.
 function getRolePositionOptions(data=basePreProData()) {
-  const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : []).map(v => String(v || '').trim().toLowerCase());
-  const custom = Array.isArray(data.positionsCustom) ? data.positionsCustom : [];
+  const removed = (Array.isArray(data.positionsRemoved) ? data.positionsRemoved : []).map(v => currentPositionName(v).toLowerCase());
+  const custom = (Array.isArray(data.positionsCustom) ? data.positionsCustom : []).map(currentPositionName);
   return cleanUniqueStrings([
     ...ROLE_POSITION_OPTIONS.filter(p => !removed.includes(p.toLowerCase())),
     ...custom,

@@ -510,7 +510,7 @@ Good night.
       notes: 'Lower thirds, full screens, scorebug, credits.' },
     { person: 'Priya Demoulin', username: 'demo.priya',   position: 'Camera 1',
       notes: 'Swing camera. CAM 3 and CAM 4 are locked-off, CAM 4 overhead rig preset for the Showdown.' },
-    { person: 'Ozzie Vantage',  username: 'demo.ozzie',   position: 'Flowmingo Operator',
+    { person: 'Ozzie Vantage',  username: 'demo.ozzie',   position: 'Teleprompter Operator',
       notes: 'Prompter and the question lane. Pastes cards from the moderated queue only.' },
   ],
 
@@ -546,7 +546,7 @@ Good night.
         { name: 'Juniper Wilde',  position: 'Playback Operator',  email: 'demo.juniper@example.edu', phone: '555-0104', call: '19:30' },
         { name: 'Callum Frost',   position: 'Graphics Operator',  email: 'demo.callum@example.edu',  phone: '555-0105', call: '19:30' },
         { name: 'Priya Demoulin', position: 'Camera 1',           email: 'demo.priya@example.edu',   phone: '555-0106', call: '19:30' },
-        { name: 'Ozzie Vantage',  position: 'Flowmingo Operator', email: 'demo.ozzie@example.edu',   phone: '555-0107', call: '19:30' },
+        { name: 'Ozzie Vantage',  position: 'Teleprompter Operator', email: 'demo.ozzie@example.edu',   phone: '555-0107', call: '19:30' },
         { name: 'Finn Voss',      position: 'Host',               email: 'demo.finn@example.edu',    phone: '555-0110', call: '20:30' },
         { name: 'Dr. Imogen Rey', position: 'Guest',              email: 'demo.imogen@example.edu',  phone: '555-0111', call: '20:30' },
         { name: 'Tomás Aguilar',  position: 'Guest',              email: 'demo.tomas@example.edu',   phone: '555-0112', call: '20:45' },

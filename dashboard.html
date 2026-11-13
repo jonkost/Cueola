@@ -1754,7 +1754,7 @@ const SCOPE_KEY = id => `cueola_scope_${id}`;
 // Same list Planda Bear offers (cueola-app.js ROLE_POSITION_OPTIONS), plus the
 // positions this show added or removed there, so a role picked here and a
 // position picked in Planda Bear are the same thing.
-const LEARNER_POSITIONS = ['Producer','Director','Assistant Director','Production Manager','Stage Manager','Show Caller','Technical Director','ENG Lead','Video Lead','Audio Lead','Graphics Operator','Playback Operator','Camera Operator','Camera 1','Camera 2','Camera 3','Camera 4','Host','Guest','Talent','Script Runner','Flowmingo Operator','Safety Lead','Runner','Crew'];
+const LEARNER_POSITIONS = ['Producer','Director','Assistant Director','Production Manager','Stage Manager','Show Caller','Technical Director','ENG Lead','Video Lead','Audio Lead','Graphics Operator','Playback Operator','Camera Operator','Camera 1','Camera 2','Camera 3','Camera 4','Host','Guest','Talent','Script Runner','Teleprompter Operator','Lighting Director','Lighting Lead','Safety Lead','Runner','Crew'];
 function dashPositionOptions(sessionDoc) {
   const pre = sessionDoc?.prePro || {};
   const removed = (Array.isArray(pre.positionsRemoved) ? pre.positionsRemoved : []).map(v => String(v || '').trim().toLowerCase());
