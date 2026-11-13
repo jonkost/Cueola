@@ -124,6 +124,12 @@ final class OutputView: NSView {
     /// behind a lower third however it is framed.
     private let picture1 = CALayer()
     private let picture2 = CALayer()
+    /// The overlay: a see-through still (a lower third) that rides over
+    /// whatever picture is on air. It sits above the four picture layers and
+    /// has no background of its own, so the video shows through it.
+    private let overlay = CALayer()
+    private let overlayPicture = CALayer()
+    private var overlayCue: Cue?
     private var frames: [PictureSlot: Cue] = [:]
     /// Video layers holding a player ahead of its GO: on screen at zero
     /// opacity so the picture path is warm, but showing nothing.
@@ -160,6 +166,16 @@ final class OutputView: NSView {
             picture.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "transform": NSNull()]
             still.addSublayer(picture)
         }
+        overlay.isHidden = true
+        overlay.backgroundColor = NSColor.clear.cgColor
+        // Above every picture layer however many times they have been
+        // raised, under the Identify box.
+        overlay.zPosition = 5_000
+        overlay.actions = ["contents": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull(),
+                           "opacity": NSNull(), "transform": NSNull()]
+        overlayPicture.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "transform": NSNull()]
+        overlay.addSublayer(overlayPicture)
+        layer?.addSublayer(overlay)
         standbyLayer.isHidden = true
         standbyLayer.alignmentMode = .center
         standbyLayer.isWrapped = true
@@ -173,7 +189,7 @@ final class OutputView: NSView {
     /// The standby words show only while every picture layer is empty.
     private func updateStandby() {
         quietly {
-            let empty = PictureSlot.allCases.allSatisfy { !isShowing($0) }
+            let empty = PictureSlot.allCases.allSatisfy { !isShowing($0) } && overlay.isHidden
             standbyLayer.string = standbyText
             standbyLayer.isHidden = standbyText.isEmpty || !empty
             standbyLayer.fontSize = max(12, bounds.height * 0.07)
@@ -218,6 +234,11 @@ final class OutputView: NSView {
                 }
                 if let cue = frames[slot] { place(slot, cue) }
             }
+            overlay.transform = CATransform3DIdentity
+            overlay.frame = bounds
+            overlayPicture.transform = CATransform3DIdentity
+            overlayPicture.frame = overlay.bounds
+            if let cue = overlayCue { placeOverlay(cue) }
             if let box = identifyLayer { fitIdentify(box) }
         }
         updateStandby()
@@ -320,7 +341,57 @@ final class OutputView: NSView {
         updateStandby()
     }
 
-    func black() { PictureSlot.allCases.forEach(hide) }
+    func black() { PictureSlot.allCases.forEach(hide); hideOverlay() }
+
+    // MARK: Overlay
+
+    /// Lays a see-through still over whatever is on air. The picture
+    /// layers underneath are not touched.
+    func showOverlay(_ image: NSImage?, cue: Cue, opacity: Float) {
+        quietly {
+            overlayPicture.contents = image
+            overlayCue = cue
+            styleOverlay(cue)
+            overlay.opacity = opacity
+            overlay.isHidden = false
+        }
+        updateStandby()
+    }
+
+    /// Framing changed in the Inspector while the overlay is on.
+    func restyleOverlay(_ cue: Cue) {
+        guard overlayCue != nil else { return }
+        quietly { overlayCue = cue; styleOverlay(cue) }
+    }
+
+    func setOverlayOpacity(_ value: Float) {
+        quietly { overlay.opacity = value }
+    }
+
+    func hideOverlay() {
+        quietly {
+            overlay.isHidden = true
+            overlayPicture.contents = nil
+            overlayCue = nil
+        }
+        updateStandby()
+    }
+
+    /// The name of the overlay showing on this output, for tests.
+    var overlayShowing: String? { overlay.isHidden ? nil : overlayCue?.name }
+    /// How bright the overlay is (0 to 1), nil while it is off; for tests.
+    var debugOverlayOpacity: Float? { overlay.isHidden ? nil : overlay.opacity }
+
+    private func styleOverlay(_ cue: Cue) {
+        overlayPicture.contentsGravity = cue.fit == .cover ? .resizeAspectFill : (cue.fit == .fill ? .resize : .resizeAspect)
+        placeOverlay(cue)
+    }
+
+    private func placeOverlay(_ cue: Cue) {
+        let dx = bounds.width * cue.posX / 100
+        let dy = -bounds.height * cue.posY / 100
+        overlayPicture.transform = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), cue.scale, cue.scale, 1)
+    }
 
     /// How bright a showing layer is (0 to 1), nil while hidden; for tests.
     func debugOpacity(_ slot: PictureSlot) -> Float? { isShowing(slot) ? layerFor(slot).opacity : nil }

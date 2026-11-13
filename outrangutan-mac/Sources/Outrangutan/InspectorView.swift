@@ -242,12 +242,17 @@ struct InspectorView: View {
         ("Black", "#000000"), ("White", "#FFFFFF"), ("Gray", "#808080"), ("Chroma green", "#00B140"), ("Chroma blue", "#0047BB"),
     ]
 
+    /// The Background choice that makes a still an overlay.
+    static let overVideo = "Video on air"
+    static let overVideoNote = "The picture rides over whatever is on air, like a lower third over a video. The video keeps playing. Fire the cue again to take it off, or give it a length on the Timing tab."
+
     @ViewBuilder
     private func keySection(_ cue: Cue) -> some View {
         let k = live(cue).key
+        let overAir = live(cue).isOverlay
         // A still has no color to take out: only its own see-through parts.
         let modes: [KeyMode] = cue.kind == .still ? [.off, .alpha] : KeyMode.allCases
-        InspectorSection(title: "Key", note: keyNote(k.mode, cue.kind)) {
+        InspectorSection(title: "Key", note: overAir ? Self.overVideoNote : keyNote(k.mode, cue.kind)) {
             Picker("Key", selection: bind(cue, \.key.mode)) {
                 ForEach(modes, id: \.self) { Text($0.label).tag($0) }
             }
@@ -266,13 +271,22 @@ struct InspectorView: View {
                         // The usual choices by name, and a well for any other color.
                         Menu {
                             ForEach(Self.backdrops, id: \.hex) { b in
-                                Button(b.name) { engine.update(cue.id) { $0.key.bg = b.hex } }
+                                Button(b.name) { engine.update(cue.id) { $0.key.bg = b.hex; $0.key.over = false } }
+                            }
+                            // A still can ride over the picture on air
+                            // instead of standing on a color: a lower third
+                            // over a video.
+                            if cue.kind == .still {
+                                Divider()
+                                Button(Self.overVideo) { engine.update(cue.id) { $0.key.over = true } }
                             }
                         } label: {
-                            Text(Self.backdrops.first { $0.hex.caseInsensitiveCompare(k.bg) == .orderedSame }?.name ?? "Custom")
+                            Text(overAir ? Self.overVideo
+                                 : (Self.backdrops.first { $0.hex.caseInsensitiveCompare(k.bg) == .orderedSame }?.name ?? "Custom"))
                         }
                         .fixedSize()
-                        colorWell(cue, \.key.bg)
+                        // No color to pick while the video is the background.
+                        if !overAir { colorWell(cue, \.key.bg) }
                     }
                 }
             }

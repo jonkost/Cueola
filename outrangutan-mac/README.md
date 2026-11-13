@@ -84,6 +84,16 @@ for students running the show.
     over the background color, which fills the screen behind it. Pick
     Chroma green or Chroma blue from the Background menu for a key
     downstream; the color well takes any other color.
+    The last choice in a still's Background menu is **Video on air**. That
+    makes the still an **overlay**: GO lays it over whatever picture is on
+    air (a lower third over a video) and the video keeps playing, with its
+    own clock and sound. The row says OVERLAY while it is on. Fire the cue
+    again to take it off, or give it a length on the Timing tab and it
+    comes off by itself. Its fade in and fade out bring it on and off. One
+    overlay is on at a time; a new one takes the old one's place. It stays
+    on when another cue takes the picture under it, the way a key stays up
+    on a switcher. Stop takes off whatever fired last (the overlay alone,
+    or the picture with its overlay), and All Stop clears everything.
 - **Outputs** in the toolbar opens or closes every output. Its menu opens
   one at a time and has **Identify**, which puts each output's number on its
   screen for three seconds.
@@ -235,7 +245,9 @@ the books button in the toolbar, or Window, Library (Option-Command-L).
   still with Key set to Alpha over chroma green, so on air it is the
   graphic on green, full screen, and the switcher keys the green out. The
   Inspector's Key section changes the color behind it (chroma blue, or
-  black for a luma key).
+  black for a luma key). To put a graphic straight over a video in
+  Outrangutan itself, with no switcher, set its Background to **Video on
+  air** there.
 
 Nothing is downloaded and nothing is a recording: the app makes every
 sound from sine waves and noise, and draws every graphic, the first time
@@ -428,6 +440,12 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `stillkey`: a see-through PNG (a lower third drawn by the test) standing
   over a chroma green background, then the key switched off on air; reads
   the real output pixels.
+- `overlay`: a video on air and a see-through PNG fired over it: the video
+  clock keeps running, the overlay shows on the output, the monitor and
+  Multiview, and in the frame the scopes read; fired again it comes off,
+  with and without fades; a timed one comes off by itself; a second
+  overlay takes the first one's place; it rides across a cut; Stop and All
+  Stop; a paused show stays paused; a show file saved and opened.
 - `library`: the built-in Library made from nothing in the test's own
   folder: every sound checked (length, level, not silent, not clipped),
   every graphic checked (see-through, no green in the art), a sound onto a

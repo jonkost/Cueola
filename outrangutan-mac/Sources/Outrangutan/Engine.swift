@@ -357,6 +357,10 @@ final class Engine: ObservableObject {
     @Published private(set) var status: Status = .ready
     @Published private(set) var pictureCue: Cue?
     @Published private(set) var soundCue: Cue?
+    /// The overlay on air: a see-through still riding over the picture (a
+    /// lower third over a video). It is not the picture cue: the video
+    /// underneath keeps playing with its own clock and sound.
+    @Published private(set) var overlayCue: Cue?
     /// Seconds left on what is on air. nil when nothing is counting.
     @Published private(set) var remaining: Double?
     /// Seconds left in a pre-wait, while one runs.
@@ -463,6 +467,16 @@ final class Engine: ObservableObject {
     /// A still on its way out under a dissolve: its layer, where it shows,
     /// and its level when it started leaving, so Fade can take it down too.
     private var stillOut: (slot: PictureSlot, views: [OutputView], level: Double)?
+
+    // The overlay (a see-through still over the picture on air)
+    private var overlayViews: [OutputView] = []
+    private var overlayLevel: Double = 1
+    private var overlayTimer: Timer?
+    private var overlayEndsAt: Date?
+    private var overlayLeft: Double?        // seconds left while paused
+    private var overlayLeaving = false      // fading off; a second press cuts it
+    private var overlayFiredLast = false    // Stop takes off what fired last
+    private var overlayFrame: (id: UUID, path: String, image: CIImage)?
 
     // A cue waiting out its pre-wait
     private var pending: (cue: Cue, at: Date, timer: Timer)?
@@ -703,6 +717,7 @@ final class Engine: ObservableObject {
             paused = false
             for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.resume() }
             if let left = stillLeft { armStillTimer(left); stillLeft = nil }
+            if let left = overlayLeft { armOverlayTimer(left); overlayLeft = nil }
             if let left = pendingLeft, let p = pending { schedulePending(p.cue, in: left); pendingLeft = nil }
             refresh()
             // The strip and the deck count from a start time, so a resume
@@ -723,6 +738,12 @@ final class Engine: ObservableObject {
                 stillLeft = max(0, ends.timeIntervalSinceNow)
                 stillTimer?.invalidate(); stillTimer = nil; stillEndsAt = nil
             }
+            // A timed overlay holds its count with everything else.
+            if let ends = overlayEndsAt, overlayTimer != nil {
+                if overlayLeaving { fader.cancel("overlay"); overlayLeaving = false }
+                overlayLeft = max(0, ends.timeIntervalSinceNow)
+                overlayTimer?.invalidate(); overlayTimer = nil; overlayEndsAt = nil
+            }
             if let p = pending {
                 pendingLeft = max(0, p.at.timeIntervalSinceNow)
                 p.timer.invalidate()
@@ -735,6 +756,9 @@ final class Engine: ObservableObject {
     func stop() {
         log.add(.stop, "Stop", from: source)
         cancelPending()
+        // An overlay that fired last comes off by itself; the picture under
+        // it stays. (Stop on the picture takes the overlay with it.)
+        if overlayFiredLast, overlayCue != nil { clearOverlay(); refresh(); return }
         if lastLane == .audio && soundDeck != nil { stopSound() } else { stopPicture() }
         refresh()
     }
@@ -771,7 +795,7 @@ final class Engine: ObservableObject {
     func fadeStopAll() {
         cancelPending()
         log.add(.stop, "Fade and stop everything", from: source)
-        guard pictureDeck != nil || soundDeck != nil || stillCue != nil else { return stopEverything() }
+        guard pictureDeck != nil || soundDeck != nil || stillCue != nil || overlayCue != nil else { return stopEverything() }
         if fader.isRunning("all") { return }
         if paused { paused = false; for d in [pictureDeck, soundDeck].compactMap({ $0 }) where !d.held { d.resume() } }
         // Every deck with a cue on it, not just the one on air: under a
@@ -780,8 +804,10 @@ final class Engine: ObservableObject {
         let decks = (videoDecks + soundDecks).filter { $0.cue != nil && !$0.isPreloaded }
         let startPicture = decks.map { $0.pictureLevel }, startSound = decks.map { $0.soundLevel }
         let startStill = stillLevel
+        let startOverlay = overlayLevel
         let leaving = stillOut
         decks.forEach { fader.cancel($0.name) }
+        fader.cancel("overlay")
         pads.fadeOutAll()
         fader.run("all", from: 1, to: 0, seconds: 1, apply: { [weak self] v in
             guard let self else { return }
@@ -792,6 +818,8 @@ final class Engine: ObservableObject {
             }
             self.stillLevel = startStill * v
             self.applyStill()
+            self.overlayLevel = startOverlay * v
+            self.applyOverlay()
             if let leaving { leaving.views.forEach { $0.setOpacity(leaving.slot, Float(leaving.level * v)) } }
         }, done: { [weak self] in self?.stopEverything() })
     }
@@ -826,6 +854,12 @@ final class Engine: ObservableObject {
         guard cue.fileIsThere else { return refuse("Can't find the file for \"\(cue.name)\". It may have moved.") }
         notice = nil
         let number = (cues.firstIndex { $0.id == cue.id } ?? 0) + 1
+        // An overlay that is on comes off when it is fired again.
+        if cue.isOverlay, overlayCue?.id == cue.id {
+            log.add(.cue, "\(number). \(cue.name): overlay off", from: from ?? source)
+            endOverlay(fade: cue.fadeOut)
+            return .done
+        }
         log.add(.cue, "\(number). \(cue.name)" + (cue.preWait > 0 ? ", waits \(Timecode.short(cue.preWait))" : ""), from: from ?? source)
         if cue.preWait > 0 {
             schedulePending(cue, in: cue.preWait)
@@ -837,10 +871,22 @@ final class Engine: ObservableObject {
 
     @discardableResult
     private func begin(_ cue: Cue) -> WireResult {
+        // An overlay rides over the picture: it takes no lane, moves no
+        // clock and leaves a paused show paused.
+        if cue.isOverlay {
+            let result = beginOverlay(cue)
+            guard result.ok else { return result }
+            overlayFiredLast = true
+            refresh()
+            onCueBegan?(cue)
+            if cue.continueMode == .autoContinue { fireNext(after: cue) }
+            return result
+        }
         if paused {
             // A new cue un-pauses the show; what was paused stays where it is.
             paused = false
             stillLeft = nil
+            if let left = overlayLeft { armOverlayTimer(left); overlayLeft = nil }
         }
         // A start point from a crash is for the next cue to fire; firing
         // another cue first lets it go.
@@ -854,6 +900,7 @@ final class Engine: ObservableObject {
         }
         guard result.ok else { return result }
         lastLane = cue.kind == .audio ? .audio : .video
+        overlayFiredLast = false
         pads.tie(cue)
         refresh()
         onClipStart?(cue, playLength(cue))
@@ -983,6 +1030,106 @@ final class Engine: ObservableObject {
             applyStill()
         }
         return .done
+    }
+
+    // MARK: Overlay
+
+    /// Lays a see-through still over whatever is on air. The picture under
+    /// it is not touched: a video keeps playing, with its clock and sound.
+    private func beginOverlay(_ cue: Cue) -> WireResult {
+        let image: NSImage
+        if let ready = stillReady, ready.id == cue.id, ready.path == cue.path {
+            image = ready.image           // read from disk while it stood by
+        } else {
+            guard let loaded = NSImage(contentsOf: cue.url) else { return refuse("Can't open the still \"\(cue.name)\".") }
+            image = loaded
+        }
+        // One overlay at a time: the one that was on gives way at once.
+        if overlayCue != nil { clearOverlay() }
+        let startLevel: Double = cue.fadeIn > 0 ? 0 : 1
+        let targets = views(for: cue)
+        targets.forEach { $0.showOverlay(image, cue: cue, opacity: Float(startLevel)) }
+        overlayViews = targets
+        overlayCue = cue
+        overlayLevel = startLevel
+        overlayLeaving = false
+        if cue.duration > 0 { armOverlayTimer(cue.duration) }
+        if cue.fadeIn > 0 {
+            fader.run("overlay", from: 0, to: 1, seconds: cue.fadeIn, curve: cue.fadeCurve) { [weak self] v in
+                self?.overlayLevel = v; self?.applyOverlay()
+            }
+        }
+        // Its sound effect fires once; it is not tied to the picture cue's.
+        if !cue.sfxPadId.isEmpty {
+            let padID = cue.sfxPadId
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, cue.sfxDelay)) { [weak self] in
+                guard let self, self.overlayCue?.id == cue.id else { return }
+                self.pads.fire(padID)
+            }
+        }
+        return .done
+    }
+
+    /// Takes the overlay off, over `seconds` if it is more than zero. A
+    /// second call while it is fading cuts it.
+    private func endOverlay(fade seconds: Double) {
+        guard let cue = overlayCue else { return }
+        overlayTimer?.invalidate(); overlayTimer = nil; overlayEndsAt = nil; overlayLeft = nil
+        if seconds > 0, !overlayLeaving {
+            overlayLeaving = true
+            let from = overlayLevel
+            fader.run("overlay", from: 1, to: 0, seconds: seconds, curve: cue.fadeCurve, apply: { [weak self] v in
+                self?.overlayLevel = from * v; self?.applyOverlay()
+            }, done: { [weak self] in
+                guard let self, self.overlayCue?.id == cue.id else { return }
+                self.clearOverlay(); self.refresh()
+            })
+        } else {
+            clearOverlay()
+        }
+        refresh()
+    }
+
+    /// The overlay off, at once.
+    private func clearOverlay() {
+        fader.cancel("overlay")
+        overlayTimer?.invalidate(); overlayTimer = nil; overlayEndsAt = nil; overlayLeft = nil
+        overlayViews.forEach { $0.hideOverlay() }
+        overlayViews = []
+        overlayCue = nil
+        overlayLeaving = false
+        overlayFiredLast = false
+    }
+
+    private func applyOverlay() {
+        overlayViews.forEach { $0.setOverlayOpacity(Float(overlayLevel)) }
+    }
+
+    private func armOverlayTimer(_ seconds: Double) {
+        overlayTimer?.invalidate()
+        overlayEndsAt = Date().addingTimeInterval(seconds)
+        let t = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.overlayEnded() }
+        RunLoop.main.add(t, forMode: .common)
+        overlayTimer = t
+    }
+
+    /// A timed overlay ran out: it comes off (its fade out already ran in
+    /// the last seconds), and Follow fires the next cue.
+    private func overlayEnded() {
+        guard let cue = overlayCue else { return }
+        clearOverlay()
+        if cue.continueMode == .autoFollow, let next = nextArmed(after: cue) {
+            standbyID = nextArmed(after: next)?.id ?? next.id
+            fire(next, from: "Follow")
+        }
+        refresh()
+    }
+
+    /// Whether an overlay is on any output or monitor, and how bright; for tests.
+    var debugOverlay: String {
+        guard let cue = overlayCue else { return "off" }
+        let left = overlayLeft ?? overlayEndsAt.map { max(0, $0.timeIntervalSinceNow) }
+        return "\(cue.name) at \(Int((overlayLevel * 100).rounded()))%" + (left.map { String(format: ", %.1f s left", $0) } ?? ", holds")
     }
 
     /// Where a cue starts if it is picking up after a crash. Used once.
@@ -1408,6 +1555,12 @@ final class Engine: ObservableObject {
             stillCue = cue
             stillViews.forEach { $0.restyle(stillSlot, cue) }
         }
+        if overlayCue?.id == id {
+            // Framing changes show at once. Switched to a color background
+            // while it is on, it comes off: it is no longer an overlay.
+            if cue.isOverlay { overlayCue = cue; overlayViews.forEach { $0.restyleOverlay(cue) } }
+            else { clearOverlay(); refresh() }
+        }
     }
 
     // MARK: Output
@@ -1539,6 +1692,8 @@ final class Engine: ObservableObject {
         monitors.forEach { $0.hide(.s1); $0.hide(.s2) }
         stillViews = []
         stillOut = nil
+        // The overlay goes with the picture it rides on.
+        clearOverlay()
     }
 
     private func stopSound() {
@@ -1691,6 +1846,14 @@ final class Engine: ObservableObject {
             let from = stillLevel
             fader.run("still", from: 1, to: 0, seconds: max(0.05, ends.timeIntervalSinceNow), curve: cue.fadeCurve) { [weak self] v in
                 self?.stillLevel = from * v; self?.applyStill()
+            }
+        }
+        if let cue = overlayCue, cue.fadeOut > 0, !paused, !overlayLeaving, let ends = overlayEndsAt,
+           ends.timeIntervalSinceNow <= cue.fadeOut, !fader.isRunning("overlay") {
+            overlayLeaving = true
+            let from = overlayLevel
+            fader.run("overlay", from: 1, to: 0, seconds: max(0.05, ends.timeIntervalSinceNow), curve: cue.fadeCurve) { [weak self] v in
+                self?.overlayLevel = from * v; self?.applyOverlay()
             }
         }
         let left: Double?
@@ -1863,6 +2026,35 @@ final class Engine: ObservableObject {
     /// What is on the program picture now, for the scopes: the newest video
     /// frame, the still, or the matte. nil when the picture is black.
     func programFrame() -> CIImage? {
+        let picture = pictureFrame()
+        guard let cue = overlayCue else { return picture }
+        if overlayFrame?.id != cue.id || overlayFrame?.path != cue.path {
+            overlayFrame = CIImage(contentsOf: cue.url).map { (cue.id, cue.path, $0) }
+        }
+        guard let over = overlayFrame?.image, over.extent.width > 0, over.extent.height > 0 else { return picture }
+        // Over black when nothing is on air under it, like the output.
+        let canvas = picture ?? CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+        let box = canvas.extent
+        // The cue's fit, then its size and position, like the output layer.
+        var sx = box.width / over.extent.width, sy = box.height / over.extent.height
+        switch cue.fit {
+        case .contain: sx = min(sx, sy); sy = sx
+        case .cover: sx = max(sx, sy); sy = sx
+        case .fill: break
+        }
+        sx *= cue.scale; sy *= cue.scale
+        let w = over.extent.width * sx, h = over.extent.height * sy
+        let x = box.midX - w / 2 + box.width * cue.posX / 100
+        let y = box.midY - h / 2 - box.height * cue.posY / 100      // + is down for the cue, up for the image
+        let placed = over.transformed(by: CGAffineTransform(translationX: -over.extent.minX, y: -over.extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+            .transformed(by: CGAffineTransform(translationX: x, y: y))
+        return placed.composited(over: canvas).cropped(to: box)
+    }
+
+    /// The picture under any overlay: the newest video frame, the still, or
+    /// the matte. nil when the picture is black.
+    private func pictureFrame() -> CIImage? {
         if let d = pictureDeck, let item = d.player.currentItem {
             attachFrames(d)
             if let out = d.frames, out.hasNewPixelBuffer(forItemTime: item.currentTime()),

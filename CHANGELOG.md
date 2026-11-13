@@ -2,6 +2,22 @@
 
 ## Next release (not pushed yet)
 
+### Outrangutan for Mac: a graphic over the video (Nov 13)
+
+- **A PNG can ride over the video.** A see-through still (a lower third,
+  a bug) has a new Background choice in the Inspector's Key section:
+  Video on air. GO then lays the graphic over whatever picture is on air.
+  The video keeps playing, with its own clock and sound.
+- **On and off.** The row says OVERLAY while it is on. Fire the cue again
+  to take it off, or give it a length and it comes off by itself. Its
+  fade in and fade out bring it on and off.
+- **It behaves like a key on a switcher.** One overlay is on at a time. It
+  stays up when another cue takes the picture under it. Stop takes off
+  whatever fired last, and All Stop clears everything.
+- **Show files.** The setting saves and opens on the Mac. The web app does
+  not have overlays yet: there the same still stands on its background
+  color.
+
 ### Row notes switch (Nov 13)
 
 - **A Notes switch on the rundown and in Live.** It sits in the Name

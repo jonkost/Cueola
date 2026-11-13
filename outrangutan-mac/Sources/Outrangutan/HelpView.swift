@@ -20,6 +20,7 @@ struct HelpView: View {
                 "Add Matte makes a solid color picture: black, white, or a chroma green or blue.",
                 "The Library (the books button in the toolbar, or Window, Library, Option-Command-L) comes with the app: common sound effects, and three demo graphics for practicing a key: a lower third, a bug and an OTS box. Add to Cues puts a graphic in the cue list on chroma green, ready for the switcher to key.",
                 "A see-through PNG (a lower third) over a color: in the Inspector's Picture tab, set Key to Alpha and pick Chroma green or Chroma blue as the background. It fills the screen behind the picture, for a key downstream.",
+                "A graphic over a video, with no switcher: set the still's Key to Alpha and its Background to Video on air. GO lays it over whatever is on air and the video keeps playing. The row says OVERLAY while it is on. Fire the cue again to take it off (a hotkey on the cue makes that one key), or give it a length on the Timing tab.",
                 "Drag cues up and down to change the order, or right-click and choose Move Up or Move Down (Option-Command-Up and Down). Command-D makes a copy of a cue.",
                 "The cue standing by is loaded ahead: GO shows its first frame at once. Open the outputs before the show so the picture path is warm too.",
                 "Click a cue to stand it by. Its settings appear in the Inspector on the right (Command-I).",

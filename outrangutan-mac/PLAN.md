@@ -76,7 +76,7 @@ so a deck is either the Mac app's or KeyWi Bird's, never both.
 | Keyboard shortcuts you can change, lock, wall clock | Built (step 6) | |
 | MIDI | Built (step 6) | Uses the Mac's own MIDI system. |
 | Waveform and vectorscope | Built (step 7) | Rec. 709, 15 times a second, only while showing. |
-| Keying: chroma, luma, alpha | Built (step 7) | Keys on the graphics card, full resolution, live on air. Show files carry it both ways. Stills get the Alpha key too (Oct 16): a see-through lower third over chroma green. |
+| Keying: chroma, luma, alpha | Built (step 7) | Keys on the graphics card, full resolution, live on air. Show files carry it both ways. Stills get the Alpha key too (Oct 16): a see-through lower third over chroma green. Overlay (Nov 13, not in the web app): a still's Background can be "Video on air"; GO then lays it over the picture on air as its own layer, the video keeps playing, and firing it again takes it off. A show file marks it for the Mac only; the web app shows that still over its background color. |
 | The next cue loaded ahead | Built (Oct 16) | The cue standing by is open, decoded ahead and on the output layers (hidden) before GO, like a pro deck. GO shows its first frame in about a tenth of a second, down from a third, and the first seconds play clean. |
 | OBS control | Built (step 7) | The same protocol as the web (obs-websocket 5): scene, record and stream actions per cue, and scene triggers. |
 | Dropbox folder sync | Built (step 7) as Watch a Folder | The Dropbox app syncs the folder; Outrangutan watches it. No token to paste. |

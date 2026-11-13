@@ -26,6 +26,10 @@ struct VideoKey: Codable, Equatable {
     var sim: Double = 0.3       // how close to the key color counts as the key
     var smooth: Double = 0.1    // how soft the edge is
     var bg = "#000000"          // what shows where the key takes the picture away
+    /// A still with an Alpha key only: instead of a color, the picture on
+    /// air shows behind it. The still rides over the video as its own layer
+    /// (a lower third over a clip) and does not take the picture's place.
+    var over = false
 
     init() {}
 
@@ -36,6 +40,7 @@ struct VideoKey: Codable, Equatable {
         sim = (try? c.decode(Double.self, forKey: .sim)) ?? 0.3
         smooth = (try? c.decode(Double.self, forKey: .smooth)) ?? 0.1
         bg = (try? c.decode(String.self, forKey: .bg)) ?? "#000000"
+        over = (try? c.decode(Bool.self, forKey: .over)) ?? false
     }
 }
 

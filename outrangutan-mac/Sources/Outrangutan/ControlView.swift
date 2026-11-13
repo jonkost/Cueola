@@ -503,7 +503,10 @@ struct ControlView: View {
     }
 
     private func row(_ cue: Cue, number: Int) -> some View {
-        let onAir = cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id
+        // An overlay on air (a lower third riding over the video) is on air
+        // too, with its own word.
+        let overlay = cue.id == engine.overlayCue?.id
+        let onAir = cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id || overlay
         let waiting = cue.id == engine.pendingCue?.id
         let standby = cue.id == engine.standbyID
         return HStack(spacing: 10) {
@@ -553,6 +556,7 @@ struct ControlView: View {
             }
             Group {
                 if waiting { chip("PRE-WAIT", .orange, solid: true) }
+                else if overlay { chip("OVERLAY", .red, solid: true) }
                 else if onAir { chip("ON AIR", .red, solid: true) }
                 else if standby { chip("STANDBY", .green) }
                 else { Color.clear.frame(height: 1) }
@@ -568,7 +572,7 @@ struct ControlView: View {
         .listRowSeparator(.hidden)
         .opacity(cue.armed ? 1 : 0.55)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Cue \(number), \(cue.name)\(onAir ? ", on air" : "")")
+        .accessibilityLabel("Cue \(number), \(cue.name)\(overlay ? ", overlay on air" : (onAir ? ", on air" : ""))")
         // The right-click menu sits on each row, not on the list's selection:
         // a menu attached to the selection takes the mouse-down a row needs
         // to start a drag, and the cues could not be dragged into a new
@@ -719,7 +723,7 @@ struct ControlView: View {
     }
 
     private var onAirText: String {
-        let names = [engine.pictureCue?.name, engine.soundCue?.name].compactMap { $0 }
+        let names = [engine.pictureCue?.name, engine.soundCue?.name, engine.overlayCue?.name].compactMap { $0 }
         if names.isEmpty, let p = engine.pendingCue { return "Waiting to start: " + p.name }
         return names.isEmpty ? "Nothing on air" : "On air: " + names.joined(separator: " + ")
     }

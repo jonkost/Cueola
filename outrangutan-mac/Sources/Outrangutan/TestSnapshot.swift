@@ -379,6 +379,7 @@ enum TestSnapshot {
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
         case "library": steps = librarySteps(engine: engine, files: files, dir: dir, note: note, snap: snap)
+        case "overlay": steps = overlaySteps(engine: engine, files: files, scopes: scopes, dir: dir, note: note, snap: snap)
         case "stage": steps = stageSteps(engine: engine, link: link, files: files, scopes: scopes, note: note)
         case "padsearch":
             let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized

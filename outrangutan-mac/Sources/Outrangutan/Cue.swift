@@ -148,6 +148,11 @@ struct Cue: Identifiable, Codable, Equatable {
     var label: CueLabel = .none                 // a color to group cues by
     var hotkey = ""                             // a key that fires this cue from anywhere, "" for none
 
+    /// A see-through still set to ride over the picture on air (Key: Alpha,
+    /// Background: Video on air). GO lays it over the video instead of
+    /// taking the video's place.
+    var isOverlay: Bool { kind == .still && key.mode == .alpha && key.over }
+
     init(name: String, path: String, kind: CueKind, wireID: String? = nil) {
         self.name = name
         self.path = path

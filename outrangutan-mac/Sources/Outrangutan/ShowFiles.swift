@@ -196,6 +196,10 @@ final class ShowFiles: ObservableObject {
                 mediaId = id
             }
             if !cue.hotkey.isEmpty { mac["hotkey"] = cue.hotkey }
+            // An overlay (a still riding over the video on air). The web app
+            // and older Macs do not know the word: they read the key's
+            // background color and show the still over that instead.
+            if cue.isOverlay { mac["over"] = true }
             let web: [CueKind: String] = [.video: "var(--video)", .audio: "var(--green)", .still: "var(--yellow)", .matte: "var(--yellow)"]
             cues.append([
                 "id": cue.wireID ?? Cue.newWireID(offsetMs: i), "num": i + 1, "name": cue.name,
@@ -425,6 +429,8 @@ final class ShowFiles: ObservableObject {
                 cue.key.sim = min(1, max(0, Wire.number(k["sim"]) ?? 0.3))
                 cue.key.smooth = min(0.5, max(0, Wire.number(k["smooth"]) ?? 0.1))
                 cue.key.bg = NSColor(hex: Wire.string(k["bg"]) ?? "")?.hexString ?? "#000000"
+                // Only an Alpha-keyed still can ride over the video on air.
+                cue.key.over = kind == .still && cue.key.mode == .alpha && (mac?["over"] as? Bool ?? false)
             }
             return cue
         }

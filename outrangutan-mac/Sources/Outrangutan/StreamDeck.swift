@@ -472,7 +472,7 @@ final class StreamDeckController: ObservableObject {
             f.top = "#\(i + 1)"
             f.label = cue.name.replacingOccurrences(of: "_", with: " ")
             f.dim = !cue.fileIsThere
-            if cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id || cue.id == engine.pendingCue?.id {
+            if cue.id == engine.pictureCue?.id || cue.id == engine.soundCue?.id || cue.id == engine.pendingCue?.id || cue.id == engine.overlayCue?.id {
                 f.rim = DeckFaces.colors.onAir; f.color = engine.isPaused ? DeckFaces.colors.pause : "#b3261e"
             } else if cue.id == engine.standbyID {
                 f.rim = DeckFaces.colors.standby
