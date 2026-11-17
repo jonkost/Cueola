@@ -466,6 +466,14 @@ Pick another test with `OUTRANGUTAN_SCENARIO`:
 - `idle`: four cues and nothing else for about twenty seconds, with each
   row's place on the screen written to rows.txt, so a script can drag a
   real row with the mouse and the log shows the order after.
+  `OUTRANGUTAN_IDLE_TICKS=200` makes the wait longer (3 seconds a tick) and
+  `OUTRANGUTAN_IDLE_PLAY=1` puts a 100 second clip on air first, to drag
+  rows while the clock runs.
+- `quietlist`: the cue list's rows hold still unless something they show
+  changes: no redraws with nothing happening, none while a clip plays and
+  the clock runs, one when a cue moves. (A list that is redrawn while a row
+  is dragged loses the drop; that was why cues could not be dragged into a
+  new order.)
 - `scopes`: color bars, a still and a red matte through the preview and the
   scopes; saves each scope and the frame it read.
 - `listen`: joins show WEBTEST and waits a minute, for trying the direct

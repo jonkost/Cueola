@@ -379,6 +379,7 @@ enum TestSnapshot {
         case "cuekeys": steps = cueKeySteps(engine: engine, files: files, dir: dir, note: note, state: state)
         case "gallery": steps = gallerySteps(engine: engine, link: link, files: files, midi: midi, watch: watch, dir: dir, note: note)
         case "library": steps = librarySteps(engine: engine, files: files, dir: dir, note: note, snap: snap)
+        case "quietlist": steps = quietListSteps(engine: engine, note: note)
         case "overlay": steps = overlaySteps(engine: engine, files: files, scopes: scopes, dir: dir, note: note, snap: snap)
         case "stage": steps = stageSteps(engine: engine, link: link, files: files, scopes: scopes, note: note)
         case "padsearch":
@@ -428,9 +429,17 @@ enum TestSnapshot {
         case "idle": steps = [
             (0.5, {
                 let media = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../demo-media").standardized
-                engine.replaceShow(cues: ["Alpha", "Bravo", "Charlie", "Delta"].enumerated().map { i, n in
+                var cues = ["Alpha", "Bravo", "Charlie", "Delta"].enumerated().map { i, n in
                     Cue(name: n, path: media.appendingPathComponent("still-16x9.png").path, kind: .still, wireID: Cue.newWireID(offsetMs: i))
-                }, pads: [], banks: [], multiTrigger: nil)
+                }
+                // OUTRANGUTAN_IDLE_PLAY=1 puts a clip on air first (it runs 100
+                // seconds), so the clock runs while the rows are dragged.
+                let playing = ProcessInfo.processInfo.environment["OUTRANGUTAN_IDLE_PLAY"] == "1"
+                if playing {
+                    cues.insert(Cue(name: "Bars", path: media.appendingPathComponent("bars-16x9.mp4").path, kind: .video, wireID: Cue.newWireID(offsetMs: 9)), at: 0)
+                }
+                engine.replaceShow(cues: cues, pads: [], banks: [], multiTrigger: nil)
+                if playing { engine.go() }
                 NSApp.activate(ignoringOtherApps: true)
             }),
             (1.5, {
@@ -456,11 +465,14 @@ enum TestSnapshot {
                 note("rows on screen: " + lines.joined(separator: " / "))
                 note("window \(window.windowNumber) frame \(window.frame) screen \(screen.frame) key=\(window.isKeyWindow) active=\(NSApp.isActive)")
             }),
-        ] + (1...7).map { i in (3.0, {
+        // OUTRANGUTAN_IDLE_TICKS makes the wait longer (3 seconds a tick),
+        // for trying a drag by hand or from another tool.
+        ] + (1...max(1, Int(ProcessInfo.processInfo.environment["OUTRANGUTAN_IDLE_TICKS"] ?? "") ?? 7)).map { i in (3.0, {
             // Whose window is under the mouse, so a missed click can be explained.
             let at = NSEvent.mouseLocation
             let mine = NSApp.windows.first(where: { $0.toolbar != nil })?.windowNumber ?? -1
             let top = NSWindow.windowNumber(at: at, belowWindowWithWindowNumber: 0)
+            note("\(i) list drawn \(CueRowsCount.draws) times, clock \(engine.remaining.map { String(format: "%.1f", $0) } ?? "-")")
             note("\(i) cues: " + engine.cues.map(\.name).joined(separator: " | ") + "  standby=\(engine.standbyCue?.name ?? "-") locked=\(engine.locked) mouse \(Int(at.x)),\(Int(at.y)) over=\(top == mine ? "this window" : "window \(top)") key=\(NSApp.windows.first(where: { $0.toolbar != nil })?.isKeyWindow ?? false)")
         }) } + [
             (0.5, {

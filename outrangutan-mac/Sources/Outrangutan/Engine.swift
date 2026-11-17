@@ -1828,7 +1828,11 @@ final class Engine: ObservableObject {
     }
 
     private func tick() {
-        preRemaining = pendingLeft ?? pending.map { max(0, $0.at.timeIntervalSinceNow) }
+        // Only a new value is written. Writing the same one would still tell
+        // every window to redraw, thirty times a second, and a list that is
+        // redrawn while a row is being dragged loses the drop.
+        let pre = pendingLeft ?? pending.map { max(0, $0.at.timeIntervalSinceNow) }
+        if pre != preRemaining { preRemaining = pre }
         // Fade out before the end, for cues that ask for it. A fade-in or a
         // dissolve-in still running goes first; the fade-out then takes
         // whatever time is left.

@@ -45,6 +45,45 @@ private struct ClickWatch: NSViewRepresentable {
     }
 }
 
+/// The cue list's rows, redrawn only when something they show has changed.
+///
+/// While a cue plays, the clock changes thirty times a second and the whole
+/// control window redraws with it. A list that is redrawn while one of its
+/// rows is being dragged forgets where the row was going: the row lifts, no
+/// line shows where it will land, and the drop does nothing. That was why
+/// cues could not be dragged into a new order (found with a real mouse on
+/// Nov 17, 2026). So the rows are compared first, and left alone when
+/// nothing they show is different. Whatever a row shows has to be in Shown,
+/// or the row will not notice it change.
+private struct CueRows<Rows: View>: View, Equatable {
+    struct Shown: Equatable {
+        var cues: [Cue]
+        var standby: UUID?
+        var picture: UUID?
+        var sound: UUID?
+        var overlay: UUID?
+        var waiting: UUID?
+        var picked: Set<UUID>
+        var locked: Bool
+        var lengths: [UUID: Double]
+        var pictures: [String: NSImage]
+        var missing: Set<UUID>
+    }
+    let shown: Shown
+    @ViewBuilder let rows: () -> Rows
+    static func == (a: Self, b: Self) -> Bool { a.shown == b.shown }
+    var body: some View {
+        CueRowsCount.draws += 1
+        return rows()
+    }
+}
+
+/// How many times the cue list's rows have been redrawn. Test mode reads it
+/// to prove the list stays still while a cue plays.
+enum CueRowsCount {
+    static var draws = 0
+}
+
 /// Files from one drop, gathered as each one loads, in the order dropped.
 private final class DroppedFiles {
     var urls: [URL?]
@@ -430,6 +469,23 @@ struct ControlView: View {
                 VStack(spacing: 0) {
                 cueHeader
                 Divider()
+                CueRows(shown: cueRowsShown) { cueRows }.equatable()
+                }
+            }
+        }
+    }
+
+    /// Everything the rows show, for CueRows to compare.
+    private var cueRowsShown: CueRows<AnyView>.Shown {
+        .init(cues: engine.cues, standby: engine.standbyID, picture: engine.pictureCue?.id, sound: engine.soundCue?.id,
+              overlay: engine.overlayCue?.id, waiting: engine.pendingCue?.id, picked: picked, locked: engine.locked,
+              lengths: engine.durations, pictures: thumbs.images,
+              missing: Set(engine.cues.filter { !$0.fileIsThere }.map(\.id)))
+    }
+
+    /// The list itself: pick, drag to reorder, drop files between rows.
+    private var cueRows: AnyView {
+        AnyView(
                 List(selection: Binding(get: { picked }, set: { new in
                     picked = new
                     touchedPads = false
@@ -460,9 +516,7 @@ struct ControlView: View {
                     picked = [id]
                 }
                 .onAppear { if let id = engine.standbyID { picked = [id] } }
-                }
-            }
-        }
+        )
     }
 
     /// Files dropped between two rows: they become cues at that place.
