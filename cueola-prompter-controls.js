@@ -205,7 +205,131 @@
     }).join('') + '</div>';
   }
 
+  // Puts the strip in a page element and makes it work. Every surface uses
+  // this, so a press behaves the same everywhere.
+  //   opts.size, opts.captions   as stripHTML
+  //   opts.getState()            the talent's last report (tidy() form or raw)
+  //   opts.send(out, id, how)    called once per entry press() returns
+  // Returns { sync(state), press(id, how), destroy() }. sync() repaints the
+  // faces in place, so a finger holding Back is never knocked off its button.
+  function mount(host, opts) {
+    opts = opts || {};
+    if (!host) return null;
+    var last = tidy(opts.getState ? opts.getState() : null);
+    host.innerHTML = stripHTML(last, opts);
+    var held = '', repeat = null;
+
+    function fire(id, how) {
+      var st = tidy(opts.getState ? opts.getState() : last);
+      var outs = press(id, st, how);
+      for (var i = 0; i < outs.length; i++) { try { opts.send && opts.send(outs[i], id, how || 'down'); } catch (e) {} }
+      return outs.length > 0;
+    }
+    function letGo() {
+      if (!held) return;
+      var id = held;
+      held = '';
+      if (repeat) { clearInterval(repeat); repeat = null; }
+      var el = host.querySelector('[data-ptc="' + id + '"]');
+      if (el) el.classList.remove('is-held');
+      fire(id, 'up');
+    }
+    function grab(id) {
+      if (held === id) return;
+      letGo();
+      held = id;
+      var el = host.querySelector('[data-ptc="' + id + '"]');
+      if (el) el.classList.add('is-held');
+      fire(id, 'down');
+      // Say it again while the finger is down, so the talent knows it is
+      // still held even if one message was lost.
+      repeat = setInterval(function () { if (held === id) fire(id, 'down'); }, HOLD_REPEAT_MS);
+    }
+    function keyOf(ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('[data-ptc]') : null;
+      return t && host.contains(t) ? t : null;
+    }
+    function onDown(ev) {
+      var el = keyOf(ev);
+      if (!el || !el.hasAttribute('data-ptc-hold')) return;
+      if (ev.button != null && ev.button > 0) return;
+      ev.preventDefault();
+      try { el.setPointerCapture && ev.pointerId != null && el.setPointerCapture(ev.pointerId); } catch (e) {}
+      grab(el.getAttribute('data-ptc'));
+    }
+    function onUp() { letGo(); }
+    function onClick(ev) {
+      var el = keyOf(ev);
+      if (!el || el.tagName !== 'BUTTON') return;
+      if (el.hasAttribute('data-ptc-hold')) {
+        // A keyboard press on a focused hold button (Enter or Space) has no
+        // pointer: give it one short push.
+        if (ev.detail === 0 && !held) { grab(el.getAttribute('data-ptc')); setTimeout(letGo, 350); }
+        return;
+      }
+      fire(el.getAttribute('data-ptc'), 'down');
+      // Let go of focus, or Space would press this button again instead of Play.
+      try { el.blur(); } catch (e) {}
+    }
+    host.addEventListener('pointerdown', onDown);
+    host.addEventListener('pointerup', onUp);
+    host.addEventListener('pointercancel', onUp);
+    host.addEventListener('lostpointercapture', onUp);
+    host.addEventListener('click', onClick);
+    host.addEventListener('contextmenu', function (ev) { if (keyOf(ev)) ev.preventDefault(); });
+
+    function sync(state) {
+      var s = tidy(state == null && opts.getState ? opts.getState() : state);
+      last = s;
+      var strip = host.firstElementChild;
+      if (!strip) return;
+      strip.classList.toggle('is-off', !s.linked);
+      CONTROLS.forEach(function (c) {
+        var el = host.querySelector('[data-ptc="' + c.id + '"]');
+        if (!el) return;
+        var f = face(c.id, s);
+        var label = el.querySelector('.ptc-label');
+        if (label && label.textContent !== f.label) label.textContent = f.label;
+        var sym = el.querySelector('.sf-symbol');
+        if (sym && f.symbol && sym.getAttribute('data-symbol') !== f.symbol) sym.setAttribute('data-symbol', f.symbol);
+        var val = el.querySelector('[data-ptc-value]');
+        if (val && val.textContent !== f.value) { val.textContent = f.value; el.setAttribute('aria-label', 'Speed ' + f.value); }
+        el.classList.toggle('is-rolling', !!f.rolling);
+        el.classList.toggle('is-lit', !!f.lit);
+        el.classList.toggle('is-on', f.lit === 'on');
+        el.classList.toggle('is-air', f.lit === 'air');
+        if (c.hold) el.classList.toggle('is-held', held === c.id || f.held);
+        if (el.hasAttribute('aria-pressed')) el.setAttribute('aria-pressed', (c.id === 'play' ? f.rolling : !!f.lit) ? 'true' : 'false');
+      });
+    }
+
+    return {
+      sync: sync,
+      // The keyboard and the Stream Deck come in here, so a key is the same
+      // press as a click. how: 'down' | 'up'.
+      press: function (id, how) {
+        var c = get(id);
+        if (!c) return false;
+        if (c.hold) { if (how === 'up') letGo(); else grab(id); return true; }
+        if (how === 'up') return false;
+        return fire(id, 'down');
+      },
+      held: function () { return held; },
+      release: letGo,
+      destroy: function () {
+        letGo();
+        host.removeEventListener('pointerdown', onDown);
+        host.removeEventListener('pointerup', onUp);
+        host.removeEventListener('pointercancel', onUp);
+        host.removeEventListener('lostpointercapture', onUp);
+        host.removeEventListener('click', onClick);
+        host.innerHTML = '';
+      }
+    };
+  }
+
   return {
+    mount: mount,
     SPEED_MIN: SPEED_MIN, SPEED_MAX: SPEED_MAX, SPEED_STEP: SPEED_STEP,
     WRAP_DEFAULT_SEC: WRAP_DEFAULT_SEC,
     HOLD_REPEAT_MS: HOLD_REPEAT_MS, HOLD_EXPIRE_MS: HOLD_EXPIRE_MS,

@@ -211,3 +211,45 @@ test('a jog while rolling on slow frames keeps rolling and never hits the end', 
   assert.ok(m.get().pos < 1000, `still near where it was, got ${m.get().pos}`);
   assert.equal(m.get().rolling, true);
 });
+
+test('held Back rolls backward while paused, and stops when let go', () => {
+  const m = E.createMotion({ speed: 60, max: 5000 });
+  m.jumpTo(2000);
+  m.hold('back', true);
+  for (let i = 0; i < 120; i++) m.step(16.7);
+  const moved = m.get().pos;
+  assert.ok(moved < 1800, `went backward, got ${moved}`);
+  m.hold('back', false);
+  for (let i = 0; i < 120; i++) m.step(16.7);
+  const rest = m.get().pos;
+  for (let i = 0; i < 30; i++) m.step(16.7);
+  assert.ok(Math.abs(m.get().pos - rest) < 0.5, 'still after letting go');
+  assert.equal(m.get().rolling, false);
+});
+
+test('held Ahead rolls forward fast, then the roll carries on at its own speed', () => {
+  const m = E.createMotion({ speed: 60, max: 50000 });
+  m.roll(true);
+  for (let i = 0; i < 120; i++) m.step(16.7);
+  m.hold('ahead', true);
+  for (let i = 0; i < 120; i++) m.step(16.7);
+  assert.ok(m.get().vel > 140, `fast while held, got ${m.get().vel}`);
+  m.hold('off');
+  for (let i = 0; i < 240; i++) m.step(16.7);
+  assert.ok(Math.abs(m.get().vel - 60) < 1, `back to the set speed, got ${m.get().vel}`);
+  assert.equal(m.get().rolling, true);
+});
+
+test('Back stops at the top and Ahead stops at the end', () => {
+  const m = E.createMotion({ speed: 60, max: 300 });
+  m.jumpTo(100);
+  m.hold('back', true);
+  for (let i = 0; i < 200; i++) m.step(16.7);
+  assert.equal(m.get().pos, 0);
+  m.hold('ahead', true);
+  let ended = false;
+  for (let i = 0; i < 400; i++) ended = m.step(16.7).ended || ended;
+  assert.equal(m.get().pos, 300);
+  assert.ok(ended);
+  assert.equal(m.get().dir, '', 'the hold lets go at the end');
+});

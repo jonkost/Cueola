@@ -33,6 +33,9 @@
   var BRAKE_FACTOR = 0.25;    // held brake: a quarter speed, never below 2 px/s
   var BOOST_FACTOR = 2.5;     // held boost: two and a half times, capped at 300
   var BOOST_CAP = 300;
+  var HOLD_FACTOR = 2.5;      // held Back or Ahead: two and a half times the speed,
+  var HOLD_MIN = 120;         // never slower than this, so a slow roll still shuttles
+  var HOLD_CAP = 300;
   var EASE_MS = 270;          // the crawl's ramp to a new speed (and from 0 at play)
   var JOG_OMEGA = 30;         // dial stiffness: settles in about a fifth of a second
   var LAND_PX = 0.5;
@@ -59,11 +62,18 @@
       brake: false,
       boost: false,
       reverse: false,
+      dir: '',       // 'back' | 'ahead' while that control is held
       target: null   // { to, omega, kind } while travelling
     };
 
     // The speed the crawl wants right now, with the held modifiers applied.
     function cruise() {
+      // Back and Ahead move the copy while held, rolling or paused. Let go
+      // and the screen is back to whatever it was doing: rolling or still.
+      if (s.dir) {
+        var h = clamp(s.speed * HOLD_FACTOR, HOLD_MIN, HOLD_CAP);
+        return s.dir === 'back' ? -h : h;
+      }
       if (!s.rolling) return 0;
       var v = s.speed;
       if (s.brake) v = Math.max(v * BRAKE_FACTOR, 2);
@@ -95,6 +105,10 @@
       if (name === 'brake') s.brake = !!on;
       else if (name === 'boost') s.boost = !!on;
       else if (name === 'reverse') s.reverse = !!on;
+      else if (name === 'back' || name === 'ahead') {
+        if (on) s.dir = name;
+        else if (s.dir === name) s.dir = '';
+      } else if (name === 'off') s.dir = '';
     }
 
     // A cue: travel to a spot over a set time with an ease in and out, the
@@ -213,6 +227,7 @@
         s.vel = 0;
         s.target = null;
         s.rolling = false;
+        s.dir = '';
         ended = true;
       } else if (s.pos <= 0 && want < 0) {
         s.pos = 0;
@@ -225,7 +240,7 @@
     }
 
     function get() {
-      return { pos: s.pos, vel: s.vel, max: s.max, speed: s.speed, rolling: s.rolling, brake: s.brake, boost: s.boost, reverse: s.reverse, target: s.target ? { to: s.target.to, kind: s.target.kind } : null };
+      return { pos: s.pos, vel: s.vel, max: s.max, speed: s.speed, rolling: s.rolling, brake: s.brake, boost: s.boost, reverse: s.reverse, dir: s.dir, target: s.target ? { to: s.target.to, kind: s.target.kind } : null };
     }
 
     return {

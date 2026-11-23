@@ -28,14 +28,27 @@ button.ptc-key:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @keyframes ptc-wait{50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){.ptc-key{transition:none}.ptc-key.is-waiting{animation:none;opacity:.7}}
 
-/* Pictures for the controls that Cueola's symbol set did not have yet. */
+/* Pictures for the controls that Cueola's symbol set did not have yet.
+   The paths are read from assets/sf-symbols.css (the sheet that uses them), hence the ../ */
 .sf-symbol[data-symbol="pt.prev"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3.5' y='5' width='3' height='14' rx='1.2'/%3E%3Cpath d='M20.5 6.2v11.6a1 1 0 0 1-1.5.8L9 12.9a1 1 0 0 1 0-1.8l10-5.7a1 1 0 0 1 1.5.8z'/%3E%3C/svg%3E")}
 .sf-symbol[data-symbol="pt.next"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='17.5' y='5' width='3' height='14' rx='1.2'/%3E%3Cpath d='M3.5 6.2v11.6a1 1 0 0 0 1.5.8l10-5.7a1 1 0 0 0 0-1.8L5 5.4a1 1 0 0 0-1.5.8z'/%3E%3C/svg%3E")}
 .sf-symbol[data-symbol="pt.back"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 6.4v11.2a1 1 0 0 1-1.5.8L1.8 12.8a1 1 0 0 1 0-1.6l8.7-5.6a1 1 0 0 1 1.5.8z'/%3E%3Cpath d='M22.5 6.4v11.2a1 1 0 0 1-1.5.8l-8.7-5.6a1 1 0 0 1 0-1.6L21 5.6a1 1 0 0 1 1.5.8z'/%3E%3C/svg%3E")}
 .sf-symbol[data-symbol="pt.ahead"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 6.4v11.2a1 1 0 0 0 1.5.8l8.7-5.6a1 1 0 0 0 0-1.6l-8.7-5.6a1 1 0 0 0-1.5.8z'/%3E%3Cpath d='M1.5 6.4v11.2a1 1 0 0 0 1.5.8l8.7-5.6a1 1 0 0 0 0-1.6L3 5.6a1 1 0 0 0-1.5.8z'/%3E%3C/svg%3E")}
 .sf-symbol[data-symbol="pt.play"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4.6v14.8a1.2 1.2 0 0 0 1.8 1l12.4-7.4a1.2 1.2 0 0 0 0-2L7.8 3.6a1.2 1.2 0 0 0-1.8 1z'/%3E%3C/svg%3E")}
 .sf-symbol[data-symbol="pt.pause"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='4' width='5' height='16' rx='1.4'/%3E%3Crect x='14' y='4' width='5' height='16' rx='1.4'/%3E%3C/svg%3E")}
-.sf-symbol[data-symbol="pt.top"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/arrows/arrow.up.to.line.svg")}
-.sf-symbol[data-symbol="pt.follow"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/textformatting/text.line.first.and.arrowtriangle.forward.svg")}
-.sf-symbol[data-symbol="pt.wrap"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/time/timer.svg")}
-.sf-symbol[data-symbol="pt.message"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/textformatting/quote.bubble.svg")}
+.sf-symbol[data-symbol="pt.top"]{--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/arrows/arrow.up.to.line.svg")}
+.sf-symbol[data-symbol="pt.follow"]{--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/textformatting/text.line.first.and.arrowtriangle.forward.svg")}
+.sf-symbol[data-symbol="pt.wrap"]{--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/time/timer.svg")}
+.sf-symbol[data-symbol="pt.message"]{--sf-symbol:url("../design-system/apple/symbols/runtime/light-small/textformatting/quote.bubble.svg")}
+
+/* On the talent screen the strip takes the prompter theme's own colors. */
+#promptypus .ptc-strip{--btn-fill:color-mix(in srgb,var(--pt-text,#f0ead6) 10%,transparent);--btn-fill-2:color-mix(in srgb,var(--pt-text,#f0ead6) 18%,transparent);--text:var(--pt-text,#f0ead6);--text3:color-mix(in srgb,var(--pt-text,#f0ead6) 58%,transparent);--accent:var(--pt-accent,var(--accent))}
+#promptypus #pt-controls{padding:0 2px 2px}
+/* One row on the talent screen at any width: the keys size to the screen. */
+#promptypus #pt-controls .ptc-strip{--ptc-w:clamp(44px,5.1vw,88px);--ptc-h:clamp(40px,4.1vw,68px);--ptc-r:clamp(10px,1vw,17px);--ptc-gap:clamp(3px,.45vw,6px);--ptc-fs:clamp(8.5px,.82vw,12px);--ptc-is:clamp(14px,1.3vw,22px);--ptc-ggap:clamp(8px,1.3vw,20px);flex-wrap:nowrap}
+@media (max-width:760px){#promptypus #pt-controls .ptc-strip{flex-wrap:wrap;--ptc-w:17vw;--ptc-h:13vw;--ptc-r:3.2vw;--ptc-gap:1.4vw;--ptc-fs:2.6vw;--ptc-is:4.4vw}}
+#promptypus #pt-slate.standby .pt-slate-mark{display:none}
+#promptypus .ptc-key.ptc-play.is-rolling,#promptypus button.ptc-key.ptc-play.is-rolling:hover{background:var(--pt-ok,var(--green))}
+#promptypus[data-pt-theme="white"] .ptc-key.ptc-play.is-rolling{color:#fff}
+#promptypus[data-pt-theme="white"] .ptc-key.is-lit.is-air{background:color-mix(in srgb,var(--yellow) 55%,transparent)}
+#promptypus[data-pt-theme="white"] .ptc-key.is-lit.is-on{background:color-mix(in srgb,var(--cue-script) 34%,transparent)}

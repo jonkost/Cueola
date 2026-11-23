@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
+<link rel="stylesheet" href="cueola-prompter-controls.css?v=1ed042ff0d">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
@@ -5828,7 +5829,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       <span class="pt-check" id="pt-check-script" data-tip="A script is loaded">Script</span>
     </div>
     <button class="pt-bar-controls-btn" onclick="ptOpenEdit()">Link a show</button>
-    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptOpenSettings()" data-tip="Settings (S)" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
+    <button class="pt-bar-controls-btn icon-only" onclick="ptToggleFullscreen()" data-tip="Full screen" aria-label="Full screen"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
+    <button class="pt-bar-controls-btn icon-only" id="pt-gear-btn" onclick="ptOpenSettings()" data-tip="Settings (,)" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span></button>
   </div>
 
   <!-- Stage: the copy rolls under the read line -->
@@ -5849,8 +5851,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <div id="pt-slate" role="status" aria-live="polite">
     <div class="pt-slate-inner">
       <div class="pt-slate-mark"><span class="sf-symbol" data-symbol="state.warning" aria-hidden="true"></span></div>
-      <div class="pt-slate-title">Technical Difficulties</div>
-      <div class="pt-slate-sub">Please stand by</div>
+      <div class="pt-slate-title" id="pt-slate-title">Technical Difficulties</div>
+      <div class="pt-slate-sub" id="pt-slate-sub">Please stand by</div>
     </div>
     <div class="pt-bars-pattern" aria-label="Generated NTSC color bars">
       <div class="pt-bars-top"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
@@ -5882,42 +5884,16 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     </div>
   </div>
 
-  <!-- Floating control panel: one glass bubble, one row, every button the same size.
-       The looks (theme, align, read line, width, row info) live in Settings (gear, S). -->
+  <!-- Floating control panel: one glass bubble holding the one control set.
+       The looks (size, mirror, theme, align, read line, width) live in Settings (the gear). -->
   <div id="pt-panel">
     <div class="pt-card-grip" id="pt-panel-grip" title="Drag to move" onpointerdown="ptCardDragStart(event,'pt-panel')"><span class="pt-grip-bar" aria-hidden="true"></span></div>
-    <div class="pt-panel-row">
-      <div class="pt-ctrl-group pt-ctrl-transport">
-        <button class="pt-btn pt-primary" id="pt-play-btn" onclick="ptTogglePlay()" aria-label="Play or pause">
-          <span id="pt-play-icon" class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span>
-          <span>Play</span>
-        </button>
-        <button class="pt-btn" onclick="ptResetScroll()" data-tip="Back to the top of the script (R)"><span class="sf-symbol" data-symbol="action.reset" aria-hidden="true"></span><span>Top</span></button>
-        <button class="pt-btn" id="pt-reverse-btn" onclick="ptSetReversing(!ptReversing)" data-tip="Roll the script backward while on (Option + Down on, Option + Up off)" aria-pressed="false">Reverse</button>
-      </div>
-      <div class="pt-ctrl-group pt-ctrl-slider" role="group" aria-label="Prompter speed">
-        <span class="pt-ctrl-label">Speed</span>
-        <button class="pt-btn pt-step" onclick="ptAdjustSpeed(-5)" data-tip="Scroll slower" aria-label="Decrease speed">−</button>
-        <input type="range" class="pt-range" id="pt-speed-slider" min="5" max="200" value="60" oninput="ptSetSpeed(this.value)" aria-label="Prompter speed">
-        <button class="pt-btn pt-step" onclick="ptAdjustSpeed(5)" data-tip="Scroll faster" aria-label="Increase speed">+</button>
-        <output class="pt-ctrl-num" id="pt-speed-value" for="pt-speed-slider">60</output>
-      </div>
-      <div class="pt-ctrl-group pt-ctrl-slider" role="group" aria-label="Prompter text size">
-        <span class="pt-ctrl-label">Size</span>
-        <button class="pt-btn pt-step" onclick="ptAdjustSize(-4)" data-tip="Make the text smaller" aria-label="Decrease text size">−</button>
-        <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)" aria-label="Prompter text size">
-        <button class="pt-btn pt-step" onclick="ptAdjustSize(4)" data-tip="Make the text larger" aria-label="Increase text size">+</button>
-        <output class="pt-ctrl-num" id="pt-size-value" for="pt-size-slider">52</output>
-      </div>
-      <div class="pt-ctrl-group">
-        <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()" data-tip="Flip the copy for a beam splitter (M)" aria-pressed="false">Mirror</button>
-        <button class="pt-btn" onclick="ptToggleFullscreen()" data-tip="Fullscreen (F)"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span><span>Fullscreen</span></button>
-        <button class="pt-btn" onclick="ptOpenSettings()" data-tip="Theme, text, read line, keys (S)"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Settings</span></button>
-      </div>
-    </div>
+    <!-- The one control set (cueola-prompter-controls.js). The same fifteen
+         controls every operator screen and the Stream Deck have. -->
+    <div id="pt-controls"></div>
   </div>
 
-  <!-- Settings sheet (gear, S): the looks, the screen, the keys -->
+  <!-- Settings sheet (the gear): the looks, the screen, the keys -->
   <div id="pt-settings-overlay" class="pt-sheet-overlay" onclick="if(event.target===this)ptCloseSettings()">
     <div id="pt-settings-box" class="pt-sheet" role="dialog" aria-modal="true" aria-labelledby="pt-settings-title" tabindex="-1">
       <div class="pt-sheet-head">
@@ -5942,6 +5918,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       </div>
       <div class="pt-sheet-section">
         <h3>Text</h3>
+        <div class="pt-sheet-row" role="group" aria-label="Text size">
+          <span class="pt-ctrl-label">Size</span>
+          <span class="pt-stepper">
+            <button class="pt-btn pt-step" onclick="ptAdjustSize(-4)" aria-label="Smaller text">−</button>
+            <input type="range" class="pt-range" id="pt-size-slider" min="24" max="120" value="52" oninput="ptSetSize(this.value)" aria-label="Text size">
+            <button class="pt-btn pt-step" onclick="ptAdjustSize(4)" aria-label="Bigger text">+</button>
+            <output class="pt-ctrl-num pt-stepper-val" id="pt-size-value" for="pt-size-slider">52</output>
+          </span>
+        </div>
         <div class="pt-sheet-row" role="group" aria-label="Align">
           <span class="pt-ctrl-label">Align</span>
           <div class="pt-seg">
@@ -5968,8 +5953,12 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       </div>
       <div class="pt-sheet-section">
         <h3>Screen</h3>
+        <div class="pt-sheet-row">
+          <span class="pt-ctrl-label">Mirror for a beam splitter</span>
+          <button class="pt-btn" id="pt-mirror-btn" onclick="ptToggleMirror()" aria-pressed="false">Mirror</button>
+        </div>
         <label class="pt-sheet-row pt-sheet-switch" for="pt-rowinfo-toggle" data-tip="Show the NEXT and HOLDING row chips along the bottom">
-          <span class="pt-ctrl-label">Row info chips (NEXT and HOLDING)</span>
+          <span class="pt-ctrl-label">Row info (NEXT and HOLDING)</span>
           <input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)">
         </label>
         <div class="pt-sheet-row" role="group" aria-label="Overlay size">
@@ -5995,26 +5984,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       </div>
       <div class="pt-sheet-section">
         <h3>Keys</h3>
-        <div class="pt-keys">
-          <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Tap the script</span><span class="pt-hint-desc">Play or pause</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Double tap a line</span><span class="pt-hint-desc">Cue that line</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Drag down / up</span><span class="pt-hint-desc">Brake / boost</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Pinch</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">L</span><span class="pt-hint-desc">Read line center / high</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">W</span><span class="pt-hint-desc">Text width</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Fullscreen</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide or show controls</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">S</span><span class="pt-hint-desc">Settings</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">E</span><span class="pt-hint-desc">Link a show, load a script</span></div>
-          <div class="pt-hint-row"><span class="pt-hint-key">Esc</span><span class="pt-hint-desc">Close or pause</span></div>
-        </div>
+        <div class="pt-keys" id="pt-keys-list"></div>
       </div>
       <div class="pt-edit-actions">
         <button class="pt-btn" onclick="ptCloseSettings();ptOpenEdit()">Link a show or load a script</button>
@@ -7804,14 +7774,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
-<script src="cueola-prompter-engine.js?v=355066924d"></script>
-<script src="cueola-prompter-desk.js?v=e99b8a96ca"></script>
+<script src="cueola-prompter-engine.js?v=f66f42cef3"></script>
+<script src="cueola-prompter-desk.js?v=e3bc7017e7"></script>
+<script src="cueola-prompter-controls.js?v=4ab5b570a4"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
 <script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=b5eb4a4354"></script>
+<script src="cueola-app.js?v=8b5fe0c9ac"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

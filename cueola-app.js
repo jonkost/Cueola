@@ -17237,6 +17237,15 @@ let ptLiveSpeed = 60;
 let ptBraking = false;
 let ptBoosting = false;
 let ptReversing = false;
+// The one control set (cueola-prompter-controls.js). Back and Ahead are held:
+// ptHoldDir is 'back', 'ahead' or '' and the engine moves the copy while set.
+let ptHoldDir = '';
+let _ptHoldTimer = null;
+// Follow: every TAKE cues the prompter to that row. On unless turned off.
+let ptFollow = (() => { try { return localStorage.getItem('cueola_prompter_follow') !== '0'; } catch { return true; } })();
+let ptStandbyOn = false;      // the Standby slate covers the script
+let _ptControls = null;       // the mounted strip on the talent screen
+let _ptStepRowTarget = null;  // the row a Prev row / Next row press is travelling to
 let ptMirrored = false;
 // Row info (owner 9/15): the NEXT / HOLDING chips along the bottom of the
 // talent screen. A talent-local preference, driven from the talent panel or
@@ -17520,6 +17529,11 @@ function ptTalentHeartbeat() {
     ...rawHeartbeat.state,
     size:ptFontSize, align:ptAlign, theme:ptThemeName, mirrored:ptMirrored,
     heldAtRow:ptAutoHeldRow,
+    // What the one control set lights from: every operator screen and the
+    // Stream Deck read these, so a key is lit only when it is true here.
+    playing:ptPlaying, speed:ptTargetSpeed, follow:ptFollow, hold:ptHoldDir,
+    standbyOn:ptStandbyOn, techSlateOn:ptTechSlateOn, colorBarsOn:ptColorBarsOn,
+    questionOn:ptQuestionOn, questionText:ptQuestionText, clockState:{ ...ptClockState },
     // Measured row truth: the header at/above the read line, and whether an
     // advance left the talent ahead of the rundown.
     rowNum:ptCurrentRowNum(), ahead:!!ptAheadOfLive,
@@ -17594,6 +17608,7 @@ function stopPrompterTalentRuntime() {
   ptReversing = false;
   ptBraking = false;
   ptBoosting = false;
+  ptHoldDir = '';
   if (ptHeartbeatInterval) ptHeartbeatInterval.cancel();
   ptHeartbeatInterval = null;
   ptPingBurstTimers.forEach(clearTimeout);
@@ -17840,10 +17855,13 @@ let _ptReadoutAt = 0;
 
 function ptLoopWanted() {
   const st = ptMotion.get();
-  return st.rolling || !!st.target || Math.abs(st.vel) > 0.01;
+  return st.rolling || !!st.dir || !!st.target || Math.abs(st.vel) > 0.01;
 }
 function ptKick() {
-  if (_ptRaf) return;
+  // A frame is already asked for. In a hidden or covered window that frame
+  // may never come, so make sure the timer that stands in for it is running
+  // (a pause stops that timer; the next move must start it again).
+  if (_ptRaf) { if (ptLoopWanted()) _ptStartFreeRunFallback(); return; }
   if (!ptLoopWanted()) { ptPaint(); return; }
   _ptLastTs = null;
   _ptRaf = requestAnimationFrame(ptFrame);
@@ -17878,11 +17896,12 @@ function ptFrame(ts, fromFallback=false) {
   }
   if (r.ended) {
     // The end of the script: the roll stops there.
+    if (ptHoldDir) ptSetHold('');
     ptStopPlay();
     return;
   }
   if (ts - _ptProgPaintAt > 100) { _ptProgPaintAt = ts; ptUpdateProgress(); }
-  if (ptPlaying && !ptMotion.travelling()) {
+  if (ptPlaying && !ptMotion.travelling() && !ptHoldDir) {
     if (ptCheckAutoPauseMarkers()) return;
     if (ptCheckRowHold()) return;
   }
@@ -18165,6 +18184,101 @@ function ptRenderReadout() {
 }
 
 // ── Transport ───────────────────────────────────────────────────────────────
+// ── The one control set on the talent screen ───────────────────────────────
+// What this talent screen is doing, in the form every control surface reads.
+function ptControlState() {
+  return window.CueolaPrompterControls.stateFromTalent({
+    playing:ptPlaying, speed:ptTargetSpeed, follow:ptFollow, hold:ptHoldDir,
+    clockState:ptClockState, questionOn:ptQuestionOn,
+    standbyOn:ptStandbyOn, techSlateOn:ptTechSlateOn, colorBarsOn:ptColorBarsOn,
+  }, true);
+}
+function ptSyncControls() {
+  if (_ptControls) _ptControls.sync(ptControlState());
+}
+function ptMountControls() {
+  const host = ptEl('pt-controls');
+  if (!host) return;
+  if (_ptControls) { ptSyncControls(); return; }
+  _ptControls = window.CueolaPrompterControls.mount(host, { getState:ptControlState, send:ptLocalControl });
+  ptRenderKeysList();
+}
+// A press made ON the talent screen (its own buttons or keys). It does the
+// same thing an operator's press does, with no trip through the cloud, so
+// the talent can always run the screen in front of them.
+let _ptLocalBeatTimer = null;
+function ptLocalControl(out) {
+  if (!out) return;
+  if (out.ui === 'message') { toast('Messages come from the operator.'); return; }
+  if (!out.action) return;
+  ptHandleRemoteControl(out.action, out.payload || null);
+  ptSyncControls();
+  // Tell the operators soon, in one report, not one per press.
+  clearTimeout(_ptLocalBeatTimer);
+  _ptLocalBeatTimer = setTimeout(() => { try { ptTalentHeartbeat(); } catch {} }, 250);
+}
+// Back and Ahead. The copy moves while one is held and stops when it is let
+// go. If the "let go" never arrives (a lost message), the hold ends by itself.
+function ptSetHold(dir) {
+  dir = dir === 'back' || dir === 'ahead' ? dir : '';
+  ptHoldDir = dir;
+  clearTimeout(_ptHoldTimer);
+  _ptHoldTimer = null;
+  if (dir) {
+    ptMotion.hold(dir, true);
+    _ptHoldTimer = setTimeout(() => ptSetHold(''), window.CueolaPrompterControls.HOLD_EXPIRE_MS);
+    ptAutoHeldRow = null;
+    ptRenderHoldChip();
+    _ptLastFrameAt = _ptLastFallbackAt = performance.now();
+    ptKick();
+  } else {
+    ptMotion.hold('off');
+    ptRecalcRowHolds();
+  }
+  ptSyncControls();
+}
+// Prev row and Next row: glide to the start of the row before or after the
+// one under the read line. A second quick press counts from where the first
+// one is headed, so two presses move two rows.
+function ptStepRow(dir) {
+  const rows = ptHeaders();
+  if (!rows.length) return false;
+  let idx = -1;
+  if (ptMotion.travelling() && _ptStepRowTarget != null) idx = rows.findIndex(r => r.row === _ptStepRowTarget);
+  if (idx < 0) { const cur = ptRowAtReadLine(); idx = cur ? rows.indexOf(cur) : -1; }
+  const target = dir > 0 ? rows[idx + 1] : rows[Math.max(0, idx - 1)];
+  if (!target) return false;
+  _ptStepRowTarget = target.row;
+  ptAutoHeldRow = null;
+  ptPendingHoldResume = false;
+  ptRenderHoldChip();
+  ptGlideToOffset(ptMotion.get().pos + ptRowLandingDelta(target), () => { _ptStepRowTarget = null; ptRecalcRowHolds(); });
+  return true;
+}
+function ptSetFollow(on) {
+  ptFollow = on !== false;
+  try { localStorage.setItem('cueola_prompter_follow', ptFollow ? '1' : '0'); } catch {}
+  ptSyncControls();
+}
+// The Keys list in Settings is written from the control set, so it can
+// never fall out of step with what the keys really do.
+function ptRenderKeysList() {
+  const host = ptEl('pt-keys-list');
+  if (!host) return;
+  const row = (k, d) => `<div class="pt-hint-row"><span class="pt-hint-key">${esc(k)}</span><span class="pt-hint-desc">${esc(d)}</span></div>`;
+  const C = window.CueolaPrompterControls;
+  const rows = C.CONTROLS.filter(c => c.key).map(c => row(c.hold ? `${c.key} (hold)` : c.key, c.id === 'play' ? 'Play or pause' : c.label));
+  rows.push(row('H', 'Hide or show the controls'));
+  rows.push(row('L', 'Read line center or high'));
+  rows.push(row(',', 'Settings'));
+  rows.push(row('E', 'Link a show'));
+  rows.push(row('Tap the script', 'Play or pause'));
+  rows.push(row('Double tap a line', 'Cue that line'));
+  rows.push(row('Drag or scroll', 'Move the script'));
+  rows.push(row('Pinch', 'Text smaller or bigger'));
+  host.innerHTML = rows.join('');
+}
+
 function ptStartPlay() {
   if (ptPlaying) return;
   ptAutoHeldRow = null;
@@ -18218,6 +18332,7 @@ function ptSetSpeed(val) {
   syncPrompterSliderReadouts();
   _ptReadoutKey = '';
   ptRenderReadout();
+  ptSyncControls();
 }
 function ptAdjustSpeed(delta) {
   ptSetSpeed(Math.max(PT_ENGINE.SPEED_MIN, Math.min(PT_ENGINE.SPEED_MAX, ptTargetSpeed + delta)));
@@ -18733,6 +18848,7 @@ function ptSyncPlayIcons(isPlaying) {
     patchPrompterPlayButton(btn, isPlaying);
   });
   if (icon) icon.dataset.symbol = isPlaying ? 'media.pause' : 'media.play';
+  ptSyncControls();
 }
 
 function patchPrompterPlayButton(btn, isPlaying) {
@@ -18960,37 +19076,66 @@ function syncLiveTextZoomReadout() {
 // landing). REBUILT, never accumulated: a scrub-ahead never insta-holds, and
 // a scrub-back automatically re-arms the boundaries it moved behind.
 // Full-screen generated slates. Instant hold + scroll pause.
+function ptSlateWords(title, sub) {
+  const t = ptEl('pt-slate-title'), u = ptEl('pt-slate-sub');
+  if (t) t.textContent = title;
+  if (u) u.textContent = sub;
+}
 function ptShowTechSlate() {
   ptTechSlateOn = true;
   ptColorBarsOn = false;
+  ptStandbyOn = false;
   ptStopPlay();
+  ptSlateWords('Technical Difficulties', 'Please stand by');
   const slate = ptEl('pt-slate');
   if (slate) {
     slate.classList.add('on');
+    slate.classList.remove('bars', 'standby');
+  }
+  syncTechButtons();
+  ptSyncControls();
+}
+// Standby: covers the script before the show or during a break. The script
+// stays loaded and in place underneath.
+function ptShowStandbySlate() {
+  ptStandbyOn = true;
+  ptTechSlateOn = false;
+  ptColorBarsOn = false;
+  ptStopPlay();
+  ptSlateWords('Standby', 'The script is loaded and ready');
+  const slate = ptEl('pt-slate');
+  if (slate) {
+    slate.classList.add('on', 'standby');
     slate.classList.remove('bars');
   }
   syncTechButtons();
+  ptSyncControls();
 }
 function ptShowColorBars() {
   ptColorBarsOn = true;
   ptTechSlateOn = false;
+  ptStandbyOn = false;
   ptStopPlay();
   const slate = ptEl('pt-slate');
   if (slate) {
     slate.classList.add('on', 'bars');
+    slate.classList.remove('standby');
   }
   syncTechButtons();
+  ptSyncControls();
 }
 function ptHideAllSlates() {
   ptTechSlateOn = false;
   ptColorBarsOn = false;
+  ptStandbyOn = false;
   const slate = ptEl('pt-slate');
-  if (slate) slate.classList.remove('on', 'bars');
+  if (slate) slate.classList.remove('on', 'bars', 'standby');
   syncTechButtons();
+  ptSyncControls();
 }
 
 function anyTalentSlateOn() {
-  return ptTechSlateOn || ptColorBarsOn;
+  return ptTechSlateOn || ptColorBarsOn || ptStandbyOn;
 }
 
 function patchIconLabelButton(button, symbol, label) {
@@ -19851,6 +19996,9 @@ function ptStateSnapshot() {
     // Overlay truth rides the ack so operator windows reconcile their mirrors.
     techSlateOn: ptTechSlateOn,
     colorBarsOn: ptColorBarsOn,
+    standbyOn: ptStandbyOn,
+    follow: ptFollow,
+    hold: ptHoldDir,
     questionOn: ptQuestionOn,
     questionText: ptQuestionText,
     clockState: { ...ptClockState },
@@ -20338,10 +20486,12 @@ function ptHandleRemoteControl(action, payload=null) {
   if (action === 'seek_text') { ptSeekToText(payload?.q); return; }
   if (action === 'clock_off' || action === 'clock_timeofday' || action === 'clock_size_up' || action === 'clock_size_down' || action?.startsWith('clock_until_') || action?.startsWith('clock_duration_') || action?.startsWith('wrapup_')) {
     applyClockActionToState(action, 'talent');
+    ptSyncControls();
     return;
   }
   if (action === 'question_on' || action === 'question_off') {
     applyQuestionAction(action, 'talent', payload?.text);
+    ptSyncControls();
     return;
   }
   if (action === 'overlays_clear') {
@@ -20349,6 +20499,7 @@ function ptHandleRemoteControl(action, payload=null) {
     ptHideAllSlates();
     applyClockActionToState('clock_off', 'talent');
     applyQuestionAction('question_off', 'talent');
+    ptSyncControls();
     return;
   }
   switch (action) {
@@ -20356,6 +20507,15 @@ function ptHandleRemoteControl(action, payload=null) {
     case 'slate_tech_off': ptHideAllSlates(); break;
     case 'slate_bars_on':  ptShowColorBars(); break;
     case 'slate_bars_off': ptHideAllSlates(); break;
+    case 'slate_standby_on':  ptShowStandbySlate(); break;
+    case 'slate_standby_off': ptHideAllSlates(); break;
+    case 'hold_back':  ptSetHold('back'); break;
+    case 'hold_ahead': ptSetHold('ahead'); break;
+    case 'hold_off':   ptSetHold(''); break;
+    case 'row_prev':   ptStepRow(-1); break;
+    case 'row_next':   ptStepRow(1); break;
+    case 'follow_on':  ptSetFollow(true); break;
+    case 'follow_off': ptSetFollow(false); break;
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;
@@ -21689,6 +21849,7 @@ function enterPrompter() {
   const storedOverlay = ptStoredOverlaySize();
   if (storedOverlay != null) ptSetOverlaySize(storedOverlay, { persist:false });
   ptRenderClockOverlay();
+  ptMountControls();
   ptUpdateSyncLabel();
   ptRestorePanelLayout();
   // The door: last code prefilled (Enter alone reconnects) and your shows listed.
@@ -21709,43 +21870,31 @@ function enterPrompter() {
     }
     if (ptSettingsOpen()) {
       if (e.key === 'Escape') ptCloseSettings();
-      else if (!isInteractiveEventTarget(e) && (e.key === 's' || e.key === 'S')) ptCloseSettings();
+      else if (!isInteractiveEventTarget(e) && e.key === ',') ptCloseSettings();
       return;
     }
     if (isInteractiveEventTarget(e)) return;
-    if (e.metaKey || e.ctrlKey) return;   // Cmd+F / Cmd+R / Cmd+M belong to the browser
-    if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); ptSetReversing(true); return; }
-    if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); ptSetReversing(false); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;   // Cmd+F / Cmd+R / Cmd+M belong to the browser
+    // The one control set: a key is the same press as its button.
+    const control = window.CueolaPrompterControls.keyControl(e);
+    if (control) {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (_ptControls) _ptControls.press(control, 'down');
+      return;
+    }
     if (e.repeat) return;
     switch (e.key) {
-      case ' ':          e.preventDefault(); ptTogglePlay(); break;
-      case 'ArrowUp':    e.preventDefault(); ptBoosting = true; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); break;
-      case 'ArrowDown':  e.preventDefault(); ptBraking = true; break;
-      case 'ArrowLeft':  e.preventDefault(); ptAdjustSize(-4); break;
-      case 'ArrowRight': e.preventDefault(); ptAdjustSize(4); break;
-      case 'f': case 'F': ptToggleFullscreen(); break;
       case 'e': case 'E': ptOpenEdit(); break;
-      case 'r': case 'R': ptResetScroll(); break;
       case 'h': case 'H': ptTogglePanel(); break;
-      case 'm': case 'M': ptToggleMirror(); break;
       case 'l': case 'L': ptToggleReadLine(); break;
-      case 'w': case 'W': ptCycleWidth(); break;
-      case 's': case 'S': case 'k': case 'K': case '?': ptOpenSettings(); break;
-      case 'Escape':
-        // Close a sheet, leave fullscreen, or pause: never leave the screen
-        // (a talent pressing Esc to dismiss something used to drop the link).
-        if (document.fullscreenElement || document.webkitFullscreenElement) {
-          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-        } else if (ptPlaying) {
-          ptStopPlay();
-        }
-        break;
+      case ',': case 'k': case 'K': case '?': ptOpenSettings(); break;
     }
   };
   ptKeyupHandler = (e) => {
     if (!document.getElementById('promptypus').classList.contains('on')) return;
-    if (e.key === 'ArrowUp')   { ptBoosting = false; }
-    if (e.key === 'ArrowDown') { ptBraking = false; }
+    const control = window.CueolaPrompterControls.keyControl(e);
+    if (control && _ptControls) _ptControls.press(control, 'up');
   };
   document.addEventListener('keydown', ptKeydownHandler);
   document.addEventListener('keyup', ptKeyupHandler);
