@@ -137,6 +137,13 @@
         name: String(data.name || data.username || usernameFromEmail(user.email)),
         level: level,
       });
+      // An instructor account needs a profile too (the front page, the show
+      // list and "assign to a show" all read profiles). Make it if missing.
+      ensureProfile(current()).then(function (res) {
+        if (res && !res.ok && res.reason === 'student-username') {
+          console.warn('Instructor @' + res.username + ' shares a username with a student profile, so it has no instructor profile.');
+        }
+      });
       return current();
     }).catch(function (err) {
       if (generation !== resolveGeneration) return current();
@@ -278,14 +285,23 @@
     if (!f || !f.initializeApp || !f.getAuth || !f.createUserWithEmailAndPassword) {
       return Promise.reject(new Error('Sign-in service is still loading. Try again in a moment.'));
     }
-    var mintName = 'adminMint-' + Date.now();
-    var mintApp = f.initializeApp(auth().app.options, mintName);
-    var mintAuth = f.getAuth(mintApp);
+    var mintApp = null;
+    var mintAuth = null;
     var cleanup = function () {
+      if (!mintApp) return Promise.resolve();
       var closeOut = f.deleteApp ? function () { f.deleteApp(mintApp).catch(function () {}); } : function () {};
       return f.signOut(mintAuth).catch(function () {}).then(closeOut, closeOut);
     };
-    return f.createUserWithEmailAndPassword(mintAuth, usernameToEmail(username), password)
+    // The instructor's profile lives at profiles/<username>. If a student
+    // already holds that username the instructor could never get a profile,
+    // so stop here, before any account exists.
+    return readProfile(username).catch(function () { return null; })
+      .then(function (taken) {
+        if (taken && taken.role !== 'admin') throw new Error('A student profile already uses that username. Pick another one.');
+        mintApp = f.initializeApp(auth().app.options, 'adminMint-' + Date.now());
+        mintAuth = f.getAuth(mintApp);
+        return f.createUserWithEmailAndPassword(mintAuth, usernameToEmail(username), password);
+      })
       .then(function (cred) {
         var newUid = cred.user.uid;
         return window._setDoc(window._doc(window._db, 'admins', newUid), {
@@ -294,8 +310,14 @@
           level: level,
           createdAt: Date.now(),
           createdBy: current().id,
-        }).then(function () { return { uid: newUid, username: username, name: name, level: level }; })
-          .catch(function (err) {
+        }).then(function () {
+          // The profile is what puts this instructor on the front page and
+          // lets a show be assigned to them. A miss here is not fatal: their
+          // first log in makes it.
+          return ensureProfile({ username: username, name: name }).then(function (made) {
+            return { uid: newUid, username: username, name: name, level: level, profile: !!(made && made.ok) };
+          });
+        }, function (err) {
             // The Auth user exists but the directory write failed: without a
             // rollback the account can never sign in as an admin, and every
             // retry reports the username as taken. Delete while the fresh
@@ -316,6 +338,177 @@
           throw err;
         });
       });
+  }
+
+  /* ── Instructor profiles and show lists ─────────────────────────────────
+   * Every instructor account (admins/{uid}) is paired with a profile at
+   * profiles/<username>, role 'admin'. The profile is what the front page
+   * signs in, what "assign to a show" looks up, and where the instructor's
+   * list of shows lives (profile.sessions). Accounts made before 2026-11-23
+   * never got one, so it is made here: when the account is created, and
+   * again on log in for accounts that are still missing it. */
+  var SHOW_CODE_RE = /^[A-Z0-9_.-]{3,24}$/;
+  var profileEnsured = {};   // username -> promise of a successful ensure
+
+  function cloudReady() {
+    return !!(window._db && window._doc && window._getDoc && window._setDoc && window._updateDoc
+      && window._getDocs && window._collection);
+  }
+  function profileRef(username) { return window._doc(window._db, 'profiles', username); }
+  function readProfile(username) {
+    if (!cloudReady()) return Promise.reject(new Error('not-ready'));
+    return window._getDoc(profileRef(username)).then(function (snap) { return snap.exists() ? (snap.data() || {}) : null; });
+  }
+  function newKeyCode() {
+    var alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    var rand = new Uint32Array(6);
+    crypto.getRandomValues(rand);
+    var code = '';
+    for (var i = 0; i < 6; i++) code += alphabet[rand[i] % alphabet.length];
+    return code;
+  }
+  // The rules only accept a new profile that names an active class key of the
+  // same role. Reuse an active instructor key; make one if there is none.
+  function activeInstructorKey() {
+    return window._getDocs(window._collection(window._db, 'accessCodes')).then(function (snap) {
+      var hit = '';
+      snap.forEach(function (d) {
+        var data = d.data() || {};
+        if (!hit && data.role === 'admin' && data.active === true) hit = d.id;
+      });
+      if (hit) return hit;
+      var code = newKeyCode();
+      var me = current();
+      return window._setDoc(window._doc(window._db, 'accessCodes', code), {
+        role: 'admin', label: 'Instructor accounts', active: true,
+        createdBy: (me && (me.name || me.username)) || 'admin', createdAt: Date.now(),
+      }).then(function () { return code; });
+    });
+  }
+  function profileIdForUsername(username) {
+    var model = window.CueolaAssignmentModel;
+    var id = model && typeof model.profileIdFor === 'function' ? model.profileIdFor(username) : '';
+    return id || ('profile_' + username.replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36));
+  }
+
+  // account: { username, name }. Resolves { ok, username, profile, created } or
+  // { ok:false, reason }. Never rejects.
+  function ensureProfile(account) {
+    var username = normalizeUsername(account && account.username);
+    if (!validUsername(username)) return Promise.resolve({ ok: false, reason: 'bad-username', username: username });
+    if (!current()) return Promise.resolve({ ok: false, reason: 'signed-out', username: username });
+    if (!cloudReady()) return Promise.resolve({ ok: false, reason: 'not-ready', username: username });
+    if (profileEnsured[username]) return profileEnsured[username];
+    var name = String((account && account.name) || '').trim() || username;
+    var attempt = readProfile(username).then(function (existing) {
+      if (existing) {
+        if (existing.role !== 'admin') return { ok: false, reason: 'student-username', username: username };
+        if (existing.renamedTo || existing.mergedInto) return { ok: false, reason: 'moved', username: username };
+        return { ok: true, username: username, profile: existing, created: false };
+      }
+      return activeInstructorKey().then(function (key) {
+        var now = Date.now();
+        var doc = {
+          username: username, profileId: profileIdForUsername(username), profileAliases: [],
+          fullName: name.slice(0, 120), role: 'admin', avatar: { type: 'initials' }, theme: 'cool',
+          sessions: [], codeUsed: key, createdAt: now, lastSeen: now,
+        };
+        return window._setDoc(profileRef(username), doc).then(function () {
+          return { ok: true, username: username, profile: doc, created: true };
+        });
+      });
+    }).catch(function (err) {
+      return { ok: false, reason: (err && err.code) || (err && err.message) || 'failed', username: username };
+    }).then(function (res) {
+      if (!res.ok) delete profileEnsured[username];   // let the next call try again
+      return res;
+    });
+    profileEnsured[username] = attempt;
+    return attempt;
+  }
+
+  function cleanShowCodes(codes) {
+    var out = [];
+    (Array.isArray(codes) ? codes : [codes]).forEach(function (raw) {
+      var c = String(raw || '').trim().toUpperCase();
+      if (SHOW_CODE_RE.test(c) && out.indexOf(c) < 0) out.push(c);
+    });
+    return out;
+  }
+
+  // Put show codes on an instructor's own list of shows (their profile), so
+  // they show on that instructor's front page. Resolves { ok, added } or
+  // { ok:false, reason }. Never rejects.
+  function addShowsToProfile(account, codes) {
+    var list = cleanShowCodes(codes);
+    if (!list.length) return Promise.resolve({ ok: false, reason: 'bad-code' });
+    return ensureProfile(account).then(function (res) {
+      if (!res.ok) return res;
+      var have = (Array.isArray(res.profile.sessions) ? res.profile.sessions : []).map(function (c) { return String(c).toUpperCase(); });
+      var room = Math.max(0, 100 - have.length);   // the rules cap a profile at 100 shows
+      var add = list.filter(function (c) { return have.indexOf(c) < 0; }).slice(0, room);
+      if (!add.length) return { ok: true, added: [], full: room === 0 && list.some(function (c) { return have.indexOf(c) < 0; }) };
+      var value = window._arrayUnion ? window._arrayUnion.apply(null, add) : res.profile.sessions.concat(add);
+      return window._updateDoc(profileRef(res.username), { sessions: value }).then(function () {
+        res.profile.sessions = (res.profile.sessions || []).concat(add);
+        return { ok: true, added: add };
+      }, function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
+    });
+  }
+
+  function removeShowFromProfile(account, code) {
+    var c = cleanShowCodes(code)[0];
+    var username = normalizeUsername(account && account.username);
+    if (!c || !validUsername(username) || !cloudReady()) return Promise.resolve({ ok: false, reason: 'bad-code' });
+    return readProfile(username).then(function (p) {
+      if (!p) return { ok: true };
+      // arrayRemove matches exact values: drop the stored spelling.
+      var stored = (p.sessions || []).filter(function (s) { return String(s).toUpperCase() === c; });
+      if (!stored.length) return { ok: true };
+      var value = window._arrayRemove ? window._arrayRemove.apply(null, stored)
+        : (p.sessions || []).filter(function (s) { return String(s).toUpperCase() !== c; });
+      return window._updateDoc(profileRef(username), { sessions: value }).then(function () {
+        var cached = profileEnsured[username];
+        if (cached) cached.then(function (res) { if (res.ok) res.profile.sessions = (res.profile.sessions || []).filter(function (s) { return String(s).toUpperCase() !== c; }); });
+        return { ok: true };
+      });
+    }).catch(function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
+  }
+
+  // Every instructor account: [{ uid, username, name, level }], by name.
+  function listAdmins() {
+    if (!cloudReady()) return Promise.reject(new Error('The cloud is not ready yet.'));
+    return window._getDocs(window._collection(window._db, 'admins')).then(function (snap) {
+      var out = [];
+      snap.forEach(function (d) {
+        if (d.id === 'global') return;   // legacy list-doc, ignored
+        var data = d.data() || {};
+        out.push({ uid: d.id, username: String(data.username || ''), name: String(data.name || data.username || ''), level: data.level === 'super' ? 'super' : 'standard' });
+      });
+      out.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); });
+      return out;
+    });
+  }
+
+  // Push a show to another instructor: it goes on their list of shows, and the
+  // show remembers who it was shared with (sessions/<code>.sharedWith, a list
+  // of instructor uids) so the dashboard can put it under "Your shows" too.
+  function shareShow(code, target) {
+    var c = cleanShowCodes(code)[0];
+    if (!c || !target || !target.uid) return Promise.resolve({ ok: false, reason: 'bad-code' });
+    return addShowsToProfile(target, [c]).then(function (res) {
+      if (!res.ok) return res;
+      return window._updateDoc(window._doc(window._db, 'sessions', c), { sharedWith: window._arrayUnion(target.uid) })
+        .then(function () { return { ok: true }; },
+              function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
+    });
+  }
+  function unshareShow(code, target) {
+    var c = cleanShowCodes(code)[0];
+    if (!c || !target || !target.uid) return Promise.resolve({ ok: false, reason: 'bad-code' });
+    return window._updateDoc(window._doc(window._db, 'sessions', c), { sharedWith: window._arrayRemove(target.uid) })
+      .then(function () { return removeShowFromProfile(target, c); },
+            function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
   }
 
   function current() {
@@ -350,6 +543,12 @@
     signOut: signOutAdmin,
     changePassword: changePassword,
     createInstructor: createInstructor,
+    ensureProfile: ensureProfile,
+    addShowsToProfile: addShowsToProfile,
+    removeShowFromProfile: removeShowFromProfile,
+    listAdmins: listAdmins,
+    shareShow: shareShow,
+    unshareShow: unshareShow,
     current: current,
     onChange: onChange,
     ready: ready,

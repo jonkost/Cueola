@@ -2505,8 +2505,31 @@ function openAccountsPage() {
     page.classList.add('on');
   }
   renderAdminOverview();
-  loadIdentityAdminData();
+  loadIdentityAdminData().then(healInstructorProfiles);
   history.replaceState(null, '', location.pathname + location.search + '#accounts');
+}
+
+// Instructor accounts made before 2026-11-23 have a log in but no profile, so
+// they could not sign in on the front page or be assigned to a show. Opening
+// this page makes the missing profiles (one pass per page load).
+let _instructorProfilesHealed = false;
+async function healInstructorProfiles() {
+  if (_instructorProfilesHealed || adminSession?.level !== 'super' || !window.CueolaAdminAuth?.ensureProfile) return;
+  if (_adminDirectoryState !== 'ready') { await loadAdminDirectory(); }
+  if (_adminDirectoryState !== 'ready') return;
+  _instructorProfilesHealed = true;
+  const missing = _adminDirectory.filter(a => a.username && !identityProfiles.some(p => String(p.username || p.id) === a.username));
+  if (!missing.length) return;
+  let made = 0;
+  for (const a of missing) {
+    const res = await CueolaAdminAuth.ensureProfile(a);
+    if (res.ok && res.created) made++;
+    else if (!res.ok) console.warn('No profile made for instructor', a.username, res.reason);
+  }
+  if (made) {
+    showToast(`${made} instructor profile${made === 1 ? '' : 's'} made. ${made === 1 ? 'That instructor' : 'Those instructors'} can now be assigned to shows.`);
+    await loadIdentityAdminData();
+  }
 }
 
 /* ── Phase 3 identity administration: login codes + class roster ──────────
@@ -2904,7 +2927,9 @@ function addDashboardAdmin() {
     document.getElementById('newAdminUsername').value = '';
     document.getElementById('newAdminCode').value = '';
     loadAdminDirectory();
-    showToast(`Instructor "${created.username}" created. Share the temp password and have them change it.`);
+    showToast(created.profile === false
+      ? `Instructor "${created.username}" created, but their profile could not be made yet. It is made when they first log in.`
+      : `Instructor "${created.username}" created. Share the temp password and have them change it.`);
   }).catch(err => {
     showToast(err?.message || 'Could not create the account.');
   });
