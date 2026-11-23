@@ -1028,6 +1028,36 @@
   function setTitle(t, sub) {
     var el = document.getElementById('identityTitle'); if (el) el.innerHTML = t;
     var s = document.getElementById('identitySub'); if (s) { s.textContent = sub || ''; s.style.display = sub ? '' : 'none'; }
+    // Every screen starts with the plain Close button. The create wizard
+    // swaps it for its own pinned bar (pinWizardButtons) after it draws.
+    var foot = document.getElementById('identityFoot'); if (foot) { foot.innerHTML = ''; foot.hidden = true; }
+    var shut = document.getElementById('identityClose'); if (shut) shut.hidden = false;
+  }
+  // The wizard's buttons used to sit inside the part that scrolls, with Close
+  // pinned under them. On the agreement step Create profile was scrolled out
+  // of sight and students pressed Close instead, so no profile was made
+  // (Jon, 2026-11-23). Now Back and Continue / Create profile are pinned at
+  // the bottom, with the agreement tick box and any error right above them.
+  function pinWizardButtons() {
+    var b = body(), foot = document.getElementById('identityFoot');
+    if (!b || !foot) return;
+    var row = document.createElement('div'); row.className = 'id-foot-row';
+    var check = b.querySelector('.agreement-check');
+    var err = b.querySelector('#id-create-err');
+    var back = null, go = null;
+    Array.prototype.slice.call(b.children).forEach(function (el) {
+      if (el.tagName !== 'BUTTON') return;
+      if (el.classList.contains('btn-primary')) go = el; else if (el.classList.contains('btn-secondary')) back = el;
+    });
+    if (!go) return;
+    foot.innerHTML = '';
+    if (check) foot.appendChild(check);
+    if (err) foot.appendChild(err);
+    if (back) row.appendChild(back);
+    row.appendChild(go);
+    foot.appendChild(row);
+    foot.hidden = false;
+    var shut = document.getElementById('identityClose'); if (shut) shut.hidden = true;
   }
 
   function openHub() {
@@ -1308,6 +1338,7 @@
         '<button class="btn-secondary" onclick="CueolaIdentity.wizardBack()">Back</button>';
     }
     body().innerHTML = html;
+    pinWizardButtons();
     var first = body().querySelector('input');
     if (first) first.focus();
   }
