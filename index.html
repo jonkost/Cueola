@@ -5749,8 +5749,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       <div class="ls-sidebar-head" id="lsSidebarHead">
         <div class="ls-sidebar-head-row">
           <div class="ls-sidebar-title">Prompter</div>
-          <button class="ls-popout-btn" id="lsPopoutBtn" onclick="openScriptOpPopout()" data-tip="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
-          <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" data-tip="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
+          <button class="ls-popout-btn" id="lsPopoutBtn" onclick="openPrompterOperatorWindow()" data-tip="Open the prompter operator in its own window" aria-label="Open the prompter operator in its own window"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
+          <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" data-tip="Close the prompter panel" aria-label="Close the prompter panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" role="status">Waiting for the prompter…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
@@ -6044,7 +6044,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <button class="pt-back-btn" onclick="exitFlowmingoOperator()"><span class="sf-symbol" data-symbol="chevron.left" aria-hidden="true"></span><span>Cueola</span></button>
     <div class="flowop-title-wrap">
       <div class="flowop-kicker">Prompter controls</div>
-      <div class="flowop-title" id="flowOpTitle">Flowmingo Op</div>
+      <div class="flowop-title" id="flowOpTitle">Prompter operator</div>
     </div>
     <div class="flowop-connect">
       <input class="flowop-code" id="flowOpCodeInput" type="text" placeholder="SHOW CODE" maxlength="20" aria-label="Show code" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')flowOpLoadSession()">
@@ -6068,21 +6068,17 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <div class="flowop-note">Enter the same show code the talent screen uses.</div>
         </div>
       </section>
+      <!-- The one control set (cueola-prompter-controls.js): the same fifteen
+           controls as Live, the talent screen and the Stream Deck. -->
+      <section class="flowop-panel flowop-strip-panel">
+        <div class="ls-pt-controls" id="flowOpPtControls"></div>
+      </section>
       <section class="flowop-panel flowop-controls-panel">
         <div id="flowOpControls"></div>
       </section>
       <section class="flowop-panel">
         <div class="flowop-panel-title">Keys</div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Space</span><span class="pt-hint-desc">Play or pause</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Down (hold)</span><span class="pt-hint-desc">Brake</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Up (hold)</span><span class="pt-hint-desc">Boost</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Left / Right</span><span class="pt-hint-desc">Text smaller / bigger</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Option + Down / Up</span><span class="pt-hint-desc">Reverse / forward</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">F</span><span class="pt-hint-desc">Talent fullscreen</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">R</span><span class="pt-hint-desc">Top of script</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">H</span><span class="pt-hint-desc">Hide or show talent controls</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">M</span><span class="pt-hint-desc">Mirror</span></div>
-        <div class="pt-hint-row"><span class="pt-hint-key">Esc</span><span class="pt-hint-desc">Back to Cueola</span></div>
+        <div id="flowOpKeysList"></div>
       </section>
     </aside>
   </div>
@@ -7785,7 +7781,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=f1cb1c2f8c"></script>
+<script src="cueola-app.js?v=c25d54438f"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

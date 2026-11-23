@@ -15225,6 +15225,7 @@ function adoptPrompterTalentState(state={}) {
   if (typeof state.standbyOn === 'boolean') ptStandbyOn = state.standbyOn;
   if (typeof state.hold === 'string') ptHoldDir = (state.hold === 'back' || state.hold === 'ahead') ? state.hold : '';
   lsPrompterControlsSettled();
+  flowOpControlsSettled();
   if (typeof state.questionOn === 'boolean') {
     ptQuestionOn = state.questionOn;
     ptQuestionText = state.questionOn ? String(state.questionText || '') : '';
@@ -20920,8 +20921,8 @@ function flowOpApplyControlPreview(action, quiet=false, payload=null) {
 
 // Icon tabs pick one flat group, the same inspector standard as the Script Op
 // drawer, remembered per machine.
-const OP_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' };
-const OP_INSP_ICONS = { transport: 'media.play', live: 'content.display', clock: 'state.timed', display: 'content.script' };
+const OP_INSP_LABELS = { live: 'Place', clock: 'On screen', display: 'Look' };
+const OP_INSP_ICONS = { live: 'marker.active', clock: 'content.display', display: 'action.settings' };
 function opInspHeadHTML(scope) {
   return `<div class="insp-head op-insp-head">
     <div class="insp-tabs" role="tablist" aria-label="Operator control groups">
@@ -20931,7 +20932,7 @@ function opInspHeadHTML(scope) {
   </div>`;
 }
 function opInspTab(scope, key) {
-  if (!OP_INSP_LABELS[key]) key = 'transport';
+  if (!OP_INSP_LABELS[key]) key = 'live';
   document.querySelectorAll(`.op-insp[data-insp-scope="${scope}"]`).forEach(panel => {
     panel.querySelectorAll('.insp-tab').forEach(b => {
       const on = b.getAttribute('data-insp') === key;
@@ -20943,8 +20944,8 @@ function opInspTab(scope, key) {
   try { localStorage.setItem(`cueola_op_insp_tab_${scope}`, key); } catch {}
 }
 function opInspRestoreTab(scope) {
-  let key = 'transport';
-  try { key = localStorage.getItem(`cueola_op_insp_tab_${scope}`) || 'transport'; } catch {}
+  let key = 'live';
+  try { key = localStorage.getItem(`cueola_op_insp_tab_${scope}`) || 'live'; } catch {}
   opInspTab(scope, key);
 }
 
@@ -20952,12 +20953,11 @@ function opInspRestoreTab(scope) {
 // rides the Playback tab's More, like the Script Op.
 function flowOpScreenSectionHTML(dis='') {
   return `<div class="flow-control-section flow-control-screen">
-      <div class="flow-control-title">Screen</div>
-      <div class="flow-control-grid four">
-        <button class="pt-btn" onclick="flowOpSendControl('reset')" data-tip="Stop and go back to the top of the script"${dis}>Top</button>
+      <div class="flow-control-title">Talent screen</div>
+      <div class="flow-control-grid three">
         <button class="pt-btn" onclick="flowOpSendControl('hide_interface')" data-tip="Hide or show the bar and panel on the talent screen"${dis}>Hide controls</button>
         <button class="pt-btn${ptMirrored ? ' active' : ''}" data-flowop-mirror onclick="flowOpSendControl('mirror')" aria-pressed="${ptMirrored ? 'true' : 'false'}" data-tip="Flip the copy for a beam splitter"${dis}>Mirror</button>
-        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Fullscreen</button>
+        <button class="pt-btn" onclick="flowOpSendControl('fullscreen')"${dis}>Full screen</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" id="flowOpRowInfo" ${ptRowInfoOn ? 'checked' : ''} onchange="flowOpSendControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"${dis}><span>Row info on talent</span></label>
     </div>`;
@@ -20968,33 +20968,15 @@ function flowOpControlsHTML(disabled=false) {
   const screen = flowOpScreenSectionHTML(dis);
   const hold = (action, label) => poHoldButtonHTML('flowOpSendControl', action, label, dis);
   const drag = `onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''"`;
-  const transport = `<div class="flow-control-section flow-control-transport">
-      <div class="flow-control-title">Playback</div>
-      <div class="flow-control-grid one">
-        <button class="pt-btn${flowOpPlaying ? ' active' : ''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY}<span>${flowOpPlaying ? 'Pause' : 'Play'}</span></button>
-      </div>
-      ${poScrollPadHTML('flow', dis)}
-    </div>
-    <div class="flow-control-section flow-control-display">
-      <div class="flow-control-title">Speed &amp; Size</div>
-      <div class="pt-ctrl-group flow-control-slider">
-        <span class="pt-ctrl-label">Speed <output class="pt-ctrl-val" id="flowOpSpeedValue" for="flowOpSpeedRange">${Math.round(ptTargetSpeed)}</output></span>
-        <input type="range" class="pt-range" id="flowOpSpeedRange" min="5" max="200" value="${ptTargetSpeed}" aria-label="Speed" ${drag} oninput="flowOpApplyControlPreview('speed_set_'+this.value,true)" onchange="flowOpSendControl('speed_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
-      </div>
+  // The roll (Play, speed, Back, Ahead, Top, the rows) is the control strip
+  // above the tabs. Only the talent screen's looks are in here.
+  const sizeLook = `<div class="flow-control-section flow-control-display">
+      <div class="flow-control-title">Text size</div>
       <div class="pt-ctrl-group flow-control-slider">
         <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="flowOpSizeValue" for="flowOpSizeRange">${Math.round(ptFontSize)}</output></span>
-        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" aria-label="Text size" ${drag} oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value,true);this.dataset.controlDragging=''"${dis}>
+        <input type="range" class="pt-range" id="flowOpSizeRange" min="24" max="120" value="${ptFontSize}" aria-label="Text size" ${drag} oninput="flowOpApplyControlPreview('size_set_'+this.value,true)" onchange="flowOpSendControl('size_set_'+this.value)"${dis}>
       </div>
-    </div>
-    ${scriptOpMoreHTML(`<div class="flow-control-section flow-control-transport-extras">
-      <div class="flow-control-title">Hold &amp; direction</div>
-      <div class="flow-control-grid four">
-        ${hold('brake', 'Brake')}
-        ${hold('boost', 'Boost')}
-        <button class="pt-btn" onclick="flowOpSendControl('direction_reverse')"${dis}>Reverse</button>
-        <button class="pt-btn" onclick="flowOpSendControl('direction_forward')"${dis}>Forward</button>
-      </div>
-    </div>${screen}`)}`;
+    </div>`;
   const seekDrag = `onpointerdown="this.dataset.seekDragging='1'" onpointerup="this.dataset.seekDragging=''" onpointercancel="this.dataset.seekDragging=''"`;
   const live = `<div class="flow-control-section flow-control-rowcue">
       <div class="flow-control-title">Cue</div>
@@ -21024,7 +21006,7 @@ function flowOpControlsHTML(disabled=false) {
         <button class="pt-btn pt-icon-btn pt-punch-btn" onclick="flowOpPunchInSeek()" data-tip="Play from this point in the script" aria-label="Play from this point in the script"${dis}>${sfIcon('media.play')}</button>
       </div>
     </div>`)}`;
-  const display = `<div class="flow-control-section flow-control-align">
+  const display = `${sizeLook}<div class="flow-control-section flow-control-align">
       <div class="pt-ctrl-group flow-control-segment">
         <span class="pt-ctrl-label">Align</span>
         <button class="pt-btn${ptAlign==='left'?' active':''}" data-flowop-align="left" onclick="flowOpSendControl('align_left')" aria-label="Align left" aria-pressed="${ptAlign === 'left' ? 'true' : 'false'}"${dis}>Left</button>
@@ -21041,10 +21023,9 @@ function flowOpControlsHTML(disabled=false) {
     </div>`;
   return `<div class="flowop-controls flow-control-panel op-insp" data-insp-scope="flow">
     ${opInspHeadHTML('flow')}
-    <div class="insp-pane" data-insp-pane="transport">${transport}</div>
     <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions">${live}</div></div>
     <div class="insp-pane" data-insp-pane="clock">${clockAndAlertControlsHTML('flow', disabled)}</div>
-    <div class="insp-pane" data-insp-pane="display">${display}</div>
+    <div class="insp-pane" data-insp-pane="display">${display}${screen}</div>
   </div>`;
 }
 
@@ -21088,7 +21069,55 @@ function flowOpRenderControls(disabled=false) {
   return true;
 }
 
+// ── The one control set in the stand-alone operator ─────────────────────────
+let _flowPtControls = null;
+let _flowPtWaitTimer = null;
+function flowOpControlState() {
+  return window.CueolaPrompterControls.stateFromTalent({
+    playing:flowOpPlaying, speed:ptTargetSpeed, follow:ptFollow, hold:ptHoldDir,
+    clockState:flowOpClockState, questionOn:flowOpQuestionOn,
+    standbyOn:ptStandbyOn, techSlateOn:flowOpTechSlate, colorBarsOn:flowOpColorBarsOn,
+  }, !!flowOpCode && _prompterHasRecentTalent());
+}
+function flowOpControlSend(out, id) {
+  if (!out) return;
+  if (out.ui === 'message') {
+    // The message box lives on the On screen tab.
+    opInspTab('flow', 'clock');
+    const box = document.getElementById('flow-question-input');
+    if (box) { try { box.focus(); box.scrollIntoView({ block:'nearest' }); } catch {} }
+    return;
+  }
+  if (!out.action) return;
+  flowOpSendControl(out.action, isQuietPrompterControl(out.action), out.payload || null);
+  const el = document.querySelector(`#flowOpPtControls [data-ptc="${id}"]`);
+  if (el && !el.hasAttribute('data-ptc-hold') && flowOpCode) {
+    el.classList.add('is-waiting');
+    clearTimeout(_flowPtWaitTimer);
+    _flowPtWaitTimer = setTimeout(flowOpControlsSettled, 2500);
+  }
+}
+function flowOpControlsSettled() {
+  clearTimeout(_flowPtWaitTimer);
+  document.querySelectorAll('#flowOpPtControls .is-waiting').forEach(el => el.classList.remove('is-waiting'));
+}
+function flowOpSyncPtControls() {
+  const host = flowOpEl('flowOpPtControls');
+  if (!host) return;
+  if (!_flowPtControls) {
+    _flowPtControls = window.CueolaPrompterControls.mount(host, { getState:flowOpControlState, send:flowOpControlSend });
+    const keys = flowOpEl('flowOpKeysList');
+    if (keys) {
+      const row = (k, d) => `<div class="pt-hint-row"><span class="pt-hint-key">${esc(k)}</span><span class="pt-hint-desc">${esc(d)}</span></div>`;
+      keys.innerHTML = window.CueolaPrompterControls.CONTROLS.filter(c => c.key)
+        .map(c => row(c.hold ? `${c.key} (hold)` : c.key, c.id === 'play' ? 'Play or pause' : c.label)).join('');
+    }
+  }
+  _flowPtControls.sync(flowOpControlState());
+}
+
 function flowOpSyncControls() {
+  flowOpSyncPtControls();
   const playBtn = flowOpEl('flowOpPlayBtn');
   if (playBtn) {
     playBtn.innerHTML = `${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY}<span>${flowOpPlaying ? 'Pause' : 'Play'}</span>`;
@@ -21200,7 +21229,7 @@ function flowOpRenderSession(data=null) {
   if (fingerprint === flowOpSessionRenderFingerprint) return false;
   flowOpSessionRenderFingerprint = fingerprint;
   if (!data) {
-    if (titleEl) titleEl.textContent = 'Flowmingo Op';   // the window title, until a show is linked
+    if (titleEl) titleEl.textContent = 'Prompter operator';   // the window title, until a show is linked
     if (meta) meta.innerHTML = `<div class="flowop-session-title">No show loaded</div><div class="flowop-note">Enter the same show code the talent screen uses.</div>`;
     if (preview) preview.innerHTML = `<div class="flowop-empty">Type a show code to run the prompter from here.</div>`;
     flowOpOfferAssignedSessions();
@@ -21443,8 +21472,8 @@ function flowOpFindInScript() {
 // on key-up, on exit, and when this window loses focus.
 const flowOpKeyHolds = { brake:false, boost:false };
 function flowOpReleaseHoldKeys() {
-  if (flowOpCode && flowOpKeyHolds.brake) flowOpSendControl('brake_stop', true);
-  if (flowOpCode && flowOpKeyHolds.boost) flowOpSendControl('boost_stop', true);
+  // Let go of a held Back or Ahead (the window lost focus, the show changed).
+  if (_flowPtControls) _flowPtControls.release();
   flowOpKeyHolds.brake = false;
   flowOpKeyHolds.boost = false;
   ptBraking = false;
@@ -21452,47 +21481,51 @@ function flowOpReleaseHoldKeys() {
 }
 window.addEventListener('blur', () => { if (flowOpEl('flowOp')?.classList.contains('on')) flowOpReleaseHoldKeys(); });
 
+// The operator's keyboard is the one control set: a key is the same press
+// as its button, on this screen, in Live and on the talent screen.
 function flowOpBindKeys() {
   if (flowOpKeydownHandler) document.removeEventListener('keydown', flowOpKeydownHandler);
   if (flowOpKeyupHandler) document.removeEventListener('keyup', flowOpKeyupHandler);
   flowOpKeydownHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
     // Cmd/Ctrl shortcuts stay the browser's (Cmd+R reload, Cmd+F find), and
-    // typing never fires a hotkey. A clicked button keeps focus in Chrome, so
-    // a focused button no longer blocks the keys (Space used to re-press it).
-    if (e.isComposing || e.metaKey || e.ctrlKey) return;
+    // typing never fires a hotkey.
+    if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (isTextEditingTarget(e.target) || e.target?.closest?.('select, .modal, .modal-wrap, .overlay, [role="dialog"]')) return;
-    // No show yet: Space presses the focused button (Load, a show in the list).
-    if (!flowOpCode && e.key !== 'Escape' && e.target?.closest?.('button, summary, a')) return;
-    if (e.key === 'ArrowDown' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_reverse'); return; }
-    if (e.key === 'ArrowUp' && e.altKey) { consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('direction_forward'); return; }
-    if (e.repeat && !['ArrowUp','ArrowDown'].includes(e.key)) {
-      if (['ArrowLeft','ArrowRight',' ','Space','f','F','r','R','h','H','m','M'].includes(e.key)) consumeRemoteKey(e);
-      return;
-    }
-    switch (e.key) {
-      case ' ':
-      case 'Space': consumeRemoteKey(e); flowOpSendControl(flowOpPlaying ? 'pause' : 'resume'); break;
-      case 'ArrowUp': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.boost = true; flowOpSendControl('boost_start'); } break;
-      case 'ArrowDown': consumeRemoteKey(e); if (!e.repeat) { flowOpKeyHolds.brake = true; flowOpSendControl('brake_start'); } break;
-      case 'ArrowLeft': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_down'); break;
-      case 'ArrowRight': consumeRemoteKey(e); if (!e.repeat) flowOpSendControl('size_up'); break;
-      case 'f': case 'F': consumeRemoteKey(e); flowOpSendControl('fullscreen'); break;
-      case 'r': case 'R': consumeRemoteKey(e); flowOpSendControl('reset'); break;
-      case 'h': case 'H': consumeRemoteKey(e); flowOpSendControl('hide_interface'); break;
-      case 'm': case 'M': consumeRemoteKey(e); flowOpSendControl('mirror'); break;
-      case 'Escape': exitFlowmingoOperator(); break;
-    }
+    // No show yet: Space presses the focused button (Link, a show in the list).
+    if (!flowOpCode) return;
+    const control = window.CueolaPrompterControls.keyControl(e);
+    if (!control || !_flowPtControls) return;
+    consumeRemoteKey(e);
+    if (e.repeat) return;
+    _flowPtControls.press(control, 'down');
   };
   flowOpKeyupHandler = e => {
     if (!flowOpEl('flowOp')?.classList.contains('on')) return;
-    // Only a hold this screen started gets a stop: arrow keys in a text or
-    // number field used to send stray stops that let go of another desk's hold.
-    if (e.key === 'ArrowUp' && flowOpKeyHolds.boost) { consumeRemoteKey(e); flowOpKeyHolds.boost = false; flowOpSendControl('boost_stop', true); }
-    if (e.key === 'ArrowDown' && flowOpKeyHolds.brake) { consumeRemoteKey(e); flowOpKeyHolds.brake = false; flowOpSendControl('brake_stop', true); }
+    const control = window.CueolaPrompterControls.keyControl(e);
+    if (control && _flowPtControls && _flowPtControls.held() === control) { consumeRemoteKey(e); _flowPtControls.press(control, 'up'); }
   };
   document.addEventListener('keydown', flowOpKeydownHandler);
   document.addEventListener('keyup', flowOpKeyupHandler);
+}
+
+// The prompter operator in its own window, linked by the show code. It
+// talks to the show, not to this window, so it keeps working if Live closes
+// and it works from another computer or an iPad the same way.
+let _prompterOperatorWin = null;
+function openPrompterOperatorWindow() {
+  const code = (session.isDemo || session.isExpert) ? '' : String(session.code || '').trim().toUpperCase();
+  if (!code) { toast('The operator window links by show code. The demo has no code, so use this panel.'); return null; }
+  if (_prompterOperatorWin && !_prompterOperatorWin.closed) { try { _prompterOperatorWin.focus(); } catch {} return _prompterOperatorWin; }
+  const url = new URL(location.href);
+  url.pathname = url.pathname.replace(/[^/]*$/, '') || '/';
+  url.search = '';
+  url.searchParams.set('operator', '1');
+  url.searchParams.set('code', code);
+  url.hash = 'flowop';
+  _prompterOperatorWin = window.open(url.toString(), 'cueola-prompter-operator', 'width=1180,height=820');
+  if (!_prompterOperatorWin) toast('The browser blocked the new window. Allow pop-ups for Cueola and try again.');
+  return _prompterOperatorWin;
 }
 
 function openFlowmingoOperator(codeOverride='') {

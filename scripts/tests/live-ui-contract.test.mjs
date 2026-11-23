@@ -2365,10 +2365,12 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   assert.match(html, /Open prompter controls<\/button>/);
   assert.match(app, /params\.has\('flowop'\) \|\| params\.has\('operator'\)\) \{[\s\S]*?openFlowmingoOperator\(code\);/);
   assert.match(app, /else if \(action === 'remote'\) openFlowmingoOperator\(/);
-  // It follows the simple tier too: Play, Speed and Size up front; holds,
-  // slates and the scrubber behind More.
+  // The roll is the one control set above the tabs (flowOpPtControls). The
+  // tabs hold the rest: no Play, speed, Brake, Boost or Reverse in them.
   const flowPanel = app.slice(app.indexOf('function flowOpControlsHTML('), app.indexOf('function flowOpRenderControls('));
-  assert.match(flowPanel, /id="flowOpPlayBtn"[\s\S]*id="flowOpSpeedRange"[\s\S]*scriptOpMoreHTML\(`<div class="flow-control-section flow-control-transport-extras">/);
+  assert.doesNotMatch(flowPanel, /flowOpPlayBtn|flowOpSpeedRange|brake|boost|direction_reverse/);
+  assert.match(html, /id="flowOpPtControls"/);
+  assert.match(app, /CueolaPrompterControls\.mount\(host, \{ getState:flowOpControlState, send:flowOpControlSend \}\)/);
   assert.match(flowPanel, /scriptOpMoreHTML\(`<div class="flow-control-section flow-control-onair">[\s\S]*id="flow-seek"/);
   assert.match(flowPanel, /clockAndAlertControlsHTML\('flow', disabled\)/);
   // No lockout (2026-11-23): Script Op is never refused because the Flowmingo
