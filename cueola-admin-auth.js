@@ -444,15 +444,19 @@
     if (!list.length) return Promise.resolve({ ok: false, reason: 'bad-code' });
     return ensureProfile(account).then(function (res) {
       if (!res.ok) return res;
-      var have = (Array.isArray(res.profile.sessions) ? res.profile.sessions : []).map(function (c) { return String(c).toUpperCase(); });
-      var room = Math.max(0, 100 - have.length);   // the rules cap a profile at 100 shows
-      var add = list.filter(function (c) { return have.indexOf(c) < 0; }).slice(0, room);
-      if (!add.length) return { ok: true, added: [], full: room === 0 && list.some(function (c) { return have.indexOf(c) < 0; }) };
-      var value = window._arrayUnion ? window._arrayUnion.apply(null, add) : res.profile.sessions.concat(add);
-      return window._updateDoc(profileRef(res.username), { sessions: value }).then(function () {
-        res.profile.sessions = (res.profile.sessions || []).concat(add);
-        return { ok: true, added: add };
-      }, function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
+      // Fresh read: the list may have changed since the profile was checked.
+      return readProfile(res.username).then(function (p) {
+        var stored = Array.isArray(p && p.sessions) ? p.sessions : [];
+        var have = stored.map(function (c) { return String(c).toUpperCase(); });
+        var missing = list.filter(function (c) { return have.indexOf(c) < 0; });
+        var room = Math.max(0, 100 - have.length);   // the rules cap a profile at 100 shows
+        var add = missing.slice(0, room);
+        if (!add.length) return { ok: true, added: [], full: missing.length > 0 };
+        var value = window._arrayUnion ? window._arrayUnion.apply(null, add) : stored.concat(add);
+        return window._updateDoc(profileRef(res.username), { sessions: value }).then(function () {
+          return { ok: true, added: add, full: add.length < missing.length };
+        });
+      }).catch(function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
     });
   }
 
@@ -467,11 +471,7 @@
       if (!stored.length) return { ok: true };
       var value = window._arrayRemove ? window._arrayRemove.apply(null, stored)
         : (p.sessions || []).filter(function (s) { return String(s).toUpperCase() !== c; });
-      return window._updateDoc(profileRef(username), { sessions: value }).then(function () {
-        var cached = profileEnsured[username];
-        if (cached) cached.then(function (res) { if (res.ok) res.profile.sessions = (res.profile.sessions || []).filter(function (s) { return String(s).toUpperCase() !== c; }); });
-        return { ok: true };
-      });
+      return window._updateDoc(profileRef(username), { sessions: value }).then(function () { return { ok: true }; });
     }).catch(function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
   }
 
@@ -495,18 +495,21 @@
   // of instructor uids) so the dashboard can put it under "Your shows" too.
   function shareShow(code, target) {
     var c = cleanShowCodes(code)[0];
+    var docId = String(code || '').trim();   // the show's own spelling of its code
     if (!c || !target || !target.uid) return Promise.resolve({ ok: false, reason: 'bad-code' });
     return addShowsToProfile(target, [c]).then(function (res) {
       if (!res.ok) return res;
-      return window._updateDoc(window._doc(window._db, 'sessions', c), { sharedWith: window._arrayUnion(target.uid) })
+      if (res.full) return { ok: false, full: true, reason: 'list-full' };
+      return window._updateDoc(window._doc(window._db, 'sessions', docId), { sharedWith: window._arrayUnion(target.uid) })
         .then(function () { return { ok: true }; },
               function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
     });
   }
   function unshareShow(code, target) {
     var c = cleanShowCodes(code)[0];
+    var docId = String(code || '').trim();
     if (!c || !target || !target.uid) return Promise.resolve({ ok: false, reason: 'bad-code' });
-    return window._updateDoc(window._doc(window._db, 'sessions', c), { sharedWith: window._arrayRemove(target.uid) })
+    return window._updateDoc(window._doc(window._db, 'sessions', docId), { sharedWith: window._arrayRemove(target.uid) })
       .then(function () { return removeShowFromProfile(target, c); },
             function (err) { return { ok: false, reason: (err && err.code) || 'failed' }; });
   }

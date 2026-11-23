@@ -1903,7 +1903,46 @@ function reflectSessionScope() {
 }
 
 function scopedSessions(list) {
-  return sessionScope === 'mine' ? list.filter(isSessionOwnedBySignedInAdmin) : list;
+  return sessionScope === 'mine' ? list.filter(s => isSessionOwnedBySignedInAdmin(s) || isSessionSharedWithSignedInAdmin(s)) : list;
+}
+
+// Another instructor pushed this show to me (sessions/<code>.sharedWith holds
+// instructor uids). It sits under Your shows; delete stays with the owner.
+function isSessionSharedWithSignedInAdmin(s) {
+  return !!adminSession && Array.isArray(s.sharedWith) && s.sharedWith.includes(adminSession.id);
+}
+
+// ── A show I made is on my own list of shows ──────────────────
+// The front page lists the shows on a person's profile. Making a show here
+// stamps the owner on the show but never touched the profile, so the maker's
+// own front page did not list it. claimShowsForMe puts the code there.
+function claimShowsForMe(codes) {
+  if (!adminSession || !window.CueolaAdminAuth?.addShowsToProfile) return Promise.resolve(null);
+  return CueolaAdminAuth.addShowsToProfile(adminSession, codes).then(res => {
+    if (res && !res.ok) console.warn('Could not add the show to your own list:', res.reason);
+    return res;
+  });
+}
+// Shows made before this existed: claim each one once per device. Once, so a
+// show the instructor later takes off their own list stays off.
+const CLAIMED_KEY = id => `cueola_claimed_shows_${id}`;
+let _claimSweepRunning = false;
+async function claimOwnedShowsOnce() {
+  if (!adminSession || _claimSweepRunning) return;
+  let claimed = [];
+  try { claimed = JSON.parse(localStorage.getItem(CLAIMED_KEY(adminSession.id)) || '[]'); } catch {}
+  if (!Array.isArray(claimed)) claimed = [];
+  const fresh = sessions.filter(isSessionOwnedBySignedInAdmin)
+    .map(s => String(s.code || s.id || '').toUpperCase())
+    .filter(code => code && !claimed.includes(code));
+  if (!fresh.length) return;
+  _claimSweepRunning = true;
+  try {
+    const res = await claimShowsForMe(fresh);
+    if (res?.ok) {
+      try { localStorage.setItem(CLAIMED_KEY(adminSession.id), JSON.stringify([...claimed, ...fresh].slice(-400))); } catch {}
+    }
+  } finally { _claimSweepRunning = false; }
 }
 
 // Delete/restore stay with the session owner or a super admin. Client-side
@@ -1989,6 +2028,7 @@ async function adoptSessionsSnapshot(snap, opts={}) {
   updateStats();
   renderSuperOverview();
   renderDeletedSessions();
+  if (opts.runPurge) claimOwnedShowsOnce();   // first load only: my shows go on my own list
   // Lazy 30-day purge: super admins clean out expired soft-deletes on load
   // (explicit loads and the listener's first emission only, never on every
   // ambient change).
@@ -2242,6 +2282,7 @@ async function startNextEpisode() {
       }
     }
     hideModal('modal-detail');
+    claimShowsForMe([code]);
     createdCode = code;
     document.getElementById('created-code').textContent = code;
     document.getElementById('created-url').textContent = buildSessionShareUrl(code);
@@ -2297,6 +2338,7 @@ async function createTestShow() {
       }
     }
     if (!code) { showToast('Could not find a free show code this month. Press New show and type a code under More options.'); return; }
+    claimShowsForMe([code]);
     createdCode = code;
     document.getElementById('created-code').textContent = code;
     document.getElementById('created-url').textContent = buildSessionShareUrl(code);
@@ -3066,6 +3108,7 @@ async function createNewSession() {
       ...(Object.keys(newPaperwork).length ? { prePro: { paperworkEnabled: newPaperwork } } : {}),
     });
 
+    claimShowsForMe([code]);
     createdCode = code;
     document.getElementById('created-code').textContent = code;
     document.getElementById('created-url').textContent = buildSessionShareUrl(code);
@@ -3930,7 +3973,13 @@ async function saveDetailMetadata(showToastOnSave=true) {
     else if (normalizeOwner(entered) === normalizeOwner(adminSession.name)) patch.ownerUid = adminSession.id;
   }
   try {
+    const ownerBefore = s0?.ownerUid || '';
     await window._updateDoc(window._doc(db(), 'sessions', activeCode), patch);
+    // A new owner gets the show on their own list of shows.
+    if (patch.ownerUid && patch.ownerUid !== ownerBefore) {
+      const newOwner = _adminDirectory.find(a => a.uid === patch.ownerUid);
+      if (newOwner) CueolaAdminAuth.addShowsToProfile(newOwner, [activeCode]);
+    }
     const s = sessions.find(x=>(x.code||x.id)===activeCode);
     if (s) Object.assign(s, patch);
     if (s && 'prePro.paperworkEnabled' in patch) {

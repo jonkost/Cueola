@@ -3839,6 +3839,7 @@ function openAdminPanel() {
   chip.className = `admin-level-chip alc-${adminSession.level}`;
   renderAdminBody();
   showOverlay('adminPanel');
+  loadAdminShareState();
   // The People pane rides the same hydration as the assignments editor (now
   // on the Planda Bear hub); refresh it unless a draft is in progress there,
   // because a reload would clobber that draft.
@@ -3916,6 +3917,13 @@ function renderAdminPaneSession() {
       <div class="u-note">Instructor accounts: <a href="dashboard.html#accounts" class="link-accent">Dashboard accounts page</a>.</div>
     </div>`;
   }
+  if (adminShareAvailable()) {
+    html += `<div class="admin-section">
+      <div class="admin-section-label">Share with another admin</div>
+      <div class="u-note u-mb8">Sharing puts this show on that admin's own list of shows: their front page and their dashboard. They can open it without typing the code.</div>
+      <div id="adminShareList">${adminShareListHTML()}</div>
+    </div>`;
+  }
   if (session.code || session.isExpert) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Show clock</div>
@@ -3947,6 +3955,119 @@ function renderAdminPaneSession() {
     </div>`;
   }
   return html;
+}
+
+// ── Share this show with another admin ──
+// A show belongs to the admin who made it (ownerUid on the show). Sharing
+// pushes it to another admin: the code goes on their profile's list of shows
+// and their uid goes on the show's sharedWith list (CueolaAdminAuth.shareShow).
+const ADMIN_SHARE_EMPTY = { code:'', status:'idle', admins:[], ownerUid:'', createdBy:'', sharedWith:[] };
+let adminShareState = { ...ADMIN_SHARE_EMPTY };
+let adminShareBusy = '';   // uid of the admin a share or stop is in flight for
+
+function adminShareAvailable() {
+  return Boolean(adminSession && session.code && session.code !== 'LOCAL' && !session.isDemo && !session.isExpert);
+}
+
+async function loadAdminShareState(force=false) {
+  if (!adminShareAvailable() || !window._firebaseReady || !window.CueolaAdminAuth?.listAdmins) return;
+  const code = session.code;
+  if (!force && adminShareState.code === code && adminShareState.status !== 'failed' && adminShareState.status !== 'idle') return;
+  adminShareState = { ...ADMIN_SHARE_EMPTY, code, status:'loading' };
+  repaintAdminShare();
+  try {
+    const [admins, snap] = await Promise.all([
+      CueolaAdminAuth.listAdmins(),
+      window._getDoc(window._doc(window._db, 'sessions', code)),
+    ]);
+    if (session.code !== code) return;
+    const data = snap.exists() ? (snap.data() || {}) : {};
+    adminShareState = {
+      code, status:'ready', admins,
+      ownerUid:String(data.ownerUid || ''),
+      createdBy:String(data.createdBy || ''),
+      sharedWith:(Array.isArray(data.sharedWith) ? data.sharedWith : []).filter(uid => typeof uid === 'string'),
+    };
+  } catch (err) {
+    if (session.code !== code) return;
+    adminShareState = { ...ADMIN_SHARE_EMPTY, code, status:'failed' };
+  }
+  repaintAdminShare();
+}
+
+function repaintAdminShare() {
+  const wrap = document.getElementById('adminShareList');
+  if (wrap) wrap.innerHTML = adminShareListHTML();
+}
+
+function adminShareListHTML() {
+  const st = adminShareState.code === session.code ? adminShareState : ADMIN_SHARE_EMPTY;
+  if (st.status === 'failed') {
+    return `<div class="u-note">The admin list could not be loaded. <button class="admin-act-btn" onclick="loadAdminShareState(true)">Retry</button></div>`;
+  }
+  if (st.status !== 'ready') return '<div class="u-note">Loading admins…</div>';
+  const rows = st.admins.filter(a => a.uid && a.username).map(a => {
+    const isMe = a.uid === adminSession?.id;
+    const isOwner = a.uid === st.ownerUid;
+    const shared = st.sharedWith.includes(a.uid);
+    const busy = adminShareBusy === a.uid;
+    const uidArg = esc(JSON.stringify(a.uid));
+    let right = '';
+    if (isOwner) right = `<span class="admin-item-you">${isMe ? 'YOU MADE THIS' : 'MADE THIS'}</span>`;
+    else if (isMe) right = `<span class="admin-item-you">${shared ? 'SHARED WITH YOU' : 'YOU'}</span>`;
+    else if (shared) right = `<div class="admin-item-acts"><button class="admin-act-btn danger" ${busy ? 'disabled' : ''} onclick="adminUnshareShow(${uidArg})" data-tip="Take this show off their list">Stop sharing</button></div>`;
+    else right = `<div class="admin-item-acts"><button class="admin-act-btn" ${busy ? 'disabled' : ''} onclick="adminShareShow(${uidArg})" data-tip="Put this show on their list">Share</button></div>`;
+    return `<div class="admin-item">
+      <div class="admin-item-name">${esc(a.name || a.username)}
+        <span class="admin-member-user">@${esc(a.username)}</span>
+      </div>
+      <div class="u-spacer"></div>
+      ${right}
+    </div>`;
+  });
+  if (rows.length < 2 && !st.admins.some(a => a.uid !== adminSession?.id)) {
+    return '<div class="u-note">There is no other admin yet. A super admin adds one on the dashboard Accounts page.</div>';
+  }
+  return `<div class="admin-list">${rows.join('')}</div>`;
+}
+
+function adminShareFailText(res, verb) {
+  if (res?.reason === 'student-username') return 'That admin has no profile: a student already uses their username.';
+  if (res?.full) return 'That admin already has 100 shows on their list. They need to take one off first.';
+  if (String(res?.reason || '').includes('permission-denied')) return 'Saving was refused. Log in as an admin and try again.';
+  return `Could not ${verb}. Check the connection and try again.`;
+}
+
+async function adminShareShow(uid) {
+  const target = adminShareState.admins.find(a => a.uid === uid);
+  if (!target || adminShareBusy || !adminShareAvailable()) return;
+  const code = session.code;
+  adminShareBusy = uid; repaintAdminShare();
+  const res = await CueolaAdminAuth.shareShow(code, target);
+  adminShareBusy = '';
+  if (res?.ok) {
+    if (adminShareState.code === code && !adminShareState.sharedWith.includes(uid)) adminShareState.sharedWith.push(uid);
+    toast(`${code} is now on ${target.name || '@' + target.username}'s list of shows.`);
+  } else {
+    toast(adminShareFailText(res, 'share'));
+  }
+  repaintAdminShare();
+}
+
+async function adminUnshareShow(uid) {
+  const target = adminShareState.admins.find(a => a.uid === uid);
+  if (!target || adminShareBusy || !adminShareAvailable()) return;
+  const code = session.code;
+  adminShareBusy = uid; repaintAdminShare();
+  const res = await CueolaAdminAuth.unshareShow(code, target);
+  adminShareBusy = '';
+  if (res?.ok) {
+    if (adminShareState.code === code) adminShareState.sharedWith = adminShareState.sharedWith.filter(x => x !== uid);
+    toast(`${code} is off ${target.name || '@' + target.username}'s list of shows.`);
+  } else {
+    toast(adminShareFailText(res, 'stop sharing'));
+  }
+  repaintAdminShare();
 }
 
 function renderAdminPanePeople() {
@@ -6038,6 +6159,8 @@ async function startBlankSlate() {
       return;
     }
     localStorage.setItem('cueola_last_name', name);
+    // An admin who makes a show gets it on their own list of shows.
+    if (adminSession && window.CueolaAdminAuth?.addShowsToProfile) CueolaAdminAuth.addShowsToProfile(adminSession, [code]);
     // The creator of a Blank Slate owns and drives their own sandbox. local:true
     // marks it solo so the show-caller resolver lets them drive without a real
     // admin session. Only THIS device (which minted the code) is marked; anyone
