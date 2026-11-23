@@ -182,3 +182,32 @@ test('time readouts: seconds for a distance at a speed, formatted m:ss', () => {
 });
 
 console.log('prompter-engine: all tests passed');
+
+test('a jog stays steady on slow and stalled frames (30 Hz, 10 Hz, a hidden window)', () => {
+  for (const dt of [16.7, 33.4, 50, 100, 250, 500]) {
+    const m = E.createMotion({ speed: 60, max: 100000 });
+    m.jumpTo(1000);
+    m.moveBy(120);                       // one line down
+    let peak = 0, last = null;
+    for (let t = 0; t < 3000; t += dt) {
+      last = m.step(dt, 1000);
+      peak = Math.max(peak, last.pos);
+      assert.ok(Number.isFinite(last.pos) && Number.isFinite(last.vel), `finite at ${dt}ms`);
+      assert.ok(Math.abs(last.vel) < 5000, `no runaway speed at ${dt}ms frames, got ${last.vel}`);
+    }
+    assert.ok(peak <= 1121, `never past the target at ${dt}ms frames, peak ${peak}`);
+    assert.ok(Math.abs(last.pos - 1120) < 1, `lands on the target at ${dt}ms frames, got ${last.pos}`);
+  }
+});
+
+test('a jog while rolling on slow frames keeps rolling and never hits the end', () => {
+  const m = E.createMotion({ speed: 60, max: 5000 });
+  m.roll(true);
+  for (let i = 0; i < 60; i++) m.step(16.7);
+  m.moveBy(240);
+  let ended = false;
+  for (let t = 0; t < 2000; t += 250) ended = ended || m.step(250, 500).ended;
+  assert.equal(ended, false, 'the roll did not stop');
+  assert.ok(m.get().pos < 1000, `still near where it was, got ${m.get().pos}`);
+  assert.equal(m.get().rolling, true);
+});

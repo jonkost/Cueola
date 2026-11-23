@@ -318,7 +318,7 @@ test('questions lane replaces push-paste: QUESTION card in, script pollution out
   assert.match(html, /\.pt-question-tag\{/);
   // Payload rides the existing command envelope end-to-end.
   assert.match(app, /function buildPrompterControl\(action, source='script-op', payload=null\)/);
-  assert.match(app, /applyRemoteControlOnce\(control\.action, control\.ts, control\.sender, control\.controlId, control\.payload\)/);
+  assert.match(app, /function ptApplyDeskItem\(item\) \{[\s\S]*?applyRemoteControlOnce\(item\.action, item\.at, item\.by, item\.id, item\.payload\)/);
 });
 
 test('Script Operator pop-out parity: question lane, numeric readouts, in-app tab grouping (3.5)', async () => {
@@ -960,12 +960,18 @@ test('prompter scrub eases toward an accumulating target instead of teleporting'
   // Pause freezes a travel where the screen is; a boot prime never replays a
   // stale RELATIVE scrub; a seeded position goes through the one hard-set path.
   assert.match(app.slice(app.indexOf('function ptStopPlay()'), app.indexOf('function ptTogglePlay')), /if \(ptMotion\.travelling\(\)\) ptMotion\.jumpTo\(ptMotion\.get\(\)\.pos\);/);
-  assert.match(app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce')), /isCollaborativePrompterControl\(action\) && !action\.startsWith\('seek_line_'\) && !action\.startsWith\('seek_set_'\)\) fresh\.push\(newest\)/);
+  // The talent takes controls from the prompter desk: one record per control
+  // family. A fresh link replays the look only, never a scrub or a play
+  // (scripts/tests/prompter-desk.test.mjs proves the rules).
+  assert.match(app, /_ptDeskReceiver\.adopt\(desk\)\.forEach\(item =>/);
+  assert.doesNotMatch(app, /function unseenPrompterQueueControls/);
   const seedBlock = app.slice(app.indexOf('const seedPct = Number(message.positionPct)'), app.indexOf('ptSetSpeed(state.targetSpeed)'));
   assert.ok((seedBlock.match(/ptApplyScrollOffset\(/g) || []).length >= 2);
-  // The scrub write queue holds 24 commands: at the dial's 10 writes/s, an
-  // 8-deep queue lost relative moves after any 0.8s listener gap.
-  assert.match(app, /_prompterControlQueue = \[\..._prompterControlQueue, stamped\]\.slice\(-24\)/);
+  // No command queue: each control family is one record on the show's
+  // document, written by field path. A scrub carries a running total, so a
+  // listener gap cannot lose relative moves.
+  assert.match(app, /\['prompter\.desk\.' \+ stamped\.family\]: stamped\.record,/);
+  assert.doesNotMatch(app, /'prompter\.controlQueue'/);
   // The dial drops a superseded TAKE's auto-resume and any cue landing callback.
   assert.match(seek, /_ptLandCallback = null;/);
   assert.match(seek, /ptPendingHoldResume = false;/);
@@ -1478,7 +1484,11 @@ test('cross-device talent control: doc-path transport, rebind on evidence, doc s
   // accepts({ allowLegacy, ignoreTarget }).
   assert.match(app, /stateMessage = \{ \.\.\.stateMessage, targetOutputInstanceId:FLOWMINGO_ENDPOINT_ID \};/);
   assert.match(app, /applyCompletePrompterState\(stateMessage, \{ viaDoc:true \}\)/);
-  assert.equal((app.match(/accepts\(control, \{ allowLegacy:true, ignoreTarget:true \}\)/g) || []).length, 2);
+  // Both talent listeners hand the document's desk to the receiver. A desk
+  // record needs no session check: the show code is the address.
+  assert.match(app, /ptAdoptDesk\(d\.prompter\.desk\);/);
+  assert.match(app, /ptAdoptDesk\(data\.prompter\?\.desk\);/);
+  assert.doesNotMatch(app, /accepts\(control, \{ allowLegacy:true, ignoreTarget:true \}\)/);
   assert.match(prompterSession, /if \(!options\.ignoreTarget && target && target !== instanceId/);
   // One-hop readiness over the doc, and sync re-sends before 'recovering'.
   assert.match(app, /'prompter\.talentApplied': \{/);
@@ -2150,10 +2160,10 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   assert.equal((foreign.match(/sendPrompterStateSnapshot\(/g) || []).length, 1);
   assert.match(foreign, /if \(_prompterOperatorRuntimeActive && Date\.now\(\) - _lastPrompterRebindSnapshotTs >= 10000\) \{\n        _lastPrompterRebindSnapshotTs = Date\.now\(\);\n        sendPrompterStateSnapshot\(outputId, 'recovery'\);/);
   assert.match(app, /let _lastPrompterRebindSnapshotTs = 0;/);
-  // C2: the boot prime is a positive filter (collaborative, never a scrub).
-  const queue = app.slice(app.indexOf('function unseenPrompterQueueControls'), app.indexOf('function applyRemoteControlOnce'));
-  assert.match(queue, /const action = String\(newest\?\.action \|\| ''\);/);
-  assert.doesNotMatch(queue, /Date\.now\(\)/);
+  // C2: a fresh link resets the desk receiver, so its first document is the
+  // link pass (the look of the show only, never a scrub or a play).
+  assert.match(app, /ptResetDeskReceiver\(\);     \/\/ a new link replays the show's look/);
+  assert.match(app, /pushSessionHistoryState\('promptypus'\);\n  ptResetDeskReceiver\(\);/);
   // C4: change-driven admission with a 60s skew-tolerant first sight; applied
   // receipts need a change (no clock); both dedup stamps reset with the
   // runtime; the standalone Flowmingo Op reader follows suit.
@@ -2361,9 +2371,10 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   assert.match(flowPanel, /id="flowOpPlayBtn"[\s\S]*id="flowOpSpeedRange"[\s\S]*scriptOpMoreHTML\(`<div class="flow-control-section flow-control-transport-extras">/);
   assert.match(flowPanel, /scriptOpMoreHTML\(`<div class="flow-control-section flow-control-onair">[\s\S]*id="flow-seek"/);
   assert.match(flowPanel, /clockAndAlertControlsHTML\('flow', disabled\)/);
-  // Script Op yields transport to a Flowmingo Op that just acted (the Guide's
-  // Control ownership callout); clocks, cues and slates never wait.
-  assert.match(app, /control\.source === 'flowmingo-op'\) \{\n\s+flowmingoRemoteOverrideUntil = Date\.now\(\) \+ FLOWMINGO_REMOTE_OVERRIDE_MS;/);
+  // No lockout (2026-11-23): Script Op is never refused because the Flowmingo
+  // Op touched a control. Each control is one shared record, last press wins.
+  assert.doesNotMatch(app, /flowmingoRemoteOverrideUntil/);
+  assert.doesNotMatch(app, /Flowmingo Op has control/);
   // Simple tier: each pane leads with the student controls and folds the rest
   // behind one collapsed More, on both surfaces.
   const transport = app.slice(app.indexOf('function scriptOpTransportPaneHTML()'), app.indexOf('function scriptOpDisplayPaneHTML()'));

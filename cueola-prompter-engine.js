@@ -176,14 +176,23 @@
           landed = true;
         }
       } else if (s.target) {
+        // A critically damped spring, solved exactly for this step. The old
+        // code added the spring's push one frame at a time, which is only
+        // steady while frames come faster than about 30 a second. On a slow
+        // or stalled frame (a busy laptop, a 30 Hz projector, a window in the
+        // background) the push overshot, each frame worse than the last, and
+        // a nudge of one line threw the copy to the end of the script and
+        // stopped the roll. The exact answer cannot overshoot at any frame
+        // length: a long frame simply lands closer to the target.
         var j = s.target;
-        j.to = clampPos(j.to + want * dt);
         var w = j.omega;
-        var err = j.to - s.pos;
-        var rel = s.vel - want;
-        var acc = w * w * err - 2 * w * rel;
-        s.vel += acc * dt;
-        s.pos += s.vel * dt;
+        var x0 = s.pos - j.to;             // how far from the target, before it drifts
+        var v0 = s.vel - want;             // speed measured against the crawl
+        j.to = clampPos(j.to + want * dt);
+        var decay = Math.exp(-w * dt);
+        var pull = v0 + w * x0;
+        s.pos = j.to + (x0 + pull * dt) * decay;
+        s.vel = want + (v0 - pull * w * dt) * decay;
         if (Math.abs(j.to - s.pos) <= LAND_PX && Math.abs(s.vel - want) <= LAND_VEL) {
           s.pos = j.to;
           s.vel = want;

@@ -2362,12 +2362,6 @@ let callSheetMealsProvided = ''; // '' | 'provided' | 'not-provided'
 let callSheetWeather = null;  // { conditions, high, low, precip, wind, sunrise, sunset, emoji, source, forecastDate, place, updatedAt }
 let liveClockRunning = false;
 let paperworkDirty = false;
-let flowmingoRemoteOverrideUntil = 0;
-let _flowOpDocControlSeenId = null;   // last prompter.control id seen on the doc (null until the first snapshot of a show)
-// How long the Script Op desk defers TRANSPORT (play/speed/scroll) to a remote
-// Flowmingo Op after the remote acts. Short so the desk can grab control back fast;
-// clock/cue/question/slate bypass this entirely (isCollaborativePrompterControl).
-const FLOWMINGO_REMOTE_OVERRIDE_MS = 5000;
 let collapsedSegments = (() => {
   try { return new Set(JSON.parse(localStorage.getItem('cueola_collapsed_segs')||'[]')); }
   catch { return new Set(); }
@@ -3753,6 +3747,12 @@ function updateAdminUI() {
   const gearTools = document.getElementById('pbGearAdminTools');
   if (gearLabel) gearLabel.hidden = Boolean(adminSession);
   if (gearTools) gearTools.hidden = Boolean(adminSession);
+  // The quiet-look switch is for every signed-in admin, whatever their level.
+  const quietLabel = document.getElementById('pbGearQuietLabel');
+  const quietRow = document.getElementById('pbGearQuietRow');
+  if (quietLabel) quietLabel.hidden = !adminSession;
+  if (quietRow) quietRow.hidden = !adminSession;
+  if (!adminSession && pbQuietLook) pbEndQuietLook(true);
   // Settings > Admin: log in while signed out; the panel and log out once in.
   const setIn = document.getElementById('setAdminLoginBtn');
   const setPanel = document.getElementById('setAdminPanelBtn');
@@ -3760,12 +3760,6 @@ function updateAdminUI() {
   if (setIn) setIn.hidden = Boolean(adminSession);
   if (setPanel) setPanel.hidden = !adminSession;
   if (setOut) setOut.hidden = !adminSession;
-  // The quiet-look switch is for every signed-in admin, whatever their level.
-  const quietLabel = document.getElementById('pbGearQuietLabel');
-  const quietRow = document.getElementById('pbGearQuietRow');
-  if (quietLabel) quietLabel.hidden = !adminSession;
-  if (quietRow) quietRow.hidden = !adminSession;
-  if (!adminSession && pbQuietLook) pbEndQuietLook(true);
   // The Build caller chip is admin-only: repaint whenever the admin session
   // resolves or ends (enterRundown calls this too).
   try { renderShowCallerBadge(); renderCallerBanner(); } catch (error) { containError('Caller chip', error); }
@@ -6631,7 +6625,6 @@ function setupFirestore() {
       _sessionActiveIdxAdopted = false;   // the legacy activeIdx mirror waits for the doc to be read
       resetLiveShared();
       _ogCommandQueue = []; _lastDocOgCommandQueue = []; _ogSeenAckKey = ''; _talentReportedBuild = '';   // proto 4 state is per show
-      _flowOpDocControlSeenId = null;   // the Remote Op hand-off starts fresh per show
     }
     if (firestoreUnsub) firestoreUnsub();
     pbStartNotesListener();   // per-note live push (resets itself on session change)
@@ -6766,24 +6759,6 @@ function setupFirestore() {
       if (!snap.metadata?.hasPendingWrites) noteServerClockSample(d.presence?.[presenceId]?.at, _presenceClockWrite);
       _adoptDocPrompterSession(d);
       maybeResumeScriptOpHost();   // reload survival: re-host a still-open pop-out
-      // Remember the doc's control queue so this window's next command write
-      // can carry OTHER writers' recent entries forward instead of evicting
-      // them (two operator surfaces used to clobber each other's commands out
-      // of the queue; a lagging talent then lost the survivor's seek).
-      if (d.prompter && Array.isArray(d.prompter.controlQueue)) _lastDocPrompterControlQueue = d.prompter.controlQueue;
-      // Operator hand-off (Guide: Control ownership). Only the talent block
-      // below applies controls, so the Live window reads it from the doc: a
-      // NEW Remote Op transport command makes Script Op wait five seconds.
-      // A first or cached snapshot only records the id; stops never lock.
-      const lastCtl = d.prompter?.control;
-      const lastCtlId = String(lastCtl?.controlId || '');
-      if (_flowOpDocControlSeenId === null || snapMeta.fromCache) _flowOpDocControlSeenId = lastCtlId;
-      else if (lastCtlId && lastCtlId !== _flowOpDocControlSeenId) {
-        _flowOpDocControlSeenId = lastCtlId;
-        if (lastCtl.source === 'flowmingo-op' && !isPrompterSelfSender(lastCtl.sender) && !isCollaborativePrompterControl(lastCtl.action) && !String(lastCtl.action || '').endsWith('_stop')) {
-          flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
-        }
-      }
       if (d.prompter && typeof d.prompter.text === 'string') {
         const adopted = adoptPrompterSnapshot(d.prompter);
         // Forward live to any connected Flowmingo on this device, scroll-preserving.
@@ -6823,21 +6798,7 @@ function setupFirestore() {
             ptArmHoldReleaseFallback(newRow);
           }
         }
-        // controlQueue first (every unseen command, in order); legacy single
-        // slot when the writer is an old shell.
-        const queued = unseenPrompterQueueControls(d.prompter.controlQueue);
-        const controls = queued || (d.prompter.control?.action && !isPrompterSelfSender(d.prompter.control.sender) ? [d.prompter.control] : []);
-        controls.forEach(control => {
-          if (!control?.action) return;
-          // Same protocol gate as the talent door: production + session must
-          // match (a stale targeted transport from another session used to
-          // replay here on boot). Doc-delivered controls ignore the output
-          // target, which is stale after any talent reload.
-          if (!prompterSessionController.accepts(control, { allowLegacy:true, ignoreTarget:true })) return;
-          if (applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload) && control.source === 'flowmingo-op') {
-            flowmingoRemoteOverrideUntil = Date.now() + FLOWMINGO_REMOTE_OVERRIDE_MS;
-          }
-        });
+        ptAdoptDesk(d.prompter.desk);
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       if (d.showClock) applyRemoteShowClock(d.showClock);  // shared start/pause clock
@@ -9283,26 +9244,6 @@ const ROW_TINTS = [
   { id:'blue',   label:'Blue',   color:'#0a84ff', print:'#dbe9ff' },
   { id:'purple', label:'Purple', color:'#bf5af2', print:'#eedcfa' },
   { id:'pink',   label:'Pink',   color:'#ff375f', print:'#ffdde5' },
-// Duplicate (a student asked for copy and paste, Jon 2026-11-23): a full copy
-// of the row, every cue on it included, lands right under the original. Move
-// it from there with Up, Down or a drag. The copy is its own row: it starts
-// not done, not on air, and is never a PREP/OUT helper of another row.
-function duplicateRow(id) {
-  const i = beats.findIndex(b => b.id === id);
-  if (i < 0 || beats[i].style === 'segment') return;
-  const copy = cloneRundownValue(beats[i]);
-  copy.id = nextBeatId();
-  copy.done = false;
-  delete copy.executionState;
-  delete copy.helperFor;
-  delete copy.helperRole;
-  copy._createdAt = Date.now();
-  copy._createdBy = presenceId;
-  beats.splice(i + 1, 0, copy);
-  renderRundown(); syncToFirestore();
-  toast('Row duplicated. The copy is right under it.');
-}
-
   { id:'gray',   label:'Gray',   color:'#8e8e93', print:'#e8e8ea' },
 ];
 function rowTintDef(b) {
@@ -9333,6 +9274,26 @@ function removeRow(id) {
   beats = beats.filter(b => b.id !== id && !helperIds.includes(b.id));
   renderRundown(); syncToFirestore();
   toast(helperIds.length ? 'Removed the row and its PREP/OUT helper rows.' : (isSeg ? 'Segment deleted.' : 'Row deleted.'));
+}
+
+// Duplicate (a student asked for copy and paste, Jon 2026-11-23): a full copy
+// of the row, every cue on it included, lands right under the original. Move
+// it from there with Up, Down or a drag. The copy is its own row: it starts
+// not done, not on air, and is never a PREP/OUT helper of another row.
+function duplicateRow(id) {
+  const i = beats.findIndex(b => b.id === id);
+  if (i < 0 || beats[i].style === 'segment') return;
+  const copy = cloneRundownValue(beats[i]);
+  copy.id = nextBeatId();
+  copy.done = false;
+  delete copy.executionState;
+  delete copy.helperFor;
+  delete copy.helperRole;
+  copy._createdAt = Date.now();
+  copy._createdBy = presenceId;
+  beats.splice(i + 1, 0, copy);
+  renderRundown(); syncToFirestore();
+  toast('Row duplicated. The copy is right under it.');
 }
 
 function moveRowUp(id) {
@@ -16181,9 +16142,6 @@ async function scriptOperatorExecuteCommand(command) {
       const applied = scriptOperatorApplyPreview(action);
       return { ok:true, detail:applied === false ? 'Preview held until talent is ready' : 'Preview applied' };
     }
-    if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
-      return { ok:false, error:'Flowmingo Op currently owns transport controls' };
-    }
     const durationMatch = action.match(/^clock_duration_(\d+(?:\.\d+)?)$/);
     const wrapMatch = action.match(/^wrapup_(\d+(?:\.\d+)?)$/);
     const countToMatch = action.match(/^clock_until_(\d+)_label_/);
@@ -16602,41 +16560,43 @@ function buildPrompterControl(action, source='script-op', payload=null) {
   };
 }
 
-// Rapid commands (a punch-in sends seek then resume back-to-back) coalesce in
-// the single prompter.control slot and a remote talent can lose the seek. Each
-// write also publishes prompter.controlQueue, the last 24 commands with a seq
-// that stays monotonic for this writer across reloads; receivers replay every
-// unseen seq in order. The legacy slot keeps stale shells working.
-let _prompterControlSeq = 0;
-let _prompterControlQueue = [];
-let _lastDocPrompterControlQueue = [];   // doc truth, for carrying other writers' entries forward
+// The prompter desk (cueola-prompter-desk.js): every control is ONE record
+// per family on the show's document (prompter.desk.play, .speed, .seek ...).
+// A press overwrites its family's record; the talent applies any record it
+// has not applied yet. This replaced a 24-deep command queue that the talent
+// had to catch in order: a press could be pushed out of it, refused by the
+// session check, parked in a waiting line, or locked out for five seconds
+// when the other operator touched anything. Those were the hit-or-miss
+// results (Jon, 2026-11-23). Each family is written by field path, so two
+// operators never overwrite each other's controls.
+const _prompterDeskSender = window.CueolaPrompterDesk.createSender({ writer:FLOWMINGO_ENDPOINT_ID });
 let _lastForwardedPrompterText = null;   // in-app forward is change-gated (every doc write fires the listener)
 
 function dispatchPrompterCommand(control, origin='live', quiet=false, codeOverride='') {
   if (!control?.action) return false;
+  const stamped = _prompterDeskSender.stamp(
+    { id:control.controlId, action:control.action, payload:control.payload, at:control.ts, source:control.source },
+    { speed:ptTargetSpeed, size:ptFontSize });
+  if (!stamped) return false;
+  if (stamped.action !== control.action) {
+    // "Faster" went out as a number (speed 70). Count it here at once so a
+    // second quick press steps from 70, not from 60 again.
+    if (stamped.family === 'speed') ptTargetSpeed = Number(stamped.action.slice('speed_set_'.length)) || ptTargetSpeed;
+    if (stamped.family === 'size') ptFontSize = Number(stamped.action.slice('size_set_'.length)) || ptFontSize;
+  }
+  // The same record rides to talent windows in this browser directly (no
+  // cloud round trip); the talent applies it once whichever copy lands first.
+  control = { ...control, action:stamped.action, deskFamily:stamped.family, deskRecord:stamped.record };
   _postPrompterMessage(control);
   trackPrompterControl(control, origin, quiet);
   const code = String(codeOverride || control.productionCode || session.code || flowOpCode || '').trim().toUpperCase();
   if (window._firebaseReady && code) {
-    _prompterControlSeq = Math.max(_prompterControlSeq + 1, Date.now());
-    const stamped = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID, seq:_prompterControlSeq };
-    // 24 deep (was 8): the dial scrub writes up to 10 relative seek_lines a
-    // second, and a remote talent whose listener naps longer than the queue's
-    // history silently loses the evicted moves with no absolute truth to
-    // recover from. 24 covers a 2.4s gap at full scrub rate.
-    _prompterControlQueue = [..._prompterControlQueue, stamped].slice(-24);
-    // Publish the union of this window's queue and OTHER writers' recent doc
-    // entries (by ts), so two operator surfaces stop evicting each other's
-    // unseen commands. Receivers dedupe per-writer seq + signature, so
-    // re-carrying an already-applied entry is harmless.
-    const foreign = (Array.isArray(_lastDocPrompterControlQueue) ? _lastDocPrompterControlQueue : [])
-      .filter(c => c && c.action && Number.isFinite(Number(c.seq)) && c.senderClient !== CLIENT_ID);
-    const mergedQueue = [...foreign, ..._prompterControlQueue]
-      .sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0))
-      .slice(-24);
+    const legacy = { ...control, sender:FLOWMINGO_ENDPOINT_ID, senderClient:CLIENT_ID };
+    delete legacy.deskFamily; delete legacy.deskRecord;
     window._updateDoc(window._doc(window._db, 'sessions', code), {
-      'prompter.control': stamped,
-      'prompter.controlQueue': mergedQueue,
+      ['prompter.desk.' + stamped.family]: stamped.record,
+      // The last control, for the other operator's screen to mirror.
+      'prompter.control': legacy,
       'prompter.updatedAt':control.ts,
     }).catch(err => {
       if (origin === 'flowop') flowOpSetStatus(firebaseConnectionLabel(err, 'Send failed'), true);
@@ -17092,12 +17052,8 @@ function applyOperatorOverlayMirror(action, payload=null, origin='live') {
 }
 
 function sendPrompterControl(action, payload=null) {
-  // Stops always go through: a refused brake_stop / boost_stop would leave
-  // the talent braking or boosting on air.
-  if (livePrompterOpen && Date.now() < flowmingoRemoteOverrideUntil && !isCollaborativePrompterControl(action) && !String(action || '').endsWith('_stop')) {
-    markLivePrompterStatus('Flowmingo Op has control', 'busy');
-    return false;   // strict false: a deck key can flash the refusal
-  }
+  // No lockout: Script Op is never refused because the Flowmingo Op touched
+  // a control. Each control is one shared record and the last press wins.
   _ensurePrompterOperatorBridge();
   const control = buildPrompterControl(action, 'script-op', payload);
   applyOperatorOverlayMirror(action, payload);
@@ -17329,6 +17285,18 @@ function ptAdoptCueolaBridgeMessage(msg={}) {
 
 function ptHandleCueolaMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  // A control from an operator window in this browser. It carries its desk
+  // record, so it needs no handshake and no matching prompter session: only
+  // the show code has to agree. The cloud copy of the same record is then
+  // already applied when it arrives.
+  if (msg.type === 'PROMPTER_COMMAND' && msg.deskFamily && msg.deskRecord) {
+    const theirs = String(msg.productionCode || msg.sessionCode || '').trim().toUpperCase();
+    const mine = String(ptLinkedCueolaCode || session.code || '').trim().toUpperCase();
+    if (theirs && mine && theirs !== mine) return;
+    if (!isFlowmingoTalentActive()) return;
+    ptApplyDeskItem(_ptDeskReceiver.offer(msg.deskFamily, msg.deskRecord));
+    return;
+  }
   if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
   // Dedup: each message is sent over BroadcastChannel AND localStorage, so it
   // arrives twice. Skip repeats by id instead of dropping by timestamp (which
@@ -18370,13 +18338,22 @@ function ptSeekToText(query) {
 // stay put and release any hold. Past row n: stay put, note the live row,
 // say AHEAD. Everything else (Back, Cue here, Cue Now, the deck's cue key)
 // glides unconditionally.
+// The next drawn frame, or 150 ms, whichever comes first. A cue to a row used
+// to wait for a frame alone: a talent window that was not drawing (covered,
+// in the background, or stalled) never got one, so the cue never landed.
+function ptNextFrameOrSoon(fn) {
+  let done = false;
+  const run = () => { if (done) return; done = true; fn(); };
+  requestAnimationFrame(run);
+  setTimeout(run, 150);
+}
 function ptSeekToRow(rowNum, payload=null) {
   const n = parseInt(rowNum, 10);
   if (!Number.isFinite(n) || n < 1) return Promise.resolve(false);
   const backward = Number.isFinite(ptLiveRowNum)
     && (n < ptLiveRowNum || (n === ptLiveRowNum && Number.isFinite(ptLiveRowPrev) && n < ptLiveRowPrev));
   const advance = !!(payload && payload.advance === true) && !backward;
-  return new Promise(resolve => requestAnimationFrame(() => {
+  return new Promise(resolve => ptNextFrameOrSoon(() => {
     const rows = ptHeaders();
     const target = rows.find(r => r.row === n);
     if (!target) {
@@ -18653,6 +18630,64 @@ function patchPrompterPlayButton(btn, isPlaying) {
 function scriptOpMoreHTML(inner) {
   return `<details class="cc-more sop-more"><summary>More</summary>${inner}</details>`;
 }
+// The scroll pad: scroll or drag on it and the talent's copy moves with you.
+// It sends "move by N lines" in small steps; the desk adds them up, so a
+// step lost on the way is made up by the next one.
+function poScrollPadHTML(scope, dis='') {
+  return `<div class="pt-scroll-pad" data-pt-scrollpad="${scope}" role="slider" tabindex="0" aria-label="Scroll the prompter" aria-valuetext="Scroll or drag to move the prompter" data-tip="Scroll or drag here to move the prompter. Up and Down arrows move one line."${dis ? ' aria-disabled="true"' : ''}>
+      ${sfIcon('chevron.up')}<span>Scroll or drag here to move the prompter</span>${sfIcon('chevron.down')}
+    </div>`;
+}
+const _ptPadOwed = {};   // scope -> { px, timer }
+function ptScrollPadSend(scope, px) {
+  const st = _ptPadOwed[scope] || (_ptPadOwed[scope] = { px:0, timer:null });
+  st.px += px;
+  const flush = () => {
+    const pitch = Math.max(24, ptFontSize * 1.65);          // about one line of copy on the talent
+    const lines = Math.max(-200, Math.min(200, Math.round(st.px / pitch * 10) / 10));
+    if (!lines) return;
+    st.px -= lines * pitch;
+    const action = 'seek_line_' + lines;
+    if (scope === 'flow') flowOpSendControl(action, true); else sendPrompterControl(action);
+  };
+  if (st.timer) return;            // one send every 80 ms at most; the rest adds up
+  flush();
+  st.timer = setTimeout(() => { st.timer = null; if (Math.abs(st.px) >= 1) ptScrollPadSend(scope, 0); }, 80);
+}
+(function bindPrompterScrollPads() {
+  const padOf = e => { const el = e.target?.closest?.('[data-pt-scrollpad]'); return el && el.getAttribute('aria-disabled') !== 'true' ? el : null; };
+  document.addEventListener('wheel', e => {
+    const pad = padOf(e); if (!pad) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 400 : 1;
+    ptScrollPadSend(pad.dataset.ptScrollpad, e.deltaY * unit);
+  }, { passive:false });
+  let drag = null;
+  document.addEventListener('pointerdown', e => {
+    const pad = padOf(e); if (!pad || !e.isPrimary) return;
+    drag = { pad, id:e.pointerId, y:e.clientY };
+    try { pad.setPointerCapture(e.pointerId); } catch {}
+    pad.classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    // The pad is small, so a drag moves the copy three times as far.
+    ptScrollPadSend(drag.pad.dataset.ptScrollpad, (drag.y - e.clientY) * 3);
+    drag.y = e.clientY;
+  });
+  const end = e => { if (!drag || e.pointerId !== drag.id) return; drag.pad.classList.remove('dragging'); drag = null; };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const pad = document.activeElement?.matches?.('[data-pt-scrollpad]') ? document.activeElement : null;
+    if (!pad || pad.getAttribute('aria-disabled') === 'true') return;
+    e.preventDefault(); e.stopPropagation();
+    const action = 'seek_line_' + (e.key === 'ArrowDown' ? 1 : -1);
+    if (pad.dataset.ptScrollpad === 'flow') flowOpSendControl(action, true); else sendPrompterControl(action);
+  }, true);
+})();
 function poTransportSectionHTML(scope) {
   const playAction = ptPlaying ? 'pause' : 'resume';
   const playLabel = ptPlaying ? 'Pause' : 'Play';
@@ -18661,6 +18696,7 @@ function poTransportSectionHTML(scope) {
       <div class="flow-control-grid one">
         <button class="pt-btn${ptPlaying?' active':''}" id="${scope}-play-btn" data-prompter-play data-prompter-scope="${scope}" onclick="sendPrompterControl('${playAction}')" aria-pressed="${ptPlaying ? 'true' : 'false'}"><span class="sf-symbol" data-symbol="media.play" data-prompter-play-icon="play" aria-hidden="true"${ptPlaying ? ' hidden' : ''}></span><span class="sf-symbol" data-symbol="media.pause" data-prompter-play-icon="pause" aria-hidden="true"${ptPlaying ? '' : ' hidden'}></span><span data-prompter-play-label>${playLabel}</span></button>
       </div>
+      ${poScrollPadHTML(scope)}
     </div>`;
 }
 // Brake / Boost / Reverse / Forward: behind More (J / L and the arrow keys still work).
@@ -20110,38 +20146,24 @@ function applyQuestionAction(action, target='talent', text='') {
 // boot matches the legacy single-slot behavior instead of replaying history.
 // Returns null when the doc carries no usable queue (legacy writer): callers
 // fall back to the single prompter.control slot.
-const _ptControlQueueSeen = {};   // writer clientId -> highest seq handed out
-let _ptControlQueuePrimed = false;
-function unseenPrompterQueueControls(queue) {
-  if (!Array.isArray(queue) || !queue.length) return null;
-  const entries = queue.filter(c => c && c.action && Number.isFinite(Number(c.seq)));
-  if (!entries.length) return null;
-  const prime = !_ptControlQueuePrimed;
-  _ptControlQueuePrimed = true;
-  const fresh = [];
-  entries.forEach(c => {
-    const writer = String(c.senderClient || c.sender || '');
-    const seq = Number(c.seq);
-    if (seq > (_ptControlQueueSeen[writer] || 0)) {
-      _ptControlQueueSeen[writer] = seq;
-      if (!prime) fresh.push(c);
-    }
+// The talent side of the prompter desk. One receiver per talent screen: it
+// remembers which record of each family it has applied. The first document
+// it sees after a link is the "link" pass: it replays the look of the show
+// (slates, clock, question, row info, read line, width) and remembers the
+// rest as seen, so an old play, seek or scroll never fires on a fresh link.
+let _ptDeskReceiver = window.CueolaPrompterDesk.createReceiver();
+function ptResetDeskReceiver() { _ptDeskReceiver = window.CueolaPrompterDesk.createReceiver(); }
+function ptApplyDeskItem(item) {
+  if (!item?.action) return false;
+  return applyRemoteControlOnce(item.action, item.at, item.by, item.id, item.payload);
+}
+// The whole desk, from the show's document. Every document write lands here
+// (heartbeats too); only records not yet applied do anything.
+function ptAdoptDesk(desk) {
+  if (!desk || typeof desk !== 'object') { _ptDeskReceiver.adopt(null); return; }
+  _ptDeskReceiver.adopt(desk).forEach(item => {
+    try { ptApplyDeskItem(item); } catch (err) { containError('Prompter control', err); }
   });
-  if (prime) {
-    const newest = entries[entries.length - 1];
-    // The boot prime is a POSITIVE filter: only a collaborative control
-    // (clock, wrap-up, question, slate, overlays, cue-to-row) replays, and
-    // never a scrub. Transport (pause/resume/brake/boost), speed, size,
-    // reset, rewind and fullscreen are dropped: the doc seed lands paused,
-    // and a stale 'resume' from yesterday's rehearsal must not start the
-    // roll on a fresh link (a stale seek_line teleported the copy by up to
-    // 200 lines, a stale seek_set overrode the seeded position). A play
-    // pressed after the talent links arrives as a fresh seq, non-prime.
-    // No wall-clock age gate: writer clock vs talent clock measures nothing.
-    const action = String(newest?.action || '');
-    if (newest && isCollaborativePrompterControl(action) && !action.startsWith('seek_line_') && !action.startsWith('seek_set_')) fresh.push(newest);
-  }
-  return fresh;
 }
 
 function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) {
@@ -20586,6 +20608,7 @@ function flowOpControlsHTML(disabled=false) {
       <div class="flow-control-grid one">
         <button class="pt-btn${flowOpPlaying ? ' active' : ''}" id="flowOpPlayBtn" onclick="flowOpSendControl('${playAction}')" aria-pressed="${flowOpPlaying ? 'true' : 'false'}"${dis}>${flowOpPlaying ? PT_SVG_PAUSE : PT_SVG_PLAY}<span>${flowOpPlaying ? 'Pause' : 'Play'}</span></button>
       </div>
+      ${poScrollPadHTML('flow', dis)}
     </div>
     <div class="flow-control-section flow-control-display">
       <div class="flow-control-title">Speed &amp; Size</div>
@@ -20934,9 +20957,6 @@ async function flowOpLoadSession(codeOverride='') {
         flowOpCode = code;
         ptLinkedCueolaCode = code;
         flowOpData = snap.data() || {};
-        // Same forward-carry as the main listener: this surface's writes must
-        // not evict other operator windows' queued commands.
-        if (Array.isArray(flowOpData.prompter?.controlQueue)) _lastDocPrompterControlQueue = flowOpData.prompter.controlQueue;
         ensurePrompterProtocolIdentity({ productionCode:code, sessionId:flowOpData.prompter?.sessionId || '' });
         if (flowOpData.prompter?.state) {
           prompterSessionController.update(flowOpData.prompter.state, { preserveVersion:true });
@@ -21258,6 +21278,7 @@ async function ptLoadFromCueolaCode(codeOverride='') {
     return;
   }
   ptLastCueolaScript = null; // fresh load → allow the first snapshot to render from the top
+  ptResetDeskReceiver();     // a new link replays the show's look, never an old play or seek
   ptSetCueolaStatus('Loading...');
   ptConnState = 'connecting';
   ptConnMessage = '';
@@ -21345,8 +21366,8 @@ async function ptLoadFromCueolaCode(codeOverride='') {
           // renderer after a reload on another machine (fresh instance id per
           // load). Retarget it once; a doc-delivered seed can only style and
           // position, paused (applyCompletePrompterState), and the control
-          // queue's boot prime replays collaborative controls only (never
-          // transport or a scrub, unseenPrompterQueueControls), so a stale
+          // desk's link pass replays only the look of the show (never
+          // transport or a scrub, see cueola-prompter-desk.js), so a stale
           // seed or a stale 'resume' on a reused show code can never start
           // the roll by itself.
           if (!_lastAppliedPrompterSnapshotId && stateMessage.targetOutputInstanceId
@@ -21405,16 +21426,7 @@ async function ptLoadFromCueolaCode(codeOverride='') {
         const ss = ptEl('pt-setup-status');
         if (ss && ss.textContent !== 'Linked to ' + code) { ss.textContent = 'Linked to ' + code; ss.className = 'pt-setup-status'; }
         ptUpdateReady();
-        const queued = unseenPrompterQueueControls(data.prompter?.controlQueue);
-        const controls = queued || (data.prompter?.control ? [data.prompter.control] : []);
-        controls.forEach(control => {
-          // Doc-delivered controls are addressed by production + session only:
-          // the operator's targetOutputInstanceId is stale after any reload.
-          if (control?.action && !isPrompterSelfSender(control.sender)
-              && prompterSessionController.accepts(control, { allowLegacy:true, ignoreTarget:true })) {
-            applyRemoteControlOnce(control.action, control.ts, control.sender, control.controlId, control.payload);
-          }
-        });
+        ptAdoptDesk(data.prompter?.desk);
         // Director's fix requests (Go Live preflight): hello, top, slates_off, reload.
         if (data.fixRequests && typeof data.fixRequests === 'object') {
           try { ptHandleFixRequests(code, data.fixRequests); } catch (err) { containError('Talent fix request', err); }
@@ -21522,6 +21534,7 @@ function enterPrompter() {
   document.getElementById('liveshow').classList.remove('on');
   document.getElementById('promptypus').classList.add('on');
   pushSessionHistoryState('promptypus');
+  ptResetDeskReceiver();
   ptInitReceiver();
 
   // Sync live script from Cueola if available (always takes priority over previous content)
@@ -21625,7 +21638,7 @@ function enterPrompter() {
   const stage = ptEl('pt-stage');
   if (stage && !stage._ptPointer) {
     stage._ptPointer = true;
-    let pointerId = null, startY = 0, startedAt = 0, dragged = false;
+    let pointerId = null, startY = 0, lastY = 0, startedAt = 0, dragged = false;
     let lastTapAt = 0, lastTapY = 0, tapTimer = null, tapTarget = null;
     const release = (e, allowTap=false) => {
       if (pointerId == null || (e?.pointerId != null && e.pointerId !== pointerId)) return;
@@ -21634,8 +21647,6 @@ function enterPrompter() {
       try { if (stage.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId); } catch {}
       pointerId = null;
       dragged = false;
-      ptBraking = false;
-      ptBoosting = false;
       if (!tap) return;
       // Hidden controls: a finger tap brings them back (no mouse, no H key
       // on an iPad) and does nothing else.
@@ -21672,7 +21683,7 @@ function enterPrompter() {
       if (fingers.size > 1) return;
       if (!e.isPrimary || isInteractiveTarget(e.target)) return;
       pointerId = e.pointerId;
-      startY = e.clientY;
+      startY = lastY = e.clientY;
       startedAt = Date.now();
       dragged = false;
       tapTarget = e.target;
@@ -21689,12 +21700,30 @@ function enterPrompter() {
         return;
       }
       if (e.pointerId !== pointerId) return;
-      const dy = e.clientY - startY;
-      if (dy > 20) { ptBraking = true; ptBoosting = false; dragged = true; }
-      else if (dy < -20) { ptBoosting = true; ptBraking = false; ptLiveSpeed = Math.min(ptTargetSpeed * 2.5, 300); dragged = true; }
-      else { ptBraking = false; ptBoosting = false; }
+      // Drag the copy like a page: it follows the finger or the mouse, up
+      // or down, rolling or paused (Jon, 2026-11-23: "mainly scroll on it").
+      // This replaced a hidden gesture (drag down to brake, up to boost).
+      if (!dragged && Math.abs(e.clientY - startY) > 8) { dragged = true; lastY = startY; }
+      if (dragged) {
+        ptJogBy(lastY - e.clientY);
+        lastY = e.clientY;
+      }
       e.preventDefault();
     });
+    // A mouse wheel or two fingers on a trackpad scroll the copy the same
+    // way. Hold Ctrl (or pinch on a trackpad) to change the text size.
+    let wheelZoom = 0;
+    stage.addEventListener('wheel', e => {
+      if (isInteractiveTarget(e.target)) return;
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? ptLinePitch() : e.deltaMode === 2 ? stage.clientHeight : 1;
+      if (e.ctrlKey) {
+        wheelZoom += e.deltaY * unit;
+        if (Math.abs(wheelZoom) >= 24) { ptAdjustSize(wheelZoom < 0 ? 4 : -4); wheelZoom = 0; }
+        return;
+      }
+      ptJogBy(e.deltaY * unit);
+    }, { passive:false });
     const unfinger = e => { fingers.delete(e.pointerId); if (fingers.size < 2) pinchDist = 0; };
     stage.addEventListener('pointerup', e => { const pinching = fingers.size === 2; unfinger(e); if (!pinching) release(e, true); });
     stage.addEventListener('pointercancel', e => { unfinger(e); release(e, false); });

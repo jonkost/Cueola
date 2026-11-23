@@ -2,6 +2,60 @@
 
 ## Next release (not pushed yet)
 
+### The prompter controls are rebuilt (Nov 23)
+
+- **Every prompter control now lands.** Before, each press travelled in a
+  line of commands that the talent screen had to catch in order. A press
+  could be pushed out of the line, refused, parked, or blocked for five
+  seconds because the other operator touched something. Now the show keeps
+  one small record per control (play, speed, size, position, slate, clock
+  and so on). A press overwrites that record and the talent screen applies
+  it. The last press wins, the same way the live position works.
+- **Script Op and Flowmingo Op no longer lock each other out.** Either one
+  can press anything at any time.
+- **A scroll no longer throws the copy to the end.** On a slow or stalled
+  frame, a small nudge could send the copy racing to the bottom and stop
+  the roll. The motion math is now exact at any frame rate.
+- **A cue to a row lands even if the talent window is not drawing.**
+- **Scroll right on the prompter.** On the talent screen, drag the copy or
+  use the mouse wheel or trackpad to move it, rolling or paused. Hold Ctrl
+  and scroll (or pinch) to change the text size. This replaces the hidden
+  drag down to brake, drag up to boost. Brake and boost are still on the
+  operators' panels and keys.
+- **A scroll pad for the operators.** Script Op and Flowmingo Op each have
+  a pad under Play: scroll or drag on it and the talent's copy moves.
+- **Faster and Slower are exact.** They now send the number (speed 70),
+  so a missed press cannot leave the two screens disagreeing.
+- **A lighter, glass look** on the talent screen's control panel, Settings
+  sheet and link card.
+- Not changed: the lesson "Run The Remote Prompter" still says Script Op
+  pauses while Remote Op is active. That is no longer true, and the lesson
+  is recorded narration, so it waits on Jon.
+
+### Smaller fixes (Nov 23)
+
+- **Create profile is always in reach.** The profile window's buttons are
+  pinned at the bottom. Before, Create profile could be scrolled out of
+  sight and the button at the bottom was Close, so students closed the
+  window without making a profile.
+- **Done on the quiet look works.** It was blocked whenever a Planda Bear
+  page was open, so only a reload ended the look.
+- **Duplicate a row.** In Edit, Duplicate makes a copy of the row right
+  under it, cues and all. The row buttons are now one even grid: Up, Down,
+  Before, After, then Duplicate, Hide, and Remove set apart at the end.
+- **Admin log in is in Settings.** Signed in, the same spot shows Admin
+  Panel and Admin log out.
+
+### Outrangutan for Mac: cues can be dragged into a new order (Nov 17)
+
+- **Dragging a cue to a new place works.** Before, the cue lifted and then
+  sprang back. The clock was redrawing the whole control window thirty
+  times a second, even with nothing playing, and a list that is redrawn
+  while a row is being dragged forgets where the row was going. The list
+  now holds still unless something in it changes.
+- **Lighter on the Mac.** With nothing playing, the control window no
+  longer redraws itself thirty times a second.
+
 ### Outrangutan for Mac: a graphic over the video (Nov 13)
 
 - **A PNG can ride over the video.** A see-through still (a lower third,

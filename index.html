@@ -2006,12 +2006,6 @@ button.pb-roster-row:hover{background:var(--s3)}
 .agreement-text ol{margin:0;padding-left:20px}
 .agreement-text li{margin:6px 0}
 .agreement-text b{color:var(--text)}
-.agreement-check{display:flex;align-items:center;gap:10px;margin:12px 0 10px;font-size:13px;color:var(--text);cursor:pointer}
-#agreementModal .modal-actions{margin-top:14px}
-@media(max-width:680px){.id-av-grid{grid-template-columns:repeat(3,1fr)}.id-card-actions .jis-btn{flex:1}}
-.pb-av-choice{display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border: 1.5px solid transparent;border-radius:13px;background:var(--s2);color:var(--text2);cursor:pointer;font-size:11.5px;font-weight:700}
-.pb-av-choice:hover{border-color: transparent;color:var(--text)}
-.pb-av-choice.sel{border-color:transparent;background:color-mix(in srgb,var(--accent) 28%,var(--s2));color:var(--text)}
 /* The wizard's buttons ride a bar pinned to the bottom of the profile window,
    below the part that scrolls, so Create profile is always in reach. */
 .id-foot{display:flex;flex-direction:column;gap:10px;flex:none}
@@ -2019,6 +2013,12 @@ button.pb-roster-row:hover{background:var(--s3)}
 .id-foot .agreement-check{margin:0}
 .id-foot-row{display:flex;gap:10px}
 .id-foot-row > button{flex:1 1 0;width:auto;min-width:0}
+.agreement-check{display:flex;align-items:center;gap:10px;margin:12px 0 10px;font-size:13px;color:var(--text);cursor:pointer}
+#agreementModal .modal-actions{margin-top:14px}
+@media(max-width:680px){.id-av-grid{grid-template-columns:repeat(3,1fr)}.id-card-actions .jis-btn{flex:1}}
+.pb-av-choice{display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border: 1.5px solid transparent;border-radius:13px;background:var(--s2);color:var(--text2);cursor:pointer;font-size:11.5px;font-weight:700}
+.pb-av-choice:hover{border-color: transparent;color:var(--text)}
+.pb-av-choice.sel{border-color:transparent;background:color-mix(in srgb,var(--accent) 28%,var(--s2));color:var(--text)}
 .pb-av-chip{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:15px;font-weight:800;color:#fff;background:var(--s4)}
 /* v2.1 D7 — icon avatars: SF-symbol masks tinted via currentColor (white on
    the user's hashed chip color; legible across all nine themes) */
@@ -2926,6 +2926,12 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-ctrl-slider .pt-range{width:120px;min-width:120px}
 /* A segmented group: same-size buttons, one picked */
 .pt-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;padding:2px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--pt-text,#f0ead6) 7%,transparent)}
+/* The operators' scroll pad: scroll or drag on it to move the talent's copy. */
+.pt-scroll-pad{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;padding:8px 12px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--pt-text,var(--text)) 6%,transparent);color:var(--text3);font-family:var(--sans);font-size:12px;font-weight:600;text-align:center;cursor:ns-resize;user-select:none;-webkit-user-select:none;touch-action:none;transition:background .15s,color .15s}
+.pt-scroll-pad:hover,.pt-scroll-pad:focus-visible,.pt-scroll-pad.dragging{background:color-mix(in srgb,var(--pt-accent,var(--accent)) 16%,transparent);color:var(--text)}
+.pt-scroll-pad:focus-visible{outline:2px solid var(--pt-accent,var(--accent));outline-offset:2px}
+.pt-scroll-pad[aria-disabled="true"]{opacity:.4;cursor:default}
+.pt-scroll-pad .sf-symbol{flex:none;font-size:12px}
 .pt-seg .pt-btn{background:transparent;border-radius:calc(var(--ui-radius-control) - 2px);min-width:60px}
 .pt-seg .pt-btn.active{background:color-mix(in srgb,var(--pt-text,#f0ead6) 16%,transparent);color:var(--pt-text,#f0ead6)}
 #promptypus .pt-step{width:34px;min-width:34px;padding:0;font-size:16px}
@@ -3875,6 +3881,16 @@ input.pt-range::-moz-range-thumb,
 }
 #promptypus #pt-bar{box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
 #promptypus #pt-panel{border-radius:var(--ui-radius-panel)}
+/* Liquid glass pass on the talent screen (2026-11-23). The control panel, the
+   Settings sheet and the link card were 92% solid, so the blur behind them
+   never showed. They now let the copy glow through like the rest of the app:
+   a lighter fill, a bright top edge, a hairline rim and a soft drop shadow. */
+#promptypus #pt-panel,#promptypus .pt-sheet,#promptypus .pt-setup-card{
+  background:linear-gradient(145deg,color-mix(in srgb,var(--pt-ui-bg,#14141c) 74%,transparent),color-mix(in srgb,var(--pt-ui-bg,#14141c) 54%,transparent)),linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.07),0 18px 50px rgba(0,0,0,.38);
+  -webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));
+}
+#promptypus #pt-bar{background:linear-gradient(180deg,color-mix(in srgb,var(--pt-ui-bg,#14141c) 78%,transparent),color-mix(in srgb,var(--pt-ui-bg,#14141c) 60%,transparent));box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -1px 0 rgba(255,255,255,.06)}
 :is(#promptypus,#flowOp) :is(.pt-back-btn,.pt-bar-controls-btn,.pt-btn){
   background:color-mix(in srgb,var(--pt-ui-bg,rgba(15,15,25,.92)) 48%,transparent);
   border-color:var(--flow-glass-edge);
@@ -7046,6 +7062,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <button type="button" class="btn-secondary settings-file-btn" onclick="hideModal('modal-settings');openShowLog()" data-tip="A timestamped record of cues, media and sync events, and errors"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Show Log</span></button>
       </div>
     </div>
+    <!-- Admin (Jon, 2026-11-23): the admin log in lives here in Settings. -->
+    <div class="settings-section u-mt12">
+      <div class="settings-sec-label">Admin</div>
+      <div class="settings-file-grid">
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLoginBtn" onclick="hideModal('modal-settings');openAdminLogin()" data-tip="Log in as an admin on this device"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span>Admin log in</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminPanelBtn" onclick="hideModal('modal-settings');openAdminPanel()" data-tip="Open the Admin Panel" hidden><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Admin Panel</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLogoutBtn" onclick="logoutAdmin()" data-tip="Log out of admin on this device" hidden><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span><span>Admin log out</span></button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="cancelSettings()">Cancel</button>
       <button class="btn-primary btn-save" onclick="saveSettings()">Save Changes</button>
@@ -7062,15 +7087,6 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="modal-actions">
       <button class="btn-secondary" onclick="clearShowLog()">Clear</button>
       <button class="btn-secondary export-action" onclick="exportShowLog()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export .txt</span></button>
-    <!-- Admin (Jon, 2026-11-23): the admin log in lives here in Settings. -->
-    <div class="settings-section u-mt12">
-      <div class="settings-sec-label">Admin</div>
-      <div class="settings-file-grid">
-        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLoginBtn" onclick="hideModal('modal-settings');openAdminLogin()" data-tip="Log in as an admin on this device"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span>Admin log in</span></button>
-        <button type="button" class="btn-secondary settings-file-btn" id="setAdminPanelBtn" onclick="hideModal('modal-settings');openAdminPanel()" data-tip="Open the Admin Panel" hidden><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Admin Panel</span></button>
-        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLogoutBtn" onclick="logoutAdmin()" data-tip="Log out of admin on this device" hidden><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span><span>Admin log out</span></button>
-      </div>
-    </div>
       <button class="btn-primary" onclick="hideModal('modal-showlog')">Close</button>
     </div>
   </div>
@@ -7755,20 +7771,21 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-prepro-sync.js?v=98291546f4"></script>
 <script src="cueola-grading-model.js?v=200ac91a4e"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
-<script src="cueola-identity.js?v=930ad6c900"></script>
+<script src="cueola-identity.js?v=e98ee4b56e"></script>
 <script src="cueola-admin-auth.js?v=82979270bc"></script>
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-live-state.js?v=6314983dd7"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
-<script src="cueola-prompter-engine.js?v=84164f9c24"></script>
+<script src="cueola-prompter-engine.js?v=355066924d"></script>
+<script src="cueola-prompter-desk.js?v=e99b8a96ca"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
 <script src="cueola-script-operator-protocol.js?v=414e116aee"></script>
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=c951ebb660"></script>
+<script src="cueola-app.js?v=580973cf30"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
