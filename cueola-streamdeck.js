@@ -60,13 +60,20 @@
     ['ref.open', '#2e3640', 'HELP'],
     // Flowmingo (prompter)
     ['prompter.cue.current', '#4a2f73', 'CUE ROW'],
-    ['prompter.playpause', '#6a3b8a', 'SCROLL'], ['prompter.top', '#3d2b52', 'TOP'],
+    // The one control set (cueola-prompter-controls.js): the same names as
+    // every prompter screen. BRAKE, BOOST, REV and FWD became BACK, AHEAD,
+    // PREV ROW and NEXT ROW; the ids are kept so saved layouts still work.
+    ['prompter.dir.rev', '#3d2b52', 'PREV ROW'], ['prompter.brake', '#5a4a12', 'BACK'],
+    ['prompter.playpause', '#6a3b8a', 'PLAY'], ['prompter.boost', '#5a4a12', 'AHEAD'],
+    ['prompter.dir.fwd', '#3d2b52', 'NEXT ROW'],
+    ['prompter.top', '#3d2b52', 'TOP'], ['prompter.follow', '#1f5b63', 'FOLLOW'],
+    ['prompter.speed.down', '#3d2b52', 'SLOWER'], ['prompter.speed.up', '#3d2b52', 'FASTER'],
+    ['prompter.clock', '#5a4a12', 'CLOCK'], ['prompter.slate', '#5a4a12', 'SLATE'],
+    ['prompter.message', '#5a4a12', 'MESSAGE'], ['prompter.wrap', '#5a4a12', 'WRAP'],
+    ['prompter.clear', '#2e3640', 'CLEAR'],
     ['prompter.size.up', '#3d2b52', 'A+'], ['prompter.size.down', '#3d2b52', 'A-'],
-    ['prompter.speed.up', '#3d2b52', 'SPD+'], ['prompter.speed.down', '#3d2b52', 'SPD-'],
-    ['prompter.dir.fwd', '#3d2b52', 'FWD'], ['prompter.dir.rev', '#3d2b52', 'REV'],
     ['prompter.fullscreen', '#3d2b52', 'FULL'], ['prompter.hideui', '#3d2b52', 'HIDE UI'],
-    ['prompter.mirror', '#3d2b52', 'MIRROR'], ['prompter.brake', '#5a4a12', 'BRAKE'],
-    ['prompter.boost', '#5a4a12', 'BOOST'], ['prompter.nudge.back', '#3d2b52', 'NUDGE-'],
+    ['prompter.mirror', '#3d2b52', 'MIRROR'], ['prompter.nudge.back', '#3d2b52', 'NUDGE-'],
     ['prompter.nudge.fwd', '#3d2b52', 'NUDGE+'], ['prompter.editscript', '#3d2b52', 'EDIT'],
     ['prompter.push.paste', '#3d2b52', 'PASTE'], ['prompter.overlays', '#3d2b52', 'OVERLAYS'],
     ['scrub.open', '#3d2b52', 'SCRUB']
@@ -89,19 +96,25 @@
     'rundown.next': 'Same as the TAKE button in Live: the director\'s press puts the STANDBY cue ON AIR for everyone.',
     'rundown.back': 'Moves the show back one cue. Director only.',
     'prompter.cue.current': 'Jumps the talent prompter to the current live row.',
-    'prompter.playpause': 'Starts or stops the prompter scroll. Toggle.',
+    'prompter.playpause': 'Play starts the roll. While rolling it is Pause. Lit when the talent screen is rolling.',
+    'prompter.follow': 'On: every TAKE cues the prompter to that row. Off: you place it by hand. Lit when on.',
+    'prompter.clock': 'Shows or hides the clock for the talent. Lit while the talent can see it.',
+    'prompter.slate': 'Covers the script with Standby. Lit while it is up.',
+    'prompter.message': 'Opens the message box to send the talent a short message. Press again to take it down.',
+    'prompter.wrap': 'Shows a two minute wrap up countdown for the talent. Press again to take it down.',
+    'prompter.clear': 'Takes everything off the talent screen but the script.',
     'prompter.top': 'Sends the prompter back to the top of the script.',
     'prompter.size.up': 'Makes the talent text one step bigger.',
     'prompter.size.down': 'Makes the talent text one step smaller.',
-    'prompter.speed.up': 'Scrolls the prompter a little faster.',
-    'prompter.speed.down': 'Scrolls the prompter a little slower.',
-    'prompter.dir.fwd': 'Prompter scrolls forward (normal). Toggle pair with REV.',
-    'prompter.dir.rev': 'Prompter scrolls backward, for walking the script back. Toggle pair with FWD.',
+    'prompter.speed.up': 'Speed up by 5.',
+    'prompter.speed.down': 'Speed down by 5.',
+    'prompter.dir.fwd': 'Jumps to the start of the next row.',
+    'prompter.dir.rev': 'Jumps to the start of the row before.',
     'prompter.fullscreen': 'Puts the talent display into fullscreen.',
     'prompter.hideui': 'Hides the chrome on the talent display. Toggle.',
     'prompter.mirror': 'Mirror-flips the talent display for a beam-splitter rig. Toggle.',
-    'prompter.brake': 'HOLD to slow the prompter to a crawl. Releases when you let go.',
-    'prompter.boost': 'HOLD to speed the prompter up. Releases when you let go.',
+    'prompter.brake': 'HOLD to roll backward. Let go and it stops.',
+    'prompter.boost': 'HOLD to roll forward fast. Let go and it stops.',
     'prompter.nudge.back': 'Nudges the script back 3 lines.',
     'prompter.nudge.fwd': 'Nudges the script forward 3 lines.',
     'prompter.editscript': 'Opens the current row script for editing.',
@@ -110,7 +123,7 @@
     'ref.open': 'Shows the keyboard shortcut reference overlay.',
     'scrub.open': 'Opens the jog-wheel scrub overlay for the prompter.'
   };
-  var KEYMAP_TOGGLES = { 'playout.pause': 1, 'prompter.playpause': 1, 'prompter.hideui': 1, 'prompter.mirror': 1, 'prompter.overlays': 1 };
+  var KEYMAP_TOGGLES = { 'playout.pause': 1, 'prompter.playpause': 1, 'prompter.hideui': 1, 'prompter.mirror': 1, 'prompter.overlays': 1, 'prompter.follow': 1, 'prompter.clock': 1, 'prompter.slate': 1, 'prompter.message': 1, 'prompter.wrap': 1 };
 
   function buildCatalog() {
     catalog = {};
@@ -204,8 +217,14 @@
     if (id === 'playout.pause') return function (s) { return s.playout && s.playout.status === 'pause'; };
     if (id === 'prompter.playpause') return function (s) { return s.prompter && s.prompter.playing; };
     if (id === 'prompter.mirror') return function (s) { return s.prompter && s.prompter.mirrored; };
-    if (id === 'prompter.dir.rev') return function (s) { return s.prompter && s.prompter.reversed; };
-    if (id === 'prompter.dir.fwd') return function (s) { return !!(s.prompter && s.prompter.playing && !s.prompter.reversed); };
+    // A key is lit only when the talent screen says that thing is true.
+    if (id === 'prompter.follow') return function (s) { return !!(s.prompter && s.prompter.follow); };
+    if (id === 'prompter.clock') return function (s) { return !!(s.prompter && s.prompter.clockOn); };
+    if (id === 'prompter.slate') return function (s) { return !!(s.prompter && s.prompter.slateOn); };
+    if (id === 'prompter.message') return function (s) { return !!(s.prompter && s.prompter.messageOn); };
+    if (id === 'prompter.wrap') return function (s) { return !!(s.prompter && s.prompter.wrapOn); };
+    if (id === 'prompter.brake') return function (s) { return !!(s.prompter && s.prompter.hold === 'back'); };
+    if (id === 'prompter.boost') return function (s) { return !!(s.prompter && s.prompter.hold === 'ahead'); };
     if (id === 'prompter.overlays') return function (s) { return !!(s.prompter && s.prompter.overlaysOn); };
     return null;
   }
@@ -1779,12 +1798,15 @@
     'playout.go': 'media/play.fill.svg', 'playout.pause': 'media/pause.svg', 'playout.stop': 'media/stop.fill.svg',
     'playout.fade': 'editing/slider.vertical.3.svg', 'playout.panic': 'privacyandsecurity/exclamationmark.triangle.svg',
     'rundown.next': 'arrows/arrowshape.turn.up.right.fill.svg', 'rundown.back': 'arrows/arrowshape.turn.up.left.fill.svg',
-    'prompter.playpause': 'textformatting/scroll.svg', 'prompter.top': 'arrows/arrow.up.to.line.svg',
+    'prompter.playpause': 'media/play.fill.svg', 'prompter.top': 'arrows/arrow.up.to.line.svg',
+    'prompter.follow': 'textformatting/text.line.first.and.arrowtriangle.forward.svg', 'prompter.clock': 'objectsandtools/clock.svg',
+    'prompter.slate': 'media/display.svg', 'prompter.message': 'textformatting/quote.bubble.svg',
+    'prompter.wrap': 'time/timer.svg', 'prompter.clear': 'objectsandtools/xmark.svg',
     'prompter.size.up': 'objectsandtools/plus.magnifyingglass.svg', 'prompter.size.down': 'objectsandtools/minus.magnifyingglass.svg',
     'prompter.speed.up': 'nature/hare.svg', 'prompter.speed.down': 'nature/tortoise.svg',
-    'prompter.dir.fwd': 'arrows/arrowshape.right.svg', 'prompter.dir.rev': 'arrows/arrowshape.left.svg',
+    'prompter.dir.fwd': 'arrows/arrowshape.down.svg', 'prompter.dir.rev': 'arrows/arrowshape.up.svg',
     'prompter.fullscreen': 'arrows/square.arrowtriangle.4.outward.svg', 'prompter.hideui': 'arrows/arrow.up.right.and.arrow.down.left.svg',
-    'prompter.mirror': 'media/display.2.svg', 'prompter.brake': 'nature/tortoise.svg', 'prompter.boost': 'nature/hare.svg',
+    'prompter.mirror': 'media/display.2.svg', 'prompter.brake': 'arrows/arrowshape.left.svg', 'prompter.boost': 'arrows/arrowshape.right.svg',
     'prompter.nudge.back': 'arrows/chevron.left.svg', 'prompter.nudge.fwd': 'arrows/chevron.right.svg',
     'prompter.editscript': 'editing/pencil.svg', 'prompter.cue.current': 'textformatting/text.line.first.and.arrowtriangle.forward.svg',
     'ref.open': 'communication/questionmark.circle.fill.svg', 'scrub.open': 'media/waveform.path.svg'

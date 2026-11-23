@@ -8133,6 +8133,18 @@ function consumeRemoteKey(e) {
 // with the Script Op panel open — Space/J/K/L drive the prompter, G/P/S drive
 // playout, Shift+Esc is PANIC. Bindings can be overridden per action via
 // localStorage.cueola_keymap = {"playout.go":["G","F13"], …}.
+// A key or a Stream Deck key pressing one of the fifteen prompter controls.
+// It goes through the same press() the buttons use, so it sends exactly what
+// the button sends, worked out from what the talent screen last reported.
+function prompterControlPress(id) {
+  const C = window.CueolaPrompterControls;
+  let sent = false;
+  C.press(id, lsPrompterControlState(), 'down').forEach(out => {
+    if (out.ui === 'message') { if (!livePrompterOpen) toggleLivePrompterPanel(); lsPrompterControlSend(out, id); sent = true; return; }
+    if (out.action) sent = sendPrompterControl(out.action, out.payload || null) !== false || sent;
+  });
+  return sent;
+}
 const KEYMAP = [
   { id: 'rundown.next',        scope: 'live', group: 'Rundown',  keys: ['ArrowRight', 'ArrowDown'], label: 'TAKE (next cue)',             run: () => lsNext() },
   { id: 'rundown.back',        scope: 'live', group: 'Rundown',  keys: ['ArrowLeft', 'ArrowUp'],    label: 'Back',                        run: () => lsPrev() },
@@ -8140,16 +8152,19 @@ const KEYMAP = [
   // not the local ptPlaying flag, which only moved once the handshake completed.
   { id: 'prompter.playpause',  scope: 'live', group: 'Prompter', keys: ['Space'],  label: 'Play / pause',                  run: () => sendPrompterControl(_sdPrompterPlayingTruth() ? 'pause' : 'resume') },
   { id: 'prompter.toggle',     scope: 'live', group: 'Prompter', keys: ['K'],      label: 'Play / pause (JKL)',            run: () => sendPrompterControl(_sdPrompterPlayingTruth() ? 'pause' : 'resume') },
-  { id: 'prompter.brake',      scope: 'live', group: 'Prompter', keys: ['J'],      label: 'Brake (hold)',                  hold: ['brake_start', 'brake_stop'] },
-  { id: 'prompter.boost',      scope: 'live', group: 'Prompter', keys: ['L'],      label: 'Boost (hold)',                  hold: ['boost_start', 'boost_stop'] },
+  // The one control set (cueola-prompter-controls.js). Back and Ahead are
+  // the hold buttons that replaced Brake, Boost and Reverse. The ids keep
+  // their old names so a saved Stream Deck layout still finds its keys.
+  { id: 'prompter.brake',      scope: 'live', group: 'Prompter', keys: ['J'],      label: 'Back (hold)',                   hold: ['hold_back', 'hold_off'] },
+  { id: 'prompter.boost',      scope: 'live', group: 'Prompter', keys: ['L'],      label: 'Ahead (hold)',                  hold: ['hold_ahead', 'hold_off'] },
   { id: 'prompter.size.down',  scope: 'live', group: 'Prompter', keys: ['-'],      label: 'Text smaller',                  run: () => sendPrompterControl('size_down') },
   { id: 'prompter.size.up',    scope: 'live', group: 'Prompter', keys: ['='],      label: 'Text bigger',                   run: () => sendPrompterControl('size_up') },
-  { id: 'prompter.speed.down', scope: 'live', group: 'Prompter', keys: ['['],      label: 'Speed down',                    run: () => sendPrompterControl('speed_down') },
-  { id: 'prompter.speed.up',   scope: 'live', group: 'Prompter', keys: [']'],      label: 'Speed up',                      run: () => sendPrompterControl('speed_up') },
+  { id: 'prompter.speed.down', scope: 'live', group: 'Prompter', keys: ['['],      label: 'Slower',                        run: () => prompterControlPress('slower') },
+  { id: 'prompter.speed.up',   scope: 'live', group: 'Prompter', keys: [']'],      label: 'Faster',                        run: () => prompterControlPress('faster') },
   { id: 'prompter.nudge.back', scope: 'live', group: 'Prompter', keys: [','],      label: 'Nudge back',                    run: () => poNudgeSeek(-3) },
   { id: 'prompter.nudge.fwd',  scope: 'live', group: 'Prompter', keys: ['.'],      label: 'Nudge forward',                 run: () => poNudgeSeek(3) },
   { id: 'prompter.cue.current',scope: 'live', group: 'Prompter', keys: ['C'],      label: 'Cue prompter to current row',   run: () => sendPrompterControl('seek_row_' + rowDisplayNumber(Math.max(liveActiveCueIndex(), 0))) },
-  { id: 'prompter.top',        scope: 'live', group: 'Prompter', keys: ['T'],      label: 'Prompter to top',               run: () => sendPrompterControl('reset') },
+  { id: 'prompter.top',        scope: 'live', group: 'Prompter', keys: ['T'],      label: 'Top',                           run: () => prompterControlPress('top') },
   { id: 'prompter.fullscreen', scope: 'live', group: 'Prompter', keys: ['F'],      label: 'Talent fullscreen',             run: () => sendPrompterControl('fullscreen') },
   { id: 'prompter.reset',      scope: 'live', group: 'Prompter', keys: ['R'],      label: 'Stop prompter, back to top',    run: () => sendPrompterControl('reset') },
   { id: 'prompter.hideui',     scope: 'live', group: 'Prompter', keys: ['H'],      label: 'Hide talent UI',                run: () => sendPrompterControl('hide_interface') },
@@ -8158,8 +8173,17 @@ const KEYMAP = [
   // (it used the SELECTED row, so the deck's EDIT key and the pop-out could
   // silently edit two different rows: 8/20 "couldn't find my punch-in").
   { id: 'prompter.editscript', scope: 'live', group: 'Prompter', keys: ['E'],      label: 'Edit current row script',       run: () => openLiveScript(Math.max(liveActiveCueIndex(), 0)) },
-  { id: 'prompter.dir.fwd',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowUp'],   label: 'Direction forward',      run: () => sendPrompterControl('direction_forward') },
-  { id: 'prompter.dir.rev',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowDown'], label: 'Direction reverse',      run: () => sendPrompterControl('direction_reverse') },
+  // Reverse and Forward are retired. Their keys are Prev row and Next row.
+  { id: 'prompter.dir.fwd',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowDown'], label: 'Next row',               run: () => prompterControlPress('next') },
+  { id: 'prompter.dir.rev',    scope: 'live', group: 'Prompter', keys: ['Alt+ArrowUp'],   label: 'Prev row',               run: () => prompterControlPress('prev') },
+  // The rest of the control set. No keyboard key in Live (the letters belong
+  // to other departments here); every one can go on a Stream Deck key.
+  { id: 'prompter.follow',     scope: 'live', group: 'Prompter', keys: [],  label: 'Follow',                       run: () => prompterControlPress('follow') },
+  { id: 'prompter.clock',      scope: 'live', group: 'Prompter', keys: [],  label: 'Clock',                        run: () => prompterControlPress('clock') },
+  { id: 'prompter.slate',      scope: 'live', group: 'Prompter', keys: [],  label: 'Slate',                        run: () => prompterControlPress('slate') },
+  { id: 'prompter.message',    scope: 'live', group: 'Prompter', keys: [],  label: 'Message',                      run: () => prompterControlPress('message') },
+  { id: 'prompter.wrap',       scope: 'live', group: 'Prompter', keys: [],  label: 'Wrap',                         run: () => prompterControlPress('wrap') },
+  { id: 'prompter.clear',      scope: 'live', group: 'Prompter', keys: [],  label: 'Clear',                        run: () => prompterControlPress('clear') },
   // Deck-first actions: no default key (bindable via cueola_keymap overrides).
   { id: 'prompter.push.paste', scope: 'live', group: 'Prompter', keys: [],  label: 'Push clipboard as question',   run: () => pushClipboardQuestion() },
   { id: 'prompter.overlays',   scope: 'live', group: 'Prompter', keys: [],  label: 'Stash / restore overlays',     run: () => toggleOverlayStash() },
@@ -8491,7 +8515,7 @@ window.cueolaSurfaceBridge = {
         // cue / pad id), so the deck marks only the matching key.
         pendingIds: _sdSafe(() => _ogPendingCmds.map(p => p.command.cueId || p.command.padId || p.command.action).filter(Boolean), []),
       },
-      prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => _talentMirrorFresh(), false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
+      prompter: { playing: _sdSafe(() => _sdPrompterPlayingTruth(), false), speed: _sdSafe(() => ptTargetSpeed, 0), size: _sdSafe(() => ptFontSize, 0), positionPct: _sdSafe(() => (Number.isFinite(_talentReportedPct) ? _talentReportedPct : null), null), connected: _sdSafe(() => _talentMirrorFresh(), false), mirrored: _sdSafe(() => !!ptMirrored, false), reversed: _sdSafe(() => !!ptReversing, false), follow: _sdSafe(() => ptFollow !== false, true), hold: _sdSafe(() => ptHoldDir || '', ''), clockOn: _sdSafe(() => lsPrompterControlState().clock, false), wrapOn: _sdSafe(() => lsPrompterControlState().wrap, false), slateOn: _sdSafe(() => lsPrompterControlState().slate, false), messageOn: _sdSafe(() => !!ptQuestionOn, false), clockMode: _sdSafe(() => (ptClockState && ptClockState.mode) || 'off', 'off'), questionOn: _sdSafe(() => !!ptQuestionOn, false), overlaysOn: _sdSafe(() => !!(ptQuestionOn || ptColorBarsOn || ptTechSlateOn || (ptClockState && ptClockState.mode !== 'off')), false) },
       clock: { running: _sdSafe(() => !!liveClockRunning, false), elapsed: _sdSafe(() => elapsedSecs, 0) },
       live: { activeIndex: ai, selectedIndex: (sel == null ? Math.max(ai, 0) : sel), rowCount: _sdSafe(() => beats.length, 0), rowName: _sdSafe(() => _sdBeatName(beats[Math.max(ai, 0)]), ''),
               // Lifecycle truth for lamps and honest keys: on = this window's Live
