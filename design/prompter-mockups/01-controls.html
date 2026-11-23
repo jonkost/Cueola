@@ -1,0 +1,59 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>The one control set</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.ctable{width:100%;border-collapse:collapse;font-size:13px}
+.ctable td{padding:7px 10px;vertical-align:middle;background:linear-gradient(var(--hair),var(--hair)) 0 100%/100% 1px no-repeat}
+.ctable td:first-child{width:76px}.ctable .g td{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding-top:16px}
+.ctable .ck{--ck-w:60px;--ck-h:48px;--ck-r:12px;--ck-fs:10px;--ck-is:16px}
+.sizes{display:flex;gap:28px;align-items:flex-end;flex-wrap:wrap}
+.sizes>div{text-align:center}.sizes .ck{margin:0 auto 8px}
+.gone td{padding:6px 10px;font-size:13px}.gone td:first-child{color:var(--text3);text-decoration:line-through;white-space:nowrap}
+</style></head><body>
+<main class="page">
+<h1>The one control set</h1>
+<p class="lede">Fifteen controls. The same name, the same picture, the same order and the same size on every screen: the operator inside Live, the stand-alone operator, the talent screen, the keyboard and the Stream Deck. Three groups of five, so the screen and a 15-key Stream Deck are laid out the same way.</p>
+
+<div class="glass pad" style="padding:24px"><div data-strip='{}'></div></div>
+<p class="cap"><b>Paused.</b> Play is the one filled button. Follow is lit because the prompter is following the rundown.</p>
+
+<div class="grid g2" style="margin-top:20px">
+  <div><div class="glass pad"><div data-strip='{"rolling":true,"on":["clock"],"speed":"65","size":"compact"}'></div></div><p class="cap"><b>Rolling, clock up.</b> Play turns green and reads Pause. A control that is on the talent's screen is lit yellow.</p></div>
+  <div><div class="glass pad"><div data-strip='{"off":true,"follow":false,"size":"compact"}'></div></div><p class="cap"><b>No talent screen linked.</b> Everything dims together. Nothing looks pressable when it would do nothing.</p></div>
+</div>
+
+<div class="sect"><h2>One size per screen, never mixed</h2><p>Every button in the set is the same size as its neighbours. Corners are a quarter of the height, the Apple push button shape. No outlines, no shadows.</p></div>
+<div class="glass pad sizes" style="padding:24px">
+  <div><div class="strip touch"><button class="ck play"><span class="sf-symbol" data-symbol="pt.play"></span><span>Play</span></button></div><div class="cap">Talent screen and iPad<br><b>88 × 68</b></div></div>
+  <div><div class="strip"><button class="ck play"><span class="sf-symbol" data-symbol="pt.play"></span><span>Play</span></button></div><div class="cap">Stand-alone operator<br><b>76 × 60</b></div></div>
+  <div><div class="strip compact"><button class="ck play"><span class="sf-symbol" data-symbol="pt.play"></span><span>Play</span></button></div><div class="cap">Inside Live<br><b>60 × 48</b></div></div>
+  <div><div data-deck="play"></div><div class="cap">Stream Deck key<br><b>same picture, same word</b></div></div>
+</div>
+
+<div class="sect"><h2>What each control does</h2><p>The key in the last column works on every screen, so a student learns it once.</p></div>
+<div class="glass pad"><table class="ctable" id="ctable"></table></div>
+
+<div class="sect"><h2>Where the old controls went</h2><p>Nothing a show needs is lost. The pile is smaller because several old buttons did the same job.</p></div>
+<div class="glass pad"><table class="gone">
+<tr><td>Brake, Boost, Reverse, Forward</td><td>Back and Ahead. Hold to move, let go to stop. Slower and Faster change the speed.</td></tr>
+<tr><td>Scroll pad, Position slider, Nudge</td><td>Back and Ahead, the mouse wheel on any preview, and the Stream Deck dial.</td></tr>
+<tr><td>Cue Now, Cue Next, Cue Row</td><td>Follow, Prev row and Next row. Turning Follow on jumps to the row on air.</td></tr>
+<tr><td>Push to prompter</td><td>Gone. The script lives in the rundown rows, so the talent always has the current words. A change to the row on air waits for one Send change button.</td></tr>
+<tr><td>Time, Duration, Count to, Hide</td><td>One Clock control. Press to show or hide. Hold to pick which clock.</td></tr>
+<tr><td>Tech difficulties, Color bars</td><td>One Slate control. Press for Standby. Hold for bars or tech difficulties.</td></tr>
+<tr><td>Push card, Into script, Question</td><td>One Message control.</td></tr>
+<tr><td>Size, Mirror, Fullscreen, Align, Width, Read line, Theme, Hide controls</td><td>Settings. They are set once in rehearsal, not during the show. Size is also on a Stream Deck dial.</td></tr>
+<tr><td>Script Op, Flowmingo Op, Remote Op</td><td>One operator. It is the same panel inside Live and in its own window, on this computer or any other.</td></tr>
+</table></div>
+</main>
+<script>
+document.addEventListener('mock-ready',function(){
+  var g='',h='';
+  PT_CONTROLS.forEach(function(c){
+    if(c.g!==g){g=c.g;h+='<tr class="g"><td colspan="4">'+g+'</td></tr>';}
+    var k=document.createElement('div');k.innerHTML=ptStrip({captions:false});
+    h+='<tr><td><button class="ck'+(c.id==='play'?' play':'')+(c.id==='speed'?' read':'')+'">'+(c.sym?sym(c.sym):c.pm?'<span class="pm">'+c.pm+'</span>':'<span class="val">60</span>')+'<span>'+c.label+'</span></button></td><td><b>'+c.label+'</b></td><td>'+c.does+'</td><td>'+(c.key?'<span class="kbd">'+c.key+'</span>':'')+'</td></tr>';
+  });
+  document.getElementById('ctable').innerHTML=h;
+});
+</script>
+</body></html>

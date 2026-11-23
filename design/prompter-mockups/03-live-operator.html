@@ -1,0 +1,59 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Operator inside Live</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.live{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:10px;align-items:start}
+.live .tbl{overflow:hidden;padding:6px 8px}
+.side{padding:14px 16px 16px}
+.side .strip{justify-content:flex-start}
+.now{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;padding:10px 16px}
+.now small{display:block;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--text3)}
+@media(max-width:1100px){.live{grid-template-columns:1fr}.side{order:-1}}
+</style></head><body>
+<main class="page">
+<h1>Operator inside Live</h1>
+<p class="lede">The built-in operator is a panel beside the rundown. It is the same panel as the stand-alone operator, only narrower. The rundown table does not change: same columns, same two lines in every cell.</p>
+
+<div class="win">
+  <div class="glass bar"><span class="brand">Cu<span>e</span>ola</span><span class="chip air"><span class="dot"></span>LIVE</span><span class="chip">DIRECTOR · You</span><span class="sp"></span><span class="num" style="font-weight:700">7:02:14 PM</span>
+    <button class="btn sm">Focus</button><button class="btn sm" style="background:color-mix(in srgb,var(--cue-script) 28%,transparent)"><span class="sf-symbol" data-symbol="department.script"></span>Prompter</button><button class="btn sm">Guide</button><button class="btn sm">Exit</button></div>
+  <div class="glass now"><div><small>SHOW</small><b>Campus News: Demo Show</b> <span class="chip code">DEMO1</span></div><div><small style="color:var(--red)">ON AIR</small><b>Anchor Wide: Welcome</b> <span class="num" style="color:var(--text2)">0:06 of 0:20</span></div><div><small style="color:var(--green)">STANDBY</small><b>Anchor Lower Third</b></div></div>
+  <div class="live">
+    <div class="glass tbl" data-rundown='{"live":true,"air":3,"here":3}'></div>
+    <aside class="glass strong side">
+      <div class="panel-h"><h3>Prompter</h3><span class="chip ok"><span class="dot"></span>TALENT LINKED</span><button class="btn sm icon" aria-label="Open in its own window"><span class="sf-symbol" data-symbol="action.expand"></span></button><button class="btn sm icon" aria-label="Close"><span class="sf-symbol" data-symbol="action.close"></span></button></div>
+      <div data-talent="rolling"></div>
+      <p class="cap" style="margin-bottom:12px">What the talent sees right now. Scroll on it to move the script.</p>
+      <div data-strip='{"rolling":true,"size":"compact","speed":"60"}'></div>
+      <div class="seg" style="margin:14px 0 10px"><span class="on">Script</span><span>On screen</span><span>Look</span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="chip air">ON AIR</span><b style="font-size:13px">3 · Anchor Wide: Welcome</b></div>
+      <div class="ed" style="font-size:14px;min-height:0"><p><span class="spk">HOST</span>Good evening and welcome to Campus News. I'm your anchor. Tonight, <span class="em">three big stories</span> from around campus.</p><p><span class="note">TURN TO CAMERA 2</span></p><p>First, the student council voted last night on next year's budget<span class="caret"></span></p></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px"><span class="chip warn">CHANGED · NOT ON SCREEN YET</span><span style="flex:1"></span><button class="btn primary sm" style="min-width:112px">Send change</button></div>
+    </aside>
+  </div>
+  <div class="glass bar"><div><small style="font-size:9px;letter-spacing:.1em;color:var(--text3);display:block">ELAPSED</small><span class="led" style="color:#ff5a4d">00:01:11;04</span></div><div><small style="font-size:9px;letter-spacing:.1em;color:var(--text3);display:block">REMAINING</small><span class="led" style="color:#3dd590">00:10:38;24</span></div><span class="sp"></span><button class="btn" style="background:var(--green);color:#04130c">Back</button><button class="btn" style="background:var(--red);color:#fff;min-width:150px">TAKE</button></div>
+</div>
+<p class="cap"><b>How it ties to the rundown.</b> The Script cell on the row where the prompter sits says PROMPTER HERE, so the director sees it without asking. With Follow lit, each TAKE cues the prompter to the new row. The roll stops by itself at the end of a row and waits for the next TAKE.</p>
+
+<div class="sect"><h2>The other two tabs</h2><p>Same tabs, same order, in Live and in the stand-alone window.</p></div>
+<div class="grid g2">
+  <div class="glass strong side"><div class="seg" style="margin-bottom:12px"><span>Script</span><span class="on">On screen</span><span>Look</span></div>
+    <div class="glabel" style="margin-top:0">Clock</div>
+    <div class="rows"><div class="r"><span class="l">Show ends in</span><span class="v"><span class="sf-symbol" data-symbol="action.confirm" style="color:var(--accent)"></span></span></div><div class="r"><span class="l">Time left in this row</span></div><div class="r"><span class="l">Time of day</span></div><div class="r"><span class="l">Count down from</span><span class="v"><span class="stepper"><b>−</b><span>5:00</span><b>+</b></span></span></div></div>
+    <div class="glabel">Slate</div>
+    <div class="seg"><span class="on">Standby</span><span>Color bars</span><span>Tech difficulties</span></div>
+    <div class="glabel">Message</div>
+    <div class="qgrid"><button class="btn sm">Slow down</button><button class="btn sm">Speed up</button><button class="btn sm">Look at camera 1</button><button class="btn sm">Look at camera 2</button><button class="btn sm">Stretch</button><button class="btn sm">Louder</button></div>
+    <div style="display:flex;gap:8px;margin-top:8px"><span class="field">Type a message or a question</span><button class="btn primary" style="min-width:88px">Send</button></div>
+    <div class="glabel">Wrap</div>
+    <div class="seg"><span>0:30</span><span>1:00</span><span class="on">2:00</span><span>5:00</span></div>
+  </div>
+  <div class="glass strong side"><div class="seg" style="margin-bottom:12px"><span>Script</span><span>On screen</span><span class="on">Look</span></div>
+    <div class="glabel" style="margin-top:0">Text on the talent screen</div>
+    <div class="rows"><div class="r"><span class="l">Size</span><span class="v"><span class="stepper"><b>−</b><span>70</span><b>+</b></span></span></div><div class="r"><span class="l">Width</span><span class="v"><span class="seg"><span>Narrow</span><span class="on">Normal</span><span>Wide</span></span></span></div><div class="r"><span class="l">Read line</span><span class="v"><span class="seg"><span class="on">High</span><span>Center</span></span></span></div><div class="r"><span class="l">Line up</span><span class="v"><span class="seg"><span>Left</span><span class="on">Center</span></span></span></div></div>
+    <div class="glabel">Screen</div>
+    <div class="rows"><div class="r"><span class="l">Mirror<div class="s">For a glass prompter in front of the lens</div></span><span class="sw"></span></div><div class="r"><span class="l">Row names in the script</span><span class="sw on"></span></div><div class="r"><span class="l">Next row and time left</span><span class="sw on"></span></div><div class="r"><span class="l">Theme</span><span class="v">Glacier <span class="sf-symbol" data-symbol="chevron.right"></span></span></div></div>
+    <p class="cap">Look is the same list as Settings on the talent screen. Change it in either place and both agree.</p>
+  </div>
+</div>
+</main>
+</body></html>

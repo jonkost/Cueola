@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stand-alone operator</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.op{display:grid;grid-template-columns:250px minmax(0,1fr) 330px;gap:10px;align-items:start}
+.op>*{padding:14px}
+.dock{padding:14px 16px}
+.stat{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--text2)}
+.ipad{max-width:820px;margin:0 auto}
+.ipad .op{grid-template-columns:minmax(0,1fr) 300px}.ipad .op .rowlist{display:none}
+@media(max-width:1100px){.op{grid-template-columns:minmax(0,1fr) 300px}.op .rowlist{display:none}}
+@media(max-width:760px){.op,.ipad .op{grid-template-columns:1fr}}
+</style></head><body>
+<main class="page">
+<h1>Stand-alone operator</h1>
+<p class="lede">The prompter operator in its own window. It links with a show code, so it runs on this computer or any other, and it does not need the Live window open. Same panel, same fifteen controls.</p>
+
+<div class="win">
+  <div class="glass bar"><span class="brand">Flow<span>mingo</span></span><span class="ttl">Prompter operator</span>
+    <button class="btn sm"><b>Campus News: Demo Show</b><span class="num" style="letter-spacing:.1em;color:var(--text2)">DEMO1</span><span class="sf-symbol" data-symbol="chevron.down"></span></button>
+    <span class="sp"></span><span class="chip air"><span class="dot"></span>SHOW IS LIVE</span><span class="chip ok"><span class="dot"></span>TALENT LINKED · STUDIO A</span><span class="avatar">MR</span><button class="btn sm icon" aria-label="Settings"><span class="sf-symbol" data-symbol="action.settings"></span></button></div>
+  <div class="op">
+    <div class="glass rowlist"><div class="glabel" style="margin:0 10px 6px">Rows</div>
+      <div class="it"><span class="n">1</span><b class="none">Countdown Slate</b><span class="t">no script</span></div>
+      <div class="it"><span class="n">2</span><b>Show Open</b><span class="t">0:03</span></div>
+      <div class="it on"><span class="n">3</span><b>Anchor Wide: Welcome</b><span class="chip air">ON AIR</span></div>
+      <div class="it none"><span class="n">4</span><b>Anchor Lower Third</b><span class="t">no script</span></div>
+      <div class="it none"><span class="n">5</span><b>PKG: Student Council</b><span class="t">clip 2:15</span></div>
+      <div class="it"><span class="n">6</span><b>Back to Anchor</b><span class="t">0:08</span></div>
+      <div class="it"><span class="n">7</span><b>Guest Conversation</b><span class="t">ad lib</span></div>
+      <div class="it none"><span class="n">8</span><b>Sports Highlight</b><span class="t">clip 1:30</span></div>
+      <div class="it"><span class="n">9</span><b>Weather Look-Live</b><span class="t">0:40</span></div>
+      <div class="it"><span class="n">10</span><b>Outro &amp; Signoff</b><span class="t">0:12</span></div>
+      <p class="cap" style="margin:10px">Click a row to cue the prompter there. Script total 1:28.</p>
+    </div>
+    <div class="glass"><div data-talent="rolling"></div>
+      <div class="stat"><span class="chip ok">TALENT HAS IT</span><span>The talent screen confirmed your last press.</span><span style="flex:1"></span><span class="num">Row 3 of 10 · 0:14 left</span></div>
+      <div class="meter" style="margin-top:8px"><i style="width:28%;background:var(--cue-script)"></i></div>
+    </div>
+    <div class="glass strong"><div class="seg" style="margin-bottom:12px"><span>Script</span><span class="on">On screen</span><span>Look</span></div>
+      <div class="glabel" style="margin-top:0">Clock</div>
+      <div class="rows"><div class="r"><span class="l">Show ends in</span><span class="v"><span class="sf-symbol" data-symbol="action.confirm" style="color:var(--accent)"></span></span></div><div class="r"><span class="l">Time left in this row</span></div><div class="r"><span class="l">Time of day</span></div></div>
+      <div class="glabel">Slate</div>
+      <div class="seg"><span class="on">Standby</span><span>Bars</span><span>Tech</span></div>
+      <div class="glabel">Message</div>
+      <div class="qgrid"><button class="btn sm">Slow down</button><button class="btn sm">Speed up</button><button class="btn sm">Stretch</button><button class="btn sm">Louder</button></div>
+      <div style="display:flex;gap:8px;margin-top:8px"><span class="field">Type a message</span><button class="btn primary" style="min-width:76px">Send</button></div>
+    </div>
+  </div>
+  <div class="glass strong dock" data-strip='{"rolling":true,"speed":"60"}'></div>
+</div>
+<p class="cap"><b>Laid out for a show.</b> Rows on the left, what the talent sees in the middle, the fifteen controls along the bottom where a hand rests. The green TALENT HAS IT chip only shows after the talent screen answers back, so the operator is never guessing.</p>
+
+<div class="sect"><h2>iPad</h2><p>Same window on an iPad. The controls grow to touch size and wrap into their three groups. The row list tucks behind the show name.</p></div>
+<div class="win ipad">
+  <div class="glass bar"><span class="brand">Flow<span>mingo</span></span><button class="btn sm"><b>Campus News</b><span class="num" style="color:var(--text2)">DEMO1</span><span class="sf-symbol" data-symbol="chevron.down"></span></button><span class="sp"></span><span class="chip ok"><span class="dot"></span>TALENT LINKED</span><span class="avatar">MR</span></div>
+  <div class="op">
+    <div class="glass rowlist"></div>
+    <div class="glass"><div data-talent="paused"></div><div class="stat"><span class="chip warn">PAUSED</span><span style="flex:1"></span><span class="num">Row 3 of 10</span></div></div>
+    <div class="glass strong"><div class="seg" style="margin-bottom:12px"><span class="on">Script</span><span>On screen</span><span>Look</span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="chip air">ON AIR</span><b style="font-size:13px">3 · Anchor Wide</b></div>
+      <div class="ed" style="font-size:14px;min-height:0"><p><span class="spk">HOST</span>Good evening and welcome to Campus News. I'm your anchor.</p></div></div>
+  </div>
+  <div class="glass strong dock" data-strip='{"size":"touch","speed":"60"}'></div>
+</div>
+</main>
+</body></html>

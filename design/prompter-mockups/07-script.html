@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Script and formatting</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.sc{display:grid;grid-template-columns:230px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}.sc>*{padding:14px}
+@media(max-width:1000px){.sc{grid-template-columns:1fr}}
+.fk{width:100%;border-collapse:collapse;font-size:13px}
+.fk th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:left;padding:8px 12px}
+.fk td{padding:10px 12px;vertical-align:middle;background:linear-gradient(var(--hair),var(--hair)) 0 0/100% 1px no-repeat}
+.fk td:first-child{font-weight:700;white-space:nowrap}.fk .ed{min-height:0;font-size:15px}.fk .ed p{margin:0}
+.fk .tal{aspect-ratio:auto;border-radius:10px;padding:10px 16px;width:300px;container-type:normal;font-size:22px;font-weight:600;text-align:center}
+.fk .tal>*{font-size:inherit}
+.fk .tal .t-spk{font-size:11px;padding:2px 8px;border-radius:5px;margin:0}.fk .tal .t-note{font-size:14px;padding:3px 10px;border-radius:6px;margin:0}
+.fk .tal .t-em{text-decoration-thickness:2px;text-underline-offset:4px}.fk .tal .t-stop{font-size:10px;margin:0;gap:8px}.fk .tal .t-stop::before,.fk .tal .t-stop::after{height:2px}
+.fk .tal .t-row{font-size:10px;margin:0;gap:8px}.fk .tal .t-row i{padding:2px 6px;min-width:0}.fk .tal .t-row::before,.fk .tal .t-row::after{height:1px}
+.old{font:13px/1.5 var(--mono-num);color:var(--text2);white-space:pre-wrap}
+</style></head><body>
+<main class="page">
+<h1>Script and formatting</h1>
+<p class="lede">The script is written row by row, in the same place it lives: the rundown. Formatting is a button, never typed symbols. The right side always shows the row exactly as the talent will see it.</p>
+
+<div class="win">
+  <div class="glass bar"><span class="ttl">Script</span><span class="chip code">DEMO1</span><span style="color:var(--text2);font-size:13px">Campus News: Demo Show</span><span class="sp"></span><span style="font-size:12px;color:var(--text2)">Whole script reads in <b class="num" style="color:var(--text)">1:28</b></span><button class="btn sm">Bring in a file</button><button class="btn sm">Print</button></div>
+  <div class="sc">
+    <div class="glass rowlist"><div class="glabel" style="margin:0 10px 6px">Rows</div>
+      <div class="it none"><span class="n">1</span><b>Countdown Slate</b><span class="t">no script</span></div>
+      <div class="it"><span class="n">2</span><b>Show Open</b><span class="t">0:03</span></div>
+      <div class="it on"><span class="n">3</span><b>Anchor Wide: Welcome</b><span class="t">0:14</span></div>
+      <div class="it none"><span class="n">4</span><b>Anchor Lower Third</b><span class="t">no script</span></div>
+      <div class="it none"><span class="n">5</span><b>PKG: Student Council</b><span class="t">clip</span></div>
+      <div class="it"><span class="n">6</span><b>Back to Anchor</b><span class="t">0:08</span></div>
+      <div class="it"><span class="n">7</span><b>Guest Conversation</b><span class="t" style="color:var(--yellow)">over 0:10</span></div>
+    </div>
+    <div class="glass strong">
+      <div class="panel-h"><h3>3 · Anchor Wide: Welcome</h3><span class="chip">MAYA IS TYPING</span></div>
+      <div class="tool"><button class="btn sm"><span class="sf-symbol" data-symbol="action.profile"></span>Speaker</button><button class="btn sm" style="text-decoration:underline">Punch</button><button class="btn sm" style="background:color-mix(in srgb,var(--yellow) 30%,transparent)">Note to talent</button><button class="btn sm" style="color:var(--red)">Stop here</button><button class="btn sm">Clear formatting</button></div>
+      <div class="ed" style="margin-top:14px"><p><span class="spk">HOST</span>Good evening and welcome to Campus News. I'm your anchor. Tonight, <span class="em">three big stories</span> from around campus.</p><p><span class="note">TURN TO CAMERA 2</span></p><p>First, the student council voted last night on next year's budget<span class="caret"></span></p></div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)"><span>Reads in <b class="num" style="color:var(--text)">0:14</b> of 0:20</span><div class="meter" style="flex:1"><i style="width:70%"></i></div><span>Saved</span></div>
+      <div class="rows" style="margin-top:14px"><div class="r"><span class="sf-symbol" data-symbol="state.success" style="color:var(--green)"></span><span class="l">Pasted from Word and tidied<div class="s">Removed 2 empty lines and 3 double spaces. Kept your bold as Punch.</div></span><button class="btn sm">Undo</button></div></div>
+    </div>
+    <div class="glass"><div class="panel-h"><h3>As the talent sees it</h3><span class="seg"><span class="on">Dark</span><span>Light</span></span></div><div data-talent="paused"></div><p class="cap">Live preview at the talent's own size, width and read line.</p></div>
+  </div>
+</div>
+
+<div class="sect"><h2>The whole formatting kit</h2><p>Five things, each with one button and one look. That is all a prompter script needs.</p></div>
+<div class="glass pad"><table class="fk">
+<tr><th>What</th><th>In the editor</th><th>On the talent screen</th><th>What it is for</th></tr>
+<tr><td>Speaker</td><td><div class="ed"><p><span class="spk">HOST</span>Good evening.</p></div></td><td><div class="tal"><span class="t-spk">HOST</span><div>Good evening.</div></div></td><td>Who reads next. Picked from the show's speakers, the same list the Script cue uses.</td></tr>
+<tr><td>Punch</td><td><div class="ed"><p>Tonight, <span class="em">three big stories</span>.</p></div></td><td><div class="tal">Tonight, <span class="t-em">three big stories</span>.</div></td><td>Words to hit. One style, so bold and italic can never look different on the two screens.</td></tr>
+<tr><td>Note to talent</td><td><div class="ed"><p><span class="note">TURN TO CAMERA 2</span></p></div></td><td><div class="tal"><span class="t-note">TURN TO CAMERA 2</span></div></td><td>Something to do, not say. Yellow box, so it is never read aloud.</td></tr>
+<tr><td>Stop here</td><td><div class="ed"><div class="stop">STOP · AD LIB</div></div></td><td><div class="tal"><div class="t-stop">STOP · AD LIB</div></div></td><td>The roll stops by itself at this line and waits for Play.</td></tr>
+<tr><td>Row name</td><td style="color:var(--text2)">Comes from the rundown. Not typed.</td><td><div class="tal"><div class="t-row"><i>3</i>Anchor Wide: Welcome</div></div></td><td>Shows where the talent is in the show. Crew notes for the row stay in the rundown and never appear here.</td></tr>
+</table></div>
+
+<div class="sect"><h2>What it replaces</h2></div>
+<div class="grid g2">
+  <div><div class="glass pad"><div class="old">[3] Anchor Wide: Welcome
+HOST:
+Good evening and welcome to Campus News. Tonight, **three big stories** from *around* campus.
+[TURN TO CAMERA 2]
+[STOP HERE]
+
+[4] Anchor Lower Third
+[Name / Title]</div></div><p class="cap"><b>Today.</b> One long text box of typed symbols. Italic stars show up raw on the talent screen. Crew notes like Name / Title are shown to the talent in big letters.</p></div>
+  <div><div class="glass pad"><div class="ed"><p><span class="spk">HOST</span>Good evening and welcome to Campus News. Tonight, <span class="em">three big stories</span> from around campus.</p><p><span class="note">TURN TO CAMERA 2</span></p><div class="stop">STOP</div></div></div><p class="cap"><b>New.</b> What you see is what the talent gets. Old scripts open fine: the typed symbols are turned into these five things when a show is opened.</p></div>
+</div>
+</main>
+</body></html>

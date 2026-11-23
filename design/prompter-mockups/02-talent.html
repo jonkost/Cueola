@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Talent screen</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+</head><body>
+<main class="page">
+<h1>Talent screen</h1>
+<p class="lede">The talent sees words, and almost nothing else. Crew notes never reach this screen. While it rolls, every control is hidden. The screen keeps the whole script on itself, so it can finish the show even if the link is gone.</p>
+
+<div data-talent="rolling" style="max-width:1040px"></div>
+<p class="cap"><b>Rolling, on air.</b> A thin red line across the top means this row is on air. Words already read fade. The row name is small. The speaker is a tag. A yellow box is a note to the talent, not read aloud. Underlined words get punched.</p>
+
+<div class="grid g2" style="margin-top:28px">
+  <div><div data-talent="paused"></div><p class="cap"><b>Paused.</b> The top bar and the control set come back. Same fifteen controls as the operator.</p></div>
+  <div><div data-talent="self"></div><p class="cap"><b>No operator.</b> The talent or a floor person runs it right here, by touch, keys or a clicker.</p></div>
+  <div><div data-talent="clock"></div><p class="cap"><b>Clock.</b> One clock, top right, always says what it is counting.</p></div>
+  <div><div data-talent="message"></div><p class="cap"><b>Message from the booth.</b> Wrap up with a countdown. The script keeps rolling under it.</p></div>
+  <div><div data-talent="question"></div><p class="cap"><b>Question.</b> Same place, blue, so it is never mistaken for a wrap.</p></div>
+  <div><div data-talent="gap"></div><p class="cap"><b>Rows with no script.</b> A clip or a silent row is one thin line, not a blank gap. The clock counts the clip down. A red STOP line is where the roll stops by itself.</p></div>
+  <div><div data-talent="slate"></div><p class="cap"><b>Slate: Standby.</b> Before the show, and any time the operator presses Slate.</p></div>
+  <div><div data-talent="tech"></div><p class="cap"><b>Slate: Technical difficulties.</b> Tells the talent what to do, not just what broke.</p></div>
+  <div><div data-talent="bars"></div><p class="cap"><b>Slate: Color bars.</b></p></div>
+  <div><div data-talent="waiting"></div><p class="cap"><b>Linked, no script yet.</b> The show code is big enough to check from across the studio.</p></div>
+  <div><div data-talent="lost"></div><p class="cap"><b>Link lost while rolling.</b> It does not stop, jump or blank. One calm yellow note, and the controls appear here so someone on the floor can take over.</p></div>
+  <div><div data-talent="back"></div><p class="cap"><b>Link back.</b> The operator's screen catches up to the talent, never the other way round. The words do not move.</p></div>
+  <div><div data-talent="rolling" data-pt="light"></div><p class="cap"><b>Light theme (Polar Bear).</b> Same layout, black on white.</p></div>
+  <div><div data-talent="nolink"></div><p class="cap"><b>Not linked.</b> Leads straight to the show picker (see Show codes).</p></div>
+</div>
+</main>
+</body></html>

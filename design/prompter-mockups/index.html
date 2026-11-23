@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prompter mockups</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.idx a{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none}
+.idx .n{width:26px;height:26px;border-radius:8px;background:var(--btn-fill-2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.three>div{padding:18px}
+.three h3{font-size:15px;margin-bottom:4px}.three p{color:var(--text2);font-size:13px}
+@media(max-width:800px){.three{grid-template-columns:1fr}}
+.opt .r{align-items:flex-start;padding:10px 14px}.opt b{display:block}
+</style></head><body>
+<main class="page" style="max-width:1000px">
+<h1>The new teleprompter</h1>
+<p class="lede">Design only. Nothing here is wired to the app. These pages show every screen of the rebuilt prompter so it can be approved before any of it is built. Use Light in the top bar to see each page in the light theme.</p>
+
+<div class="three">
+  <div class="glass"><h3>One control set</h3><p>Fifteen controls with the same names, pictures, order and sizes on every screen and on the Stream Deck.</p></div>
+  <div class="glass"><h3>One script, in the rundown</h3><p>Words live in each row's Script cell. No Push button. The prompter follows the TAKE.</p></div>
+  <div class="glass"><h3>It cannot fumble</h3><p>The talent screen holds the whole script and keeps rolling if the link drops. Controls light only when the talent screen confirms.</p></div>
+</div>
+
+<div class="sect"><h2>The pages</h2></div>
+<div class="rows idx" id="idx"></div>
+
+<div class="sect"><h2>Extra features to consider</h2><p>None of these are in the core plan. Each one is optional.</p></div>
+<div class="rows opt">
+  <div class="r"><span class="l"><b>Read time against row time</b><span class="s">Every row shows how long its words take to read, and warns when they will not fit the row. Shown in these mockups.</span></span></div>
+  <div class="r"><span class="l"><b>Clip countdown for the talent</b><span class="s">While a package plays, the talent screen counts down to when they are back on.</span></span></div>
+  <div class="r"><span class="l"><b>Pace to the clock</b><span class="s">The roll gently speeds up or slows down so the words end when the row's time ends.</span></span></div>
+  <div class="r"><span class="l"><b>Rehearsal mode</b><span class="s">Run the prompter through the whole show without moving the live show or the clocks.</span></span></div>
+  <div class="r"><span class="l"><b>Two talent screens</b><span class="s">Camera 1 and camera 2 prompters roll together, each with its own mirror setting.</span></span></div>
+  <div class="r"><span class="l"><b>Phone as a remote</b><span class="s">A talent with no operator runs their own prompter from a phone with Play, Back, Ahead and speed.</span></span></div>
+  <div class="r"><span class="l"><b>Scan to link</b><span class="s">The talent screen shows a square code. Point an iPad at it and the iPad becomes the operator.</span></span></div>
+  <div class="r"><span class="l"><b>Printed backup script</b><span class="s">One button prints the script by row, in big type, for when the power goes out.</span></span></div>
+  <div class="r"><span class="l"><b>Voice follow</b><span class="s">The roll follows the talent's voice. Experimental, and only for practice, never the only way to run a show.</span></span></div>
+</div>
+
+<div class="sect"><h2>New words to approve</h2><p>These would go in the glossary once approved: Prompter operator, Roll, Back, Ahead, Follow, Slate, Message, Wrap, Clear, Punch, Note to talent, Stop here.</p></div>
+</main>
+<script>
+var WHAT={'01-controls.html':'The fifteen controls, their sizes, and where each old button went.','02-talent.html':'Rolling, paused, clock, message, slates, link lost, light theme.','03-live-operator.html':'The built-in operator beside the rundown, with its three tabs.','04-operator.html':'The operator in its own window, and on an iPad.','05-show-code.html':'Picking a show, typing a code, wrong code, switching shows.','06-settings.html':'Look, This screen, and Keys.','07-script.html':'Writing the script by row, and the five kinds of formatting.','08-stream-deck.html':'Key faces for every control on three sizes of deck.','09-rundown-cue.html':'The Script cell in the rundown and in Live, and its editor.','10-states.html':'Nothing linked, nothing written, link lost, two operators.'};
+document.addEventListener('mock-ready',function(){var q=location.search;document.getElementById('idx').innerHTML=PT_PAGES.slice(1).map(function(p,i){return '<div class="r"><a class="l" href="'+p[0]+q+'"><span class="n">'+(i+1)+'</span><span><b>'+p[1]+'</b><div class="s">'+WHAT[p[0]]+'</div></span></a><span class="sf-symbol" data-symbol="chevron.right" style="color:var(--text3)"></span></div>'}).join('')});
+</script>
+</body></html>

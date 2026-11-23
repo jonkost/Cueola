@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stream Deck</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.d5{grid-template-columns:repeat(5,92px)}.d4{grid-template-columns:repeat(4,92px)}.d3{grid-template-columns:repeat(3,92px)}
+.d5.sm{grid-template-columns:repeat(5,64px);gap:10px;padding:16px;border-radius:20px}
+.lcd{grid-column:1/-1;height:70px;border-radius:12px;background:#0b0c10;display:grid;grid-template-columns:repeat(4,1fr);align-items:center;text-align:center;color:#e9eefb;font-size:11px;font-weight:700}
+.lcd b{display:block;font:700 20px var(--mono-num)}
+.dials{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,92px);gap:14px}
+.center{display:flex;justify-content:center}
+.faces{display:flex;gap:18px;flex-wrap:wrap}.faces>div{text-align:center;width:104px}.faces .dk{margin:0 auto 6px}
+</style></head><body>
+<main class="page">
+<h1>Stream Deck</h1>
+<p class="lede">The deck is the control set, key for key. Same words, same pictures, same three rows. A key lights only when the talent screen confirms it, so the deck never lies about what is on screen.</p>
+
+<div class="grid g2">
+  <div><div class="center"><div class="deck d5" id="d-paused"></div></div><p class="cap"><b>15 keys, paused.</b> Row 1 Roll. Row 2 Place and speed. Row 3 On screen. Exactly the layout on every operator screen.</p></div>
+  <div><div class="center"><div class="deck d5" id="d-rolling"></div></div><p class="cap"><b>Rolling, clock up.</b> Play is green and reads Pause. Clock is lit yellow because the talent can see it. The middle key shows the real speed.</p></div>
+</div>
+
+<div class="sect"><h2>Every key face</h2><p>What a key can look like. There are only these looks, on every key.</p></div>
+<div class="glass pad faces" style="padding:22px">
+  <div><div data-deck="slate"></div><div class="cap"><b>Ready</b><br>Press it</div></div>
+  <div><div data-deck="follow"></div><div class="cap"><b>On</b><br>Following the rundown</div></div>
+  <div><div data-deck="slate" data-st='{"on":["slate"]}'></div><div class="cap"><b>On screen</b><br>The talent sees it</div></div>
+  <div><div data-deck="play"></div><div class="cap"><b>Play</b><br>Paused, ready to roll</div></div>
+  <div><div data-deck="play" data-st='{"rolling":true}'></div><div class="cap"><b>Pause</b><br>Rolling now</div></div>
+  <div><div class="dk red"><span class="sf-symbol" data-symbol="state.warning"></span><span>No talent</span></div><div class="cap"><b>Refused</b><br>Flashes red and says why</div></div>
+  <div><div data-deck="slate" data-k="dead"></div><div class="cap"><b>Not linked</b><br>Dim, does nothing</div></div>
+  <div><div data-deck="speed" data-st='{"speed":"65"}'></div><div class="cap"><b>Speed</b><br>A number, not a guess</div></div>
+</div>
+
+<div class="sect"><h2>Other decks</h2><p>Smaller decks get the first keys of the same set, in the same order. Dials do the jobs that suit a dial.</p></div>
+<div class="grid g2">
+  <div><div class="center"><div class="deck d4" id="d-plus"></div></div><p class="cap"><b>Stream Deck +.</b> Dial 1 Speed (press: Play or Pause). Dial 2 Scroll the script (press: jump to the row on air). Dial 3 Size. Dial 4 Wrap time.</p></div>
+  <div><div class="center"><div class="deck d3" id="d-mini"></div></div><p class="cap"><b>Stream Deck Mini.</b> The six that run a show: the Roll row plus Follow.</p></div>
+</div>
+</main>
+<script>
+document.addEventListener('mock-ready',function(){
+  var ids=PT_CONTROLS.map(function(c){return c.id});
+  function fill(id,list,st){document.getElementById(id).innerHTML=list.map(function(k){return ptDeckKey(k,st)}).join('')+(document.getElementById(id).dataset.tail||'');}
+  fill('d-paused',ids,{});
+  fill('d-rolling',ids,{rolling:true,on:['clock'],speed:'65'});
+  document.getElementById('d-plus').dataset.tail='<div class="lcd"><div>SPEED<b>60</b></div><div>SCROLL<b>Row 3</b></div><div>SIZE<b>70</b></div><div>WRAP<b>2:00</b></div></div><div class="dials"><div class="dial"></div><div class="dial"></div><div class="dial"></div><div class="dial"></div></div>';
+  fill('d-plus',['prev','back','ahead','next','play','follow','slate','clear'],{});
+  fill('d-mini',['prev','play','next','back','follow','ahead'],{});
+});
+</script>
+</body></html>

@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Show codes</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.sheet{padding:22px;max-width:520px;margin:0 auto}
+.sheet h3{font-size:19px}.sheet .sub{color:var(--text2);font-size:13px;margin-top:2px}
+.stage{padding:28px 16px;border-radius:var(--ui-radius-panel);background:#000}
+[data-theme="white"] .stage{background:#d9d6cf}
+.show b{display:block;font-size:14px}.show .s{font-size:12px;color:var(--text2)}
+</style></head><body>
+<main class="page">
+<h1>Show codes</h1>
+<p class="lede">One door for the prompter. It opens the same way on the talent screen and on the stand-alone operator: pick one of your shows, or type a code. An admin sees the shows they made and the shows another admin shared with them.</p>
+
+<div class="grid g2">
+  <div><div class="stage"><div class="glass strong sheet">
+    <h3>Pick a show</h3><p class="sub">This prompter follows the show you pick.</p>
+    <div class="seg" style="margin-top:14px"><span class="on">Talent screen</span><span>Operator</span></div>
+    <div class="glabel">Your shows</div>
+    <div class="rows">
+      <div class="r show"><span class="l"><b>Campus News: Demo Show</b><span class="s num">DEMO1</span></span><span class="chip air"><span class="dot"></span>LIVE NOW</span></div>
+      <div class="r show"><span class="l"><b>Morning Announcements</b><span class="s num">2611A · opened yesterday</span></span><span class="sf-symbol" data-symbol="chevron.right" style="color:var(--text3)"></span></div>
+      <div class="r show"><span class="l"><b>Sports Desk Rehearsal</b><span class="s num">2611B · opened Nov 18</span></span><span class="sf-symbol" data-symbol="chevron.right" style="color:var(--text3)"></span></div>
+    </div>
+    <div class="glabel">Shared with you</div>
+    <div class="rows"><div class="r show"><span class="l"><b>Election Night Special</b><span class="s num">2611E · shared by M. Rivera</span></span><span class="sf-symbol" data-symbol="chevron.right" style="color:var(--text3)"></span></div></div>
+    <div class="glabel">Or type a show code</div>
+    <div style="display:flex;gap:10px;align-items:center"><div class="codebox"><b class="cur"></b><b></b><b></b><b></b><b></b></div><span style="flex:1"></span><button class="btn primary">Link</button></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:18px"><span class="avatar">JK</span><span style="font-size:12px;color:var(--text2);flex:1">Signed in as Jon Kost, instructor</span><button class="btn sm">Practice with no show</button></div>
+  </div></div><p class="cap"><b>Signed in.</b> Shows from the person's profile, the live one on top. One tap links. The top switch says what this screen will be.</p></div>
+
+  <div><div class="stage"><div class="glass strong sheet">
+    <h3>Pick a show</h3><p class="sub">Type the show code your director gave you.</p>
+    <div class="seg" style="margin-top:14px"><span class="on">Talent screen</span><span>Operator</span></div>
+    <div class="glabel">Show code</div>
+    <div style="display:flex;gap:10px;align-items:center"><div class="codebox"><b>D</b><b>E</b><b>M</b><b class="cur"></b><b></b></div><span style="flex:1"></span><button class="btn primary">Link</button></div>
+    <div class="glabel">Or</div>
+    <div class="rows"><div class="r"><span class="l">Sign in to see your shows<div class="s">Same sign-in as the rest of Cueola. Nothing about it changes.</div></span><button class="btn sm">Sign in</button></div>
+    <div class="r"><span class="l">Practice with no show<div class="s">Paste or load a script and run it on this screen only.</div></span><button class="btn sm">Practice</button></div></div>
+  </div></div><p class="cap"><b>Signed out.</b> The code box comes first. Letters land in big boxes so a typo is easy to see.</p>
+
+  <div class="stage" style="margin-top:20px"><div class="glass strong sheet">
+    <h3>Pick a show</h3><p class="sub" style="color:var(--red)">No show has the code DEMO7. Check it with your director.</p>
+    <div class="glabel">Show code</div>
+    <div style="display:flex;gap:10px;align-items:center"><div class="codebox err"><b>D</b><b>E</b><b>M</b><b>O</b><b>7</b></div><span style="flex:1"></span><button class="btn primary">Link</button></div>
+  </div></div><p class="cap"><b>Wrong code.</b> Says what is wrong and who to ask. The button always says Link.</p></div>
+</div>
+
+<div class="grid g2" style="margin-top:8px">
+  <div><div class="stage"><div class="glass strong sheet">
+    <h3>Welcome back</h3><p class="sub">This screen was the talent screen for this show last time.</p>
+    <div class="rows" style="margin-top:14px"><div class="r show"><span class="l"><b>Campus News: Demo Show</b><span class="s num">DEMO1 · Studio A prompter</span></span><span class="chip air"><span class="dot"></span>LIVE NOW</span></div></div>
+    <div class="btnrow" style="margin-top:18px"><button class="btn">Pick another</button><button class="btn primary">Link to DEMO1</button></div>
+  </div></div><p class="cap"><b>The screen remembers.</b> A studio prompter that was on DEMO1 comes back to DEMO1 in one press.</p></div>
+
+  <div><div class="stage"><div class="glass strong sheet">
+    <h3>Switch to Morning Announcements?</h3><p class="sub">Campus News: Demo Show is live. This talent screen will leave it and stop showing its script.</p>
+    <div class="btnrow" style="margin-top:18px"><button class="btn">Cancel</button><button class="btn danger">Switch show</button></div>
+  </div></div><p class="cap"><b>Changing shows while live asks first.</b> The show name and code sit in the top bar of every prompter screen. Pressing it opens the same picker.</p></div>
+</div>
+</main>
+</body></html>

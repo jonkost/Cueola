@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Settings</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.sheet{padding:20px}.sheet h3{font-size:19px;flex:1}
+.sw3{display:flex;gap:6px}.sw3 i{width:22px;height:22px;border-radius:50%;display:block}
+.keys{columns:2;column-gap:20px;font-size:13px}.keys div{display:flex;justify-content:space-between;align-items:center;padding:6px 0;break-inside:avoid}
+</style></head><body>
+<main class="page">
+<h1>Settings</h1>
+<p class="lede">One sheet with three tabs, opened from the gear on any prompter screen. Grouped rows the Apple way. Everything here is set before the show, which is why none of it sits in the live control set.</p>
+
+<div class="grid g3">
+  <div><div class="glass strong sheet">
+    <div class="panel-h"><h3>Settings</h3><button class="btn sm primary" style="min-width:72px">Done</button></div>
+    <div class="seg"><span class="on">Look</span><span>This screen</span><span>Keys</span></div>
+    <div class="glabel">Text</div>
+    <div class="rows"><div class="r"><span class="l">Size</span><span class="stepper"><b>−</b><span>70</span><b>+</b></span></div><div class="r"><span class="l">Width</span><span class="seg"><span>Narrow</span><span class="on">Normal</span><span>Wide</span></span></div><div class="r"><span class="l">Read line</span><span class="seg"><span class="on">High</span><span>Center</span></span></div><div class="r"><span class="l">Line up</span><span class="seg"><span>Left</span><span class="on">Center</span></span></div></div>
+    <div class="glabel">Screen</div>
+    <div class="rows"><div class="r"><span class="l">Mirror<div class="s">For a glass prompter in front of the lens</div></span><span class="sw"></span></div><div class="r"><span class="l">Row names in the script</span><span class="sw on"></span></div><div class="r"><span class="l">Next row and time left</span><span class="sw on"></span></div><div class="r"><span class="l">Clock and message size</span><span class="seg"><span>S</span><span class="on">M</span><span>L</span></span></div><div class="r"><span class="l">Theme</span><span class="sw3"><i style="background:#000;outline:2px solid var(--accent);outline-offset:2px"></i><i style="background:#fff"></i><i style="background:#ffc400"></i><i style="background:#6cd234"></i></span></div></div>
+  </div><p class="cap"><b>Look.</b> The same list as the operator's Look tab. Change it in either place and both agree.</p></div>
+
+  <div><div class="glass strong sheet">
+    <div class="panel-h"><h3>Settings</h3><button class="btn sm primary" style="min-width:72px">Done</button></div>
+    <div class="seg"><span>Look</span><span class="on">This screen</span><span>Keys</span></div>
+    <div class="glabel">Show</div>
+    <div class="rows"><div class="r"><span class="l">Campus News: Demo Show<div class="s num">DEMO1</div></span><button class="btn sm">Change</button></div><div class="r"><span class="l">This screen is</span><span class="seg"><span class="on">Talent screen</span><span>Operator</span></span></div><div class="r"><span class="l">Name of this screen</span><span class="v">Studio A prompter</span></div></div>
+    <div class="glabel">If the link drops</div>
+    <div class="rows"><div class="r"><span class="l">Keep rolling<div class="s">The talent finishes the row. Controls appear on this screen.</div></span><span class="sf-symbol" data-symbol="action.confirm" style="color:var(--accent)"></span></div><div class="r"><span class="l">Stop at the end of the row</span></div></div>
+    <div class="glabel">Display</div>
+    <div class="rows"><div class="r"><span class="l">Full screen</span><span class="sw on"></span></div><div class="r"><span class="l">Keep this screen awake</span><span class="sw on"></span></div></div>
+    <div class="glabel">Signed in</div>
+    <div class="rows"><div class="r"><span class="avatar">MR</span><span class="l">Maya Rivera<div class="s">Script, Campus News</div></span></div></div>
+  </div><p class="cap"><b>This screen.</b> Which show, what job, and what to do if the link drops.</p></div>
+
+  <div><div class="glass strong sheet">
+    <div class="panel-h"><h3>Settings</h3><button class="btn sm primary" style="min-width:72px">Done</button></div>
+    <div class="seg"><span>Look</span><span>This screen</span><span class="on">Keys</span></div>
+    <div class="glabel">Keyboard</div>
+    <div class="rows"><div class="r" style="display:block;padding:8px 14px"><div class="keys" id="keys"></div></div></div>
+    <div class="glabel">Stream Deck</div>
+    <div class="rows"><div class="r"><span class="l">Stream Deck XL<div class="s">Connected. Prompter layout loaded.</div></span><span class="chip ok"><span class="dot"></span>READY</span></div><div class="r"><span class="l">Use the standard prompter layout</span><button class="btn sm">Load</button></div></div>
+    <div class="glabel">Clicker or foot pedal</div>
+    <div class="rows"><div class="r"><span class="l">Forward button</span><span class="v">Play or Pause</span></div><div class="r"><span class="l">Back button</span><span class="v">Prev row</span></div></div>
+  </div><p class="cap"><b>Keys.</b> One list, the same keys on every screen, written with the control's own name.</p></div>
+</div>
+</main>
+<script>document.addEventListener('mock-ready',function(){document.getElementById('keys').innerHTML=PT_CONTROLS.filter(function(c){return c.key}).map(function(c){return '<div><span>'+(c.id==='play'?'Play or Pause':c.label)+'</span><span class="kbd">'+c.key+'</span></div>'}).join('')});</script>
+</body></html>

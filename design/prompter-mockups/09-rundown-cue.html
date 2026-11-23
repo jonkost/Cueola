@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Script cue in the rundown</title>
+<link rel="stylesheet" href="../../assets/sf-symbols.css"><link rel="stylesheet" href="mock.css"><script src="mock.js" defer></script>
+<style>
+.cells{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}.cells .cue{min-height:64px}
+@media(max-width:900px){.cells{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sheet{padding:20px;max-width:640px;margin:0 auto}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chips .chip{height:30px;padding:0 14px;font-size:12px}.chips .chip.on{background:var(--cue-script);color:#00181c}
+.two{border-radius:10px;padding:10px 12px}
+</style></head><body>
+<main class="page">
+<h1>Script cue in the rundown</h1>
+<p class="lede">The rundown table stays as it is. The Script cell keeps its two lines, STANDBY and CUE. What is new is one quiet third line that tells the crew what the prompter holds for that row, and where the prompter is.</p>
+
+<div class="glass" style="padding:6px 8px" data-rundown='{"air":0,"max":6}'></div>
+<p class="cap"><b>Building the show.</b> Same table, same columns. A Script cell with words shows how many lines and how long they take to read.</p>
+
+<div class="sect"><h2>Every look of the Script cell</h2></div>
+<div class="cells">
+  <div><div class="cue c-s"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div><div class="meta">4 lines · 0:14</div></div><p class="cap"><b>Has a script.</b> Lines and read time.</p></div>
+  <div><div class="cue c-s"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div><div class="meta">No script yet</div></div><p class="cap"><b>Cue, no words.</b> Says so plainly.</p></div>
+  <div><div class="cue c-s"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div><div class="meta" style="color:var(--yellow)">0:30 · over by 0:10</div></div><p class="cap"><b>Too long for the row.</b> Caught in rehearsal, not on air.</p></div>
+  <div><div class="cue c-s"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div><div class="meta">4 lines <span class="here">PROMPTER HERE</span></div></div><p class="cap"><b>Live.</b> The prompter is on this row.</p></div>
+  <div><div class="cue c-s"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div><div class="meta" style="color:var(--yellow)">Changed · not sent</div></div><p class="cap"><b>Live, edited.</b> A change is waiting for Send change.</p></div>
+</div>
+
+<div class="sect"><h2>Live</h2><p>Live keeps the same table plus State and Time. If the operator has moved the prompter away from the row on air, the director can see that too.</p></div>
+<div class="glass" style="padding:6px 8px" data-rundown='{"live":true,"air":3,"here":6,"max":6}'></div>
+<p class="cap"><b>Prompter ahead of the show.</b> Row 3 is on air but the prompter sits on row 6. Pressing Follow snaps it back to row 3.</p>
+
+<div class="sect"><h2>Editing the Script cue</h2><p>Click the cell. One sheet holds the cue and the words, because they belong to the same row.</p></div>
+<div class="glass strong sheet">
+  <div class="panel-h"><span class="sf-symbol" data-symbol="department.script" style="color:var(--cue-script)"></span><h3>Script cue · 3 Anchor Wide: Welcome</h3></div>
+  <div class="glabel" style="margin-top:4px">Who speaks</div>
+  <div class="chips"><span class="chip on">Host</span><span class="chip">Co-host</span><span class="chip">Guest</span><span class="chip">Reporter</span><span class="chip">+ Add</span></div>
+  <div class="glabel">The cue</div>
+  <div class="cue c-s two"><div><em>STANDBY</em>Host</div><div class="go"><em>CUE</em>Host</div></div>
+  <div class="glabel">What the talent reads</div>
+  <div class="tool"><button class="btn sm"><span class="sf-symbol" data-symbol="action.profile"></span>Speaker</button><button class="btn sm" style="text-decoration:underline">Punch</button><button class="btn sm" style="background:color-mix(in srgb,var(--yellow) 30%,transparent)">Note to talent</button><button class="btn sm" style="color:var(--red)">Stop here</button></div>
+  <div class="rows" style="margin-top:8px"><div class="r" style="display:block;padding:12px 14px"><div class="ed" style="min-height:0;font-size:15px"><p><span class="spk">HOST</span>Good evening and welcome to Campus News. I'm your anchor. Tonight, <span class="em">three big stories</span> from around campus.</p><p style="margin:0"><span class="note">TURN TO CAMERA 2</span></p></div></div></div>
+  <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);margin-top:8px"><span>Reads in <b class="num" style="color:var(--text)">0:14</b> of 0:20</span><div class="meter" style="flex:1"><i style="width:70%"></i></div></div>
+  <div class="glabel">When this row is taken</div>
+  <div class="rows"><div class="r"><span class="l">Cue the prompter to this row<div class="s">Always, while Follow is on.</div></span><span class="sf-symbol" data-symbol="action.confirm" style="color:var(--accent)"></span></div><div class="r"><span class="l">Start rolling on the TAKE<div class="s">Off: the operator presses Play on the director's cue.</div></span><span class="sw"></span></div></div>
+  <div class="btnrow" style="margin-top:18px"><button class="btn">Cancel</button><button class="btn save">Save</button></div>
+</div>
+<p class="cap" style="text-align:center">The two cue words stay STANDBY and CUE. Save is red, as on every Cueola sheet.</p>
+</main>
+</body></html>
