@@ -2811,7 +2811,9 @@ function syncDialogInert() {
     // The ⓘ popover and the toast float ABOVE the dialog layer and must stay
     // live — inert-ing #infoPop made its Learn-more link dead to mouse,
     // keyboard, and screen readers whenever a modal was open (D10.4).
-    if (child.id === 'infoPop' || child.id === 'toast') return;
+    // The yellow quiet-look bar floats above Planda Bear the same way. Left
+    // inert, its Done button was dead and only a reload ended the look.
+    if (child.id === 'infoPop' || child.id === 'toast' || child.id === 'pbQuietBar') return;
     const keepActive = top && (child === top || child.contains(top));
     setCueolaInert(child, !!top && !keepActive);
   });
