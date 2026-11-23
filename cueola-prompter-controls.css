@@ -1,0 +1,41 @@
+/* Cueola prompter controls: the look of the one control set.
+   The buttons themselves come from cueola-prompter-controls.js.
+   Three sizes, one shape. The corner is a quarter of the height, like every
+   Cueola push button. No outlines and no shadows. */
+.ptc-strip{--ptc-w:76px;--ptc-h:60px;--ptc-r:15px;--ptc-gap:6px;--ptc-fs:11px;--ptc-is:19px;--ptc-ggap:20px;display:flex;flex-wrap:wrap;gap:10px var(--ptc-ggap);justify-content:center}
+.ptc-strip.ptc-compact{--ptc-w:60px;--ptc-h:48px;--ptc-r:12px;--ptc-fs:10px;--ptc-is:16px;--ptc-ggap:10px}
+.ptc-strip.ptc-touch{--ptc-w:88px;--ptc-h:68px;--ptc-r:17px;--ptc-fs:12px;--ptc-is:22px}
+@media (pointer:coarse){.ptc-strip:not(.ptc-compact){--ptc-w:88px;--ptc-h:68px;--ptc-r:17px;--ptc-fs:12px;--ptc-is:22px}}
+.ptc-group{display:flex;flex-direction:column;gap:5px}
+.ptc-cap{font-size:calc(var(--ptc-fs) - 1px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding-left:2px}
+.ptc-keys{display:flex;gap:var(--ptc-gap)}
+.ptc-key{appearance:none;-webkit-appearance:none;border:0;margin:0;padding:0;font-family:inherit;cursor:pointer;width:var(--ptc-w);height:var(--ptc-h);border-radius:var(--ptc-r);background:var(--btn-fill);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--ptc-h) * .07);font-size:var(--ptc-fs);font-weight:600;color:var(--text);line-height:1;white-space:nowrap;flex:none;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;transition:background .12s ease,transform .08s ease}
+button.ptc-key:hover{background:var(--btn-fill-2)}
+button.ptc-key:active,.ptc-key.is-held{transform:scale(.96);background:var(--btn-fill-2)}
+button.ptc-key:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ptc-key .sf-symbol{width:var(--ptc-is);height:var(--ptc-is)}
+.ptc-val{font:700 calc(var(--ptc-is) * 1.05)/1 var(--mono-num,ui-monospace,monospace);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ptc-glyph{font-size:calc(var(--ptc-is) * 1.25);font-weight:400;line-height:.8;height:var(--ptc-is)}
+.ptc-key.ptc-play,button.ptc-key.ptc-play:hover{background:var(--accent);color:var(--on-accent,#fff)}
+.ptc-key.ptc-play.is-rolling,button.ptc-key.ptc-play.is-rolling:hover{background:var(--green);color:#04130c}
+[data-theme="white"] .ptc-key.ptc-play.is-rolling{color:#fff}
+.ptc-key.is-lit.is-on,button.ptc-key.is-lit.is-on:hover{background:color-mix(in srgb,var(--cue-script) 28%,transparent)}
+.ptc-key.is-lit.is-air,button.ptc-key.is-lit.is-air:hover{background:color-mix(in srgb,var(--yellow) 28%,transparent)}
+.ptc-key.ptc-readout{background:transparent;cursor:default}
+.ptc-strip.is-off .ptc-key{opacity:.38}
+/* A press that is waiting for the talent screen to answer. */
+.ptc-key.is-waiting{animation:ptc-wait 1s ease-in-out infinite}
+@keyframes ptc-wait{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.ptc-key{transition:none}.ptc-key.is-waiting{animation:none;opacity:.7}}
+
+/* Pictures for the controls that Cueola's symbol set did not have yet. */
+.sf-symbol[data-symbol="pt.prev"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3.5' y='5' width='3' height='14' rx='1.2'/%3E%3Cpath d='M20.5 6.2v11.6a1 1 0 0 1-1.5.8L9 12.9a1 1 0 0 1 0-1.8l10-5.7a1 1 0 0 1 1.5.8z'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.next"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='17.5' y='5' width='3' height='14' rx='1.2'/%3E%3Cpath d='M3.5 6.2v11.6a1 1 0 0 0 1.5.8l10-5.7a1 1 0 0 0 0-1.8L5 5.4a1 1 0 0 0-1.5.8z'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.back"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 6.4v11.2a1 1 0 0 1-1.5.8L1.8 12.8a1 1 0 0 1 0-1.6l8.7-5.6a1 1 0 0 1 1.5.8z'/%3E%3Cpath d='M22.5 6.4v11.2a1 1 0 0 1-1.5.8l-8.7-5.6a1 1 0 0 1 0-1.6L21 5.6a1 1 0 0 1 1.5.8z'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.ahead"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 6.4v11.2a1 1 0 0 0 1.5.8l8.7-5.6a1 1 0 0 0 0-1.6l-8.7-5.6a1 1 0 0 0-1.5.8z'/%3E%3Cpath d='M1.5 6.4v11.2a1 1 0 0 0 1.5.8l8.7-5.6a1 1 0 0 0 0-1.6L3 5.6a1 1 0 0 0-1.5.8z'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.play"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4.6v14.8a1.2 1.2 0 0 0 1.8 1l12.4-7.4a1.2 1.2 0 0 0 0-2L7.8 3.6a1.2 1.2 0 0 0-1.8 1z'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.pause"]{--sf-symbol:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='4' width='5' height='16' rx='1.4'/%3E%3Crect x='14' y='4' width='5' height='16' rx='1.4'/%3E%3C/svg%3E")}
+.sf-symbol[data-symbol="pt.top"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/arrows/arrow.up.to.line.svg")}
+.sf-symbol[data-symbol="pt.follow"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/textformatting/text.line.first.and.arrowtriangle.forward.svg")}
+.sf-symbol[data-symbol="pt.wrap"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/time/timer.svg")}
+.sf-symbol[data-symbol="pt.message"]{--sf-symbol:url("design-system/apple/symbols/runtime/light-small/textformatting/quote.bubble.svg")}

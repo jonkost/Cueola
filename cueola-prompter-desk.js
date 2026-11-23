@@ -51,7 +51,9 @@
     if (a === 'speed_up' || a === 'speed_down' || a.indexOf('speed_set_') === 0) return 'speed';
     if (a === 'size_up' || a === 'size_down' || a.indexOf('size_set_') === 0) return 'size';
     if (a.indexOf('seek_line_') === 0) return 'nudge';
-    if (a.indexOf('seek_') === 0 || a === 'reset' || a === 'rewind') return 'seek';
+    if (a.indexOf('seek_') === 0 || a.indexOf('row_') === 0 || a === 'reset' || a === 'rewind') return 'seek';
+    if (a.indexOf('hold_') === 0) return 'hold';        // Back and Ahead, while held
+    if (a.indexOf('follow_') === 0) return 'follow';    // every TAKE cues the prompter
     if (a.indexOf('align_') === 0) return 'align';
     if (a.indexOf('theme_') === 0) return 'theme';
     if (a.indexOf('direction_') === 0) return 'direction';
@@ -73,7 +75,7 @@
   }
 
   // The look of the show: safe to replay on a talent that just linked.
-  var REPLAY_FAMILIES = { slate: 1, question: 1, clock: 1, wrap: 1, clear: 1, rowinfo: 1, readline: 1, width: 1 };
+  var REPLAY_FAMILIES = { slate: 1, question: 1, clock: 1, wrap: 1, clear: 1, rowinfo: 1, readline: 1, width: 1, follow: 1 };
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
