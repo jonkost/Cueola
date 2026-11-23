@@ -3753,6 +3753,13 @@ function updateAdminUI() {
   const gearTools = document.getElementById('pbGearAdminTools');
   if (gearLabel) gearLabel.hidden = Boolean(adminSession);
   if (gearTools) gearTools.hidden = Boolean(adminSession);
+  // Settings > Admin: log in while signed out; the panel and log out once in.
+  const setIn = document.getElementById('setAdminLoginBtn');
+  const setPanel = document.getElementById('setAdminPanelBtn');
+  const setOut = document.getElementById('setAdminLogoutBtn');
+  if (setIn) setIn.hidden = Boolean(adminSession);
+  if (setPanel) setPanel.hidden = !adminSession;
+  if (setOut) setOut.hidden = !adminSession;
   // The quiet-look switch is for every signed-in admin, whatever their level.
   const quietLabel = document.getElementById('pbGearQuietLabel');
   const quietRow = document.getElementById('pbGearQuietRow');

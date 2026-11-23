@@ -1300,6 +1300,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .settings-sec-label{font-size:10px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding-bottom:6px;border-bottom: 1px solid transparent;margin-bottom:4px}
 .settings-file-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
 .settings-file-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 8px;font-size:14px;white-space:nowrap}
+:is(.entry-theme-panel,#modal-settings .settings-sheet,.plandabear-theme-bar) .settings-file-btn[hidden],.settings-file-btn[hidden]{display:none!important}
 .settings-file-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
 .settings-file-btn .sf-symbol{font-size:15px}
 @media(max-width:560px){.settings-file-grid{grid-template-columns:1fr}}
@@ -7061,6 +7062,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="modal-actions">
       <button class="btn-secondary" onclick="clearShowLog()">Clear</button>
       <button class="btn-secondary export-action" onclick="exportShowLog()"><span class="sf-symbol" data-symbol="action.export" aria-hidden="true"></span><span>Export .txt</span></button>
+    <!-- Admin (Jon, 2026-11-23): the admin log in lives here in Settings. -->
+    <div class="settings-section u-mt12">
+      <div class="settings-sec-label">Admin</div>
+      <div class="settings-file-grid">
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLoginBtn" onclick="hideModal('modal-settings');openAdminLogin()" data-tip="Log in as an admin on this device"><span class="sf-symbol" data-symbol="action.profile" aria-hidden="true"></span><span>Admin log in</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminPanelBtn" onclick="hideModal('modal-settings');openAdminPanel()" data-tip="Open the Admin Panel" hidden><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span>Admin Panel</span></button>
+        <button type="button" class="btn-secondary settings-file-btn" id="setAdminLogoutBtn" onclick="logoutAdmin()" data-tip="Log out of admin on this device" hidden><span class="sf-symbol" data-symbol="action.lock" aria-hidden="true"></span><span>Admin log out</span></button>
+      </div>
+    </div>
       <button class="btn-primary" onclick="hideModal('modal-showlog')">Close</button>
     </div>
   </div>
