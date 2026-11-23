@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="cueola-prompter-controls.css?v=1ed042ff0d">
+<link rel="stylesheet" href="cueola-prompter-controls.css?v=3af05dde20">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
@@ -5748,12 +5748,15 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="ls-sidebar" id="lsSidebar">
       <div class="ls-sidebar-head" id="lsSidebarHead">
         <div class="ls-sidebar-head-row">
-          <div class="ls-sidebar-title">Script Op</div>
+          <div class="ls-sidebar-title">Prompter</div>
           <button class="ls-popout-btn" id="lsPopoutBtn" onclick="openScriptOpPopout()" data-tip="Pop the controls out into a movable panel" aria-label="Pop out the Script Op controls"><span class="sf-symbol" data-symbol="action.fullscreen" aria-hidden="true"></span></button>
           <button class="ls-popout-btn ls-sidebar-close" onclick="toggleLivePrompterPanel()" data-tip="Close the Script Op panel" aria-label="Close the Script Op panel"><span class="sf-symbol" data-symbol="action.close" aria-hidden="true"></span></button>
         </div>
         <div class="ls-prompter-status"><span class="ls-prompter-dot" id="prompterDot"></span><span id="prompterStatusTxt" role="status">Waiting for the prompter…</span><span class="ls-prompter-update ok" id="lsPrompterUpdateStatus">Ready</span></div>
       </div>
+      <!-- The one control set (cueola-prompter-controls.js): the same fifteen
+           controls as the talent screen and the Stream Deck, always in view. -->
+      <div class="ls-pt-controls" id="lsPtControls"></div>
       <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live prompter script" placeholder="The prompter script appears here. Type changes, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
       <!-- D11.2: where the talent copy IS, always visible — the preview flows
            with the talent position so the op never loses the read. -->
@@ -5772,20 +5775,20 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
            shown as a flat single page — no stacked accordion, no nested cards. -->
       <div class="ls-operator-drawer" id="lsOperatorDrawer">
         <div class="insp-head">
-          <div class="insp-tabs" role="tablist" aria-label="Script Op control groups">
-            <button type="button" class="insp-tab on" role="tab" aria-selected="true" data-insp="transport" onclick="lsInspTab('transport')"><span class="sf-symbol" data-symbol="media.play" aria-hidden="true"></span><span class="insp-tab-lbl">Playback</span></button>
-            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="live" onclick="lsInspTab('live')"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span class="insp-tab-lbl">On air</span></button>
-            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="clock" onclick="lsInspTab('clock')"><span class="sf-symbol" data-symbol="state.timed" aria-hidden="true"></span><span class="insp-tab-lbl">Clocks</span></button>
-            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="display" onclick="lsInspTab('display')"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span class="insp-tab-lbl">Display</span></button>
+          <div class="insp-tabs" role="tablist" aria-label="Prompter control groups">
+            <button type="button" class="insp-tab on" role="tab" aria-selected="true" data-insp="live" onclick="lsInspTab('live')"><span class="sf-symbol" data-symbol="content.display" aria-hidden="true"></span><span class="insp-tab-lbl">On screen</span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="display" onclick="lsInspTab('display')"><span class="sf-symbol" data-symbol="content.script" aria-hidden="true"></span><span class="insp-tab-lbl">Script</span></button>
+            <button type="button" class="insp-tab" role="tab" aria-selected="false" data-insp="transport" onclick="lsInspTab('transport')"><span class="sf-symbol" data-symbol="action.settings" aria-hidden="true"></span><span class="insp-tab-lbl">Look</span></button>
           </div>
         </div>
-        <div class="insp-pane on" data-insp-pane="transport"><div id="lsPrompterRemote"></div></div>
-        <div class="insp-pane" data-insp-pane="live"><div class="ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div></div>
-        <div class="insp-pane" data-insp-pane="clock"><div id="lsClockActions"></div></div>
-        <!-- Display & Theme mirrors the pop-out's fourth tab; content is
-             generated by scriptOpDisplayPaneHTML (Display, Theme, Formatting
-             & Markers, Panel Text) so the two surfaces cannot drift. -->
+        <!-- On screen: what the talent sees on top of the script (slates,
+             message, clocks, wrap). -->
+        <div class="insp-pane on" data-insp-pane="live"><div class="ls-live-actions" id="lsLiveActions" aria-label="Live prompter actions"></div><div id="lsClockActions"></div></div>
+        <!-- Script: formatting and the size of the words in this panel. -->
         <div class="insp-pane" data-insp-pane="display"><div id="lsDisplayControls"></div></div>
+        <!-- Look: how the talent screen looks (size, read line, width, align,
+             mirror, theme). -->
+        <div class="insp-pane" data-insp-pane="transport"><div id="lsPrompterRemote"></div></div>
       </div>
     </div>
   </div>
@@ -7782,7 +7785,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=8b5fe0c9ac"></script>
+<script src="cueola-app.js?v=f1cb1c2f8c"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

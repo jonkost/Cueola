@@ -885,9 +885,9 @@ test('8/19 round: strip keeps its slot, rail is damped, Script Op surfaces mirro
   assert.doesNotMatch(html, /\.ls-status-rail:not\(:has\(/);
   assert.match(app, /SYNC_RECONN_CONFIRM_MS/);
   assert.match(app, /SYNC_RECONN_MIN_SHOW_MS/);
-  // Built-in Script Op mirrors the pop-out (the reference surface): same tab
-  // keys and captions, and a generated Display & Theme pane.
-  assert.match(app, /LS_INSP_LABELS = \{ transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' \}/);
+  // The prompter panel in Live: the one control set on top, three tabs under.
+  assert.match(app, /LS_INSP_LABELS = \{ live: 'On screen', display: 'Script', transport: 'Look' \}/);
+  assert.match(html, /id="lsPtControls"/);
   assert.match(app, /function scriptOpDisplayPaneHTML/);
   assert.match(html, /data-insp-pane="display"><div id="lsDisplayControls">/);
   assert.doesNotMatch(html, /data-insp-pane="format"/);
@@ -2378,9 +2378,12 @@ test('two prompter control sets, simple tier by default (owner 2026-09 debloat)'
   // Simple tier: each pane leads with the student controls and folds the rest
   // behind one collapsed More, on both surfaces.
   const transport = app.slice(app.indexOf('function scriptOpTransportPaneHTML()'), app.indexOf('function scriptOpDisplayPaneHTML()'));
-  assert.match(transport, /poTransportSectionHTML\('lsq'\)\}\$\{poDisplaySectionHTML\('lsq'\)\}\$\{scriptOpMoreHTML\(poTransportExtrasHTML\(\) \+ poScreenSectionHTML\(\)\)/);
+  // The Look tab holds the talent screen's looks. The roll (Play, speed, Back,
+  // Ahead, Top) is the one control set above the tabs, never in a tab.
+  assert.match(transport, /\$\{size\}\$\{poLayoutSectionHTML\('lsq'\)\}\$\{poAlignSectionHTML\(\)\}\$\{screen\}\$\{poThemeSectionHTML\(\)\}/);
+  assert.doesNotMatch(transport, /brake|boost|direction_reverse/);
   const display = app.slice(app.indexOf('function scriptOpDisplayPaneHTML()'), app.indexOf('function setLiveTextZoomPct('));
-  assert.match(display, /\$\{formatting\}\$\{panelText\}\$\{scriptOpMoreHTML\(poAlignSectionHTML\(\) \+ poLayoutSectionHTML\('lsq'\) \+ poThemeSectionHTML\(\)\)\}/);
+  assert.match(display, /\$\{formatting\}\$\{panelText\}<\/div>/);
   assert.match(app, /return `<details class="cc-more sop-more"><summary>More<\/summary>\$\{inner\}<\/details>`;/);
   const onAir = app.slice(app.indexOf('function liveActionsHTML('), app.indexOf('function poFindInScript('));
   assert.match(onAir, /\$\{rowCue\}\n\s*<details class="cc-more sop-more"><summary>More<\/summary>\n\s*<div class="flow-control-section flow-control-onair">/);

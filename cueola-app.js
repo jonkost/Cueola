@@ -15220,6 +15220,11 @@ function adoptPrompterTalentState(state={}) {
     flowOpColorBarsOn = ptColorBarsOn;
     syncTechButtons();
   }
+  // The one control set: Follow, a held Back or Ahead, and the Standby slate.
+  if (typeof state.follow === 'boolean') ptFollow = state.follow;
+  if (typeof state.standbyOn === 'boolean') ptStandbyOn = state.standbyOn;
+  if (typeof state.hold === 'string') ptHoldDir = (state.hold === 'back' || state.hold === 'ahead') ? state.hold : '';
+  lsPrompterControlsSettled();
   if (typeof state.questionOn === 'boolean') {
     ptQuestionOn = state.questionOn;
     ptQuestionText = state.questionOn ? String(state.questionText || '') : '';
@@ -15893,9 +15898,9 @@ function updateLsPrompter() {
 // drawer. The chosen tab is remembered so the panel reopens where you work.
 // Tab keys and captions mirror the pop-out's TAB_LABELS (script-operator.js):
 // the pop-out is the reference surface the built-in is based on.
-const LS_INSP_LABELS = { transport: 'Playback', live: 'On air', clock: 'Clocks', display: 'Display' };
+const LS_INSP_LABELS = { live: 'On screen', display: 'Script', transport: 'Look' };
 function lsInspTab(key) {
-  if (!LS_INSP_LABELS[key]) key = 'transport';
+  if (!LS_INSP_LABELS[key]) key = 'live';
   document.querySelectorAll('#lsOperatorDrawer .insp-tab').forEach(b => {
     const on = b.getAttribute('data-insp') === key;
     b.classList.toggle('on', on);
@@ -15905,13 +15910,14 @@ function lsInspTab(key) {
   try { localStorage.setItem('cueola_insp_tab', key); } catch {}
 }
 function lsInspRestoreTab() {
-  let key = 'transport';
-  try { key = localStorage.getItem('cueola_insp_tab') || 'transport'; } catch {}
+  let key = 'live';
+  try { key = localStorage.getItem('cueola_insp_tab') || 'live'; } catch {}
   if (key === 'format') key = 'display';   // pre-parity stored tab key
+  if (key === 'clock') key = 'live';       // Clocks moved into On screen
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '5';
+const SCRIPT_OP_REGION_VERSION = '6';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -16036,7 +16042,52 @@ function patchScriptOpClockControls(region) {
   });
 }
 
+// ── The one control set in Live ─────────────────────────────────────────────
+// What the talent screen last reported, for the strip in the Live panel.
+// Nothing here is a guess: a control is lit only when the talent said so.
+let _lsPtControls = null;
+let _lsPtWaitTimer = null;
+function lsPrompterControlState() {
+  return window.CueolaPrompterControls.stateFromTalent({
+    playing:ptPlaying, speed:ptTargetSpeed, follow:ptFollow, hold:ptHoldDir,
+    clockState:ptClockState, questionOn:ptQuestionOn,
+    standbyOn:ptStandbyOn, techSlateOn:ptTechSlateOn, colorBarsOn:ptColorBarsOn,
+  }, _prompterHasRecentTalent());
+}
+function lsPrompterControlSend(out, id) {
+  if (!out) return;
+  if (out.ui === 'message') {
+    // The message box lives on the On screen tab.
+    lsInspTab('live');
+    const box = document.getElementById('lsq-question-input');
+    if (box) { try { box.focus(); box.scrollIntoView({ block:'nearest' }); } catch {} }
+    return;
+  }
+  if (!out.action) return;
+  sendPrompterControl(out.action, out.payload || null);
+  // The key pulses until the talent screen answers.
+  const el = document.querySelector(`#lsPtControls [data-ptc="${id}"]`);
+  if (el && !el.hasAttribute('data-ptc-hold')) {
+    el.classList.add('is-waiting');
+    clearTimeout(_lsPtWaitTimer);
+    _lsPtWaitTimer = setTimeout(lsPrompterControlsSettled, 2500);
+  }
+}
+function lsPrompterControlsSettled() {
+  clearTimeout(_lsPtWaitTimer);
+  document.querySelectorAll('#lsPtControls .is-waiting').forEach(el => el.classList.remove('is-waiting'));
+}
+function lsSyncPrompterControls() {
+  const host = document.getElementById('lsPtControls');
+  if (!host) return;
+  if (!_lsPtControls) {
+    _lsPtControls = window.CueolaPrompterControls.mount(host, { size:'compact', getState:lsPrompterControlState, send:lsPrompterControlSend });
+  }
+  _lsPtControls.sync(lsPrompterControlState());
+}
+
 function renderLivePrompterControls() {
+  lsSyncPrompterControls();
   // The docked Script Op structure is stable. Heartbeats and Live renders patch
   // state in place so focus, slider capture, textarea selection, and caret survive.
   const live = document.getElementById('lsLiveActions');
@@ -16753,6 +16804,7 @@ function isQuietPrompterControl(action) {
   // gesture that needs the main thread quiet. Liveness is the heartbeat's job.
   return !action || action.endsWith('_stop') || action.includes('_set_')
     || action.startsWith('seek_line_')
+    || action.startsWith('hold_')      // Back and Ahead repeat while held
     || action === 'speed_up' || action === 'speed_down'
     || action === 'size_up' || action === 'size_down';
 }
@@ -19027,7 +19079,25 @@ function poScreenSectionHTML() {
 // Speed, Size up front; Brake / Boost / Reverse / Forward and the Screen
 // group (Reset, Hide controls, Mirror, Fullscreen, Row info) behind More.
 function scriptOpTransportPaneHTML() {
-  return `<div class="prompt-op-panel flow-control-panel">${poTransportSectionHTML('lsq')}${poDisplaySectionHTML('lsq')}${scriptOpMoreHTML(poTransportExtrasHTML() + poScreenSectionHTML())}</div>`;
+  // The Look tab: how the talent screen looks. Play, speed, Back, Ahead, Top
+  // and the rest of the roll are the control strip above, never in here.
+  const size = `<div class="flow-control-section flow-control-display">
+      <div class="flow-control-title">Text size</div>
+      <div class="pt-ctrl-group flow-control-slider">
+        <span class="pt-ctrl-label">Size <output class="pt-ctrl-val" id="lsq-size-value" for="lsq-size-range" data-prompter-size-value>${Math.round(ptFontSize)}</output></span>
+      <input type="range" class="pt-range" id="lsq-size-range" data-prompter-size aria-label="Prompter text size" min="24" max="120" value="${ptFontSize}" onpointerdown="this.dataset.controlDragging='1'" onpointerup="this.dataset.controlDragging=''" onpointercancel="this.dataset.controlDragging=''" onlostpointercapture="this.dataset.controlDragging=''" oninput="sendPrompterControl('size_set_'+this.value)">
+      </div>
+    </div>`;
+  const screen = `<div class="flow-control-section flow-control-screen">
+      <div class="flow-control-title">Talent screen</div>
+      <div class="flow-control-grid three">
+        <button class="pt-btn${ptMirrored ? ' active' : ''}" data-prompter-mirror onclick="sendPrompterControl('mirror')" aria-pressed="${ptMirrored ? 'true' : 'false'}" data-tip="Flip the copy for a beam splitter">Mirror</button>
+        <button class="pt-btn" onclick="sendPrompterControl('fullscreen')">Full screen</button>
+        <button class="pt-btn" onclick="sendPrompterControl('hide_interface')" data-tip="Hide or show the controls on the talent screen">Hide controls</button>
+      </div>
+      <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
+    </div>`;
+  return `<div class="prompt-op-panel flow-control-panel">${size}${poLayoutSectionHTML('lsq')}${poAlignSectionHTML()}${screen}${poThemeSectionHTML()}</div>`;
 }
 
 // The built-in Display pane mirrors the pop-out's fourth tab: Formatting &
@@ -19055,7 +19125,7 @@ function scriptOpDisplayPaneHTML() {
         <button class="pt-btn" onclick="stepLiveTextZoom(0.05)" aria-label="Bigger text">+</button>
       </div>
     </div>`;
-  return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}${scriptOpMoreHTML(poAlignSectionHTML() + poLayoutSectionHTML('lsq') + poThemeSectionHTML())}</div>`;
+  return `<div class="prompt-op-panel flow-control-panel">${formatting}${panelText}</div>`;
 }
 function setLiveTextZoomPct(pct) {
   const zoom = applyLiveTextZoom((Number(pct) || 100) / 100);
@@ -20561,6 +20631,10 @@ function prompterControlLabel(action) {
   if (action === 'seek_text') return 'Find in script';
   const labels = {
     pause:'Pause', resume:'Play', speed_up:'Faster', speed_down:'Slower',
+    hold_back:'Back', hold_ahead:'Ahead', hold_off:'Let go',
+    row_prev:'Prev row', row_next:'Next row',
+    follow_on:'Follow on', follow_off:'Follow off',
+    slate_standby_on:'Standby', slate_standby_off:'Standby off',
     size_up:'Bigger text', size_down:'Smaller text', reset:'Top of script',
     align_left:'Left', align_center:'Center', align_right:'Right',
     mirror:'Mirror', fullscreen:'Fullscreen', hide_interface:'Hide controls',

@@ -52,3 +52,10 @@ button.ptc-key:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #promptypus[data-pt-theme="white"] .ptc-key.ptc-play.is-rolling{color:#fff}
 #promptypus[data-pt-theme="white"] .ptc-key.is-lit.is-air{background:color-mix(in srgb,var(--yellow) 55%,transparent)}
 #promptypus[data-pt-theme="white"] .ptc-key.is-lit.is-on{background:color-mix(in srgb,var(--cue-script) 34%,transparent)}
+
+/* In the Live panel the strip is three rows of five that fill the panel:
+   the same layout as a 15-key Stream Deck. */
+.ls-pt-controls{flex:none;padding:10px 14px 12px}
+.ls-pt-controls .ptc-strip{flex-direction:column;flex-wrap:nowrap;gap:8px;align-items:stretch}
+.ls-pt-controls .ptc-keys{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.ls-pt-controls .ptc-key{width:auto}
