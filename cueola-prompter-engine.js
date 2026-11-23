@@ -320,6 +320,45 @@
     return m ? m.length : 0;
   }
 
+  // ── The script by row: holding a change to the row on air ────────────────
+  // Rows back to script text, the same shape parseRows reads.
+  function rowsText(rows) {
+    return (rows || []).map(function (r) {
+      if (r.num == null) return r.text || '';
+      var head = '[' + r.num + ']' + (r.name ? ' ' + r.name : '');
+      return r.text ? head + '\n' + r.text : head;
+    }).join('\n\n');
+  }
+  // One row's words, or null if the script has no such row.
+  function rowText(text, num) {
+    var rows = parseRows(text);
+    for (var i = 0; i < rows.length; i++) if (rows[i].num === Number(num)) return rows[i].text;
+    return null;
+  }
+  // Did this row's words change between what the talent has and the rundown now?
+  function rowChanged(sentText, nextText, num) {
+    var a = rowText(sentText, num), b = rowText(nextText, num);
+    return a != null && b != null && a !== b;
+  }
+  // The new script, but with one row's words kept as the talent has them.
+  // The talent is reading that row right now, so its change waits for the
+  // operator's Send change. Every other row goes through at once.
+  function holdRow(nextText, sentText, num) {
+    var old = rowText(sentText, num);
+    if (old == null) return String(nextText || '');
+    var rows = parseRows(nextText);
+    rows.forEach(function (r) { if (r.num === Number(num)) { r.text = old; r.lines = old ? old.split('\n') : []; } });
+    return rowsText(rows);
+  }
+  // How long the words take to read aloud, in seconds. 150 words a minute is
+  // an easy news read. Zero for no words.
+  var READ_WPM = 150;
+  function readSeconds(text, wpm) {
+    var words = wordCount(text);
+    if (!words) return 0;
+    return Math.max(1, Math.round(words / (Number(wpm) > 0 ? Number(wpm) : READ_WPM) * 60));
+  }
+
   // Seconds to travel a distance at a speed; null when nothing is moving.
   function secondsForPixels(px, velPxPerSec) {
     var v = Math.abs(finite(velPxPerSec, 0));
@@ -344,6 +383,12 @@
     parseRows: parseRows,
     diffRows: diffRows,
     wordCount: wordCount,
+    rowsText: rowsText,
+    rowText: rowText,
+    rowChanged: rowChanged,
+    holdRow: holdRow,
+    readSeconds: readSeconds,
+    READ_WPM: READ_WPM,
     secondsForPixels: secondsForPixels,
     formatSeconds: formatSeconds
   };

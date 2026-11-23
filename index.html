@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="cueola-prompter-controls.css?v=3af05dde20">
+<link rel="stylesheet" href="cueola-prompter-controls.css?v=fb134827ab">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
@@ -5757,7 +5757,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       <!-- The one control set (cueola-prompter-controls.js): the same fifteen
            controls as the talent screen and the Stream Deck, always in view. -->
       <div class="ls-pt-controls" id="lsPtControls"></div>
-      <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live prompter script" placeholder="The prompter script appears here. Type changes, then push." oninput="queueLivePrompterDraftPush()" onkeydown="livePrompterKeydown(event)"></textarea>
+      <textarea class="ls-prompter-text" id="lsPrompterText" spellcheck="true" aria-label="Live prompter script" readonly placeholder="The script appears here, row by row. Write it in the Script column of the rundown." onkeydown="livePrompterKeydown(event)"></textarea>
       <!-- D11.2: where the talent copy IS, always visible — the preview flows
            with the talent position so the op never loses the read. -->
       <div class="ls-talent-pos" id="lsTalentPos" hidden>
@@ -5766,10 +5766,14 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
         <label class="ls-talent-pos-follow" data-tip="Keep the row that is on air in view, so the script moves with the rundown. Waits while you type or scroll."><input type="checkbox" id="lsTalentPosFollow" checked> Follow rundown</label>
       </div>
       <div class="ls-script-resizer" id="lsScriptResizer" onpointerdown="startScriptHeightResize(event)" onkeydown="resizeLiveScriptByKey(event)" data-tip="Drag or use arrow keys to resize the script" role="separator" tabindex="0" aria-label="Resize the script editor" aria-orientation="horizontal" aria-valuemin="120" aria-valuemax="1400" aria-valuenow="120"></div>
+      <!-- No Push: the script goes to the talent by itself. A change to the
+           row on air waits here until the operator sends it. -->
       <div class="ls-editor-actions">
-        <button class="ls-pact-btn ls-clear-btn ls-pact-circle" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Edit this cue's script" aria-label="Edit cue script"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span></button>
-        <span class="ls-destructive-zone"><button class="ls-pact-btn ls-clear-btn ls-pact-circle ls-destructive-action" onclick="clearPrompter()" data-tip="Clear the script. Asks you to confirm first." aria-label="Clear script; confirmation required"><span class="sf-symbol" data-symbol="action.delete" aria-hidden="true"></span></button></span>
-        <button class="ls-push-btn ls-push-primary" onclick="pushToPrompter()" data-tip="Send the script to the prompter (Cmd/Ctrl+Enter)"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Push to prompter</span></button>
+        <button class="ls-pact-btn ls-clear-btn ls-pact-circle" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Edit this row's script" aria-label="Edit this row's script"><span class="sf-symbol" data-symbol="action.edit" aria-hidden="true"></span></button>
+        <div class="ls-pt-held" id="lsPrompterHeld" role="status" hidden>
+          <span class="ls-pt-held-copy"><strong id="lsPrompterHeldLabel">Row changed while on air</strong><span>The talent still has the old words.</span></span>
+          <button class="ls-push-btn ls-push-primary" onclick="sendPrompterRowChange()" data-tip="Put the new words on the talent screen now"><span>Send change</span></button>
+        </div>
       </div>
       <!-- Inspector pattern (Keynote-style): icon tabs pick ONE control group,
            shown as a flat single page — no stacked accordion, no nested cards. -->
@@ -7773,7 +7777,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
-<script src="cueola-prompter-engine.js?v=f66f42cef3"></script>
+<script src="cueola-prompter-engine.js?v=754932bf19"></script>
 <script src="cueola-prompter-desk.js?v=e3bc7017e7"></script>
 <script src="cueola-prompter-controls.js?v=4ab5b570a4"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
@@ -7781,7 +7785,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=c25d54438f"></script>
+<script src="cueola-app.js?v=cd008f6875"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

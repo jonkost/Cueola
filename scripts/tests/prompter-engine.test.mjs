@@ -253,3 +253,32 @@ test('Back stops at the top and Ahead stops at the end', () => {
   assert.ok(ended);
   assert.equal(m.get().dir, '', 'the hold lets go at the end');
 });
+
+const SENT = '[1] Open\nHOST:\nGood evening.\n\n[2] Lower Third\n\n[3] Welcome\nTonight, three stories.';
+test('a change to the row on air is held; other rows go through', () => {
+  const next = '[1] Open\nHOST:\nGood evening, everyone.\n\n[2] Lower Third\n\n[3] Welcome\nTonight, four stories.';
+  assert.equal(E.rowChanged(SENT, next, 1), true);
+  assert.equal(E.rowChanged(SENT, next, 2), false);
+  const held = E.holdRow(next, SENT, 1);
+  assert.equal(E.rowText(held, 1), 'HOST:\nGood evening.', 'row 1 keeps the words the talent has');
+  assert.equal(E.rowText(held, 3), 'Tonight, four stories.', 'row 3 took the change');
+  assert.equal(E.rowChanged(held, next, 1), true, 'still waiting to be sent');
+  assert.equal(E.rowChanged(next, next, 1), false);
+});
+
+test('a brand new row is never treated as a change on air', () => {
+  const next = SENT + '\n\n[4] Sign Off\nGood night.';
+  assert.equal(E.rowChanged(SENT, next, 4), false);
+  assert.equal(E.holdRow(next, SENT, 4), next);
+});
+
+test('rows survive a round trip through text', () => {
+  assert.equal(E.rowsText(E.parseRows(SENT)), SENT);
+});
+
+test('read time comes from the words, and crew directions do not count', () => {
+  assert.equal(E.readSeconds(''), 0);
+  assert.equal(E.readSeconds('[TURN TO CAMERA 2]'), 0);
+  assert.equal(E.readSeconds(Array(151).join('word ')), 60);
+  assert.equal(E.readSeconds('Hello'), 1);
+});

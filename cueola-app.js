@@ -13623,12 +13623,11 @@ function assemblePrompterScriptFromBeats(list=beats) {
     // script is just its heading, so the Script Op editor no longer shows a
     // tall empty gap between "[1] Opening Package" and "[2] Cold Open".
     const header = b.info ? `[${rowNum}] ${b.info}` : `[${rowNum}]`;
-    if (!copy) {
-      // Guidance body: the Script Cue label first (that's where students
-      // type), then row notes. Brackets render dimmed, never read on air.
-      const guide = String(getCueOn(d) || b.notes || '').trim().replace(/\s+/g, ' ');
-      return guide ? `${header}\n[${guide.replace(/[\[\]]/g, '')}]` : header;
-    }
+    // A row with no script is only its name: a thin line on the talent
+    // screen that shows where they are in the show. Crew notes and cue words
+    // ("Roll to air", "Name / Title") stay in the rundown. They used to be
+    // put on the talent screen in big letters, where they got read aloud.
+    if (!copy) return header;
     const speaker = scriptSpeakerLabel(d);
     const dialogue = d.scriptType === 'Dialogue' ? '[DIALOGUE]\n' : '';
     return `${header}\n` + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
@@ -13990,6 +13989,25 @@ function previewRelativeRow(delta) {
   liveRowPreview(next);
 }
 
+// The Script cell's quiet third line: how many lines and how long they take
+// to read, a warning when they will not fit the row, where the prompter is,
+// and a change that is waiting to be sent.
+function liveScriptCellMetaHTML(b, beatIdx, scriptText) {
+  const E = window.CueolaPrompterEngine;
+  const rowNum = rowDisplayNumber(beatIdx);
+  const read = E.readSeconds(scriptText);
+  const rowSecs = (Number(b?.min) || 0) * 60 + (Number(b?.sec) || 0);
+  const over = rowSecs > 0 && read > rowSecs;
+  const time = read ? E.formatSeconds(read) : '';
+  const words = over
+    ? `${time} · over by ${E.formatSeconds(read - rowSecs)}`
+    : `${scriptLineLabel(scriptText)}${time ? ' · ' + time : ''}`;
+  const held = _prompterHeldRow === rowNum;
+  return `<div class="live-script-action${over ? ' is-over' : ''}" data-pt-meta="${rowNum}"${held ? ' hidden' : ''}>${words}</div>`
+    + `<div class="live-script-action is-held" data-pt-held="${rowNum}"${held ? '' : ' hidden'}>Changed · not sent</div>`
+    + `<div class="live-script-here" data-pt-here="${rowNum}" hidden>Prompter here</div>`;
+}
+
 function liveCellForBeat(b, type, beatIdx) {
   const tc = CT[type];
   const d = b.cues?.[type];
@@ -14001,7 +14019,7 @@ function liveCellForBeat(b, type, beatIdx) {
   const off = getCueOff(d);
   const isScript = type === 'script';
   const scriptText = isScript ? scriptCueText(d) : '';
-  const scriptMeta = scriptText ? `<div class="live-script-action">${scriptLineLabel(scriptText)} · tap to open</div>` : '';
+  const scriptMeta = scriptText ? liveScriptCellMetaHTML(b, beatIdx, scriptText) : '';
   const note = cueNoteText(d);
   if (!on && !off && !scriptMeta && !note && !(type === 'playback' && outrangutanCellLinked(d))) return `<div class="live-cue-empty">·</div>`;
   // Ready (the "on"/standby cue) sits calm on top; Take (the "off"/go cue) is the
@@ -14013,7 +14031,7 @@ function liveCellForBeat(b, type, beatIdx) {
     ${liveCueOperationLine('ready', on, 'live-cue-rdy', '', type)}
     ${liveCueOperationLine('take', off, 'live-cue-go', `color:${tc.color}`, type)}
     ${outBadge}
-    ${isScript ? (scriptMeta || '<div class="live-script-action">Tap to open script</div>') : ''}
+    ${isScript ? (scriptMeta || '<div class="live-script-action">No script yet</div>') : ''}
     ${cueNoteHTML(note)}
   </div>`;
 }
@@ -14492,9 +14510,8 @@ function saveLiveScript() {
   if (b.cues.script.scriptType === 'Dialogue') b.cues.script.dialogueNote = edited;
   else b.cues.script.text = edited;
   const editedRowNum = rowDisplayNumber(liveScriptEditIdx);
-  adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
   livePrompterDraftDirty = false;
-  sendToPrompter();
+  refreshPrompterFromRundown();
   hideOverlay('lsScriptEditOv');
   renderLive(); syncToFirestore();
   scrollLiveEditorToRow(editedRowNum);
@@ -14819,17 +14836,73 @@ function buildPromptFromRundown() {
   adoptPrompterText(assemblePrompterScriptFromBeats(), { forceEditor:true, source:'assembled' });
 }
 
-// A rundown edit (this window's or another device's) refreshes a script the
-// rundown built, and the Live screen's show caller pushes it to the talent
-// right away. Before this, the push waited for the next TAKE, so a Script
-// cell edited mid-show did not reach the prompter (Jon, 2026-10-16). A script
-// typed by hand in the Live editor is never overwritten here.
-function refreshPrompterFromRundown() {
-  if (prompterSource !== 'assembled') return false;
-  if (assemblePrompterScriptFromBeats() === prompterText) return false;
-  buildPromptFromRundown();
+// ── The script lives in the rundown rows ────────────────────────────────────
+// There is no Push. Every Script cell edit goes to the talent screen by
+// itself. The one exception is the row on air: the talent is reading it, so
+// its change waits for the operator's Send change (Jon, 2026-11-23).
+let _prompterSentText = null;   // the script the talent screen was last sent
+let _prompterHeldRow = null;    // number of the on-air row with a change waiting
+
+function rundownHasScriptWords(list=beats) {
+  return (Array.isArray(list) ? list : []).some(b => b && b.style !== 'segment' && scriptCueText(b.cues?.script));
+}
+// The row the talent is reading from, if the director has taken a row and
+// a talent screen is linked. Otherwise null: nobody is mid-read, so nothing needs holding.
+function prompterOnAirRowNum() {
+  if (!document.getElementById('liveshow')?.classList.contains('on')) return null;
+  if (!_prompterHasRecentTalent()) return null;
+  // A row is on air once the director has taken it (clock running or not:
+  // a rehearsal reads the same way a show does).
+  const idx = liveSessionState().activeCueIndex;
+  if (!(idx >= 0) || !beats[idx] || isSegmentBeat(beats[idx])) return null;
+  return rowDisplayNumber(idx);
+}
+function refreshPrompterFromRundown(opts={}) {
+  // A script typed by hand into an older version of this panel, in a show
+  // whose rows hold no script at all, is left alone.
+  if (prompterSource !== 'assembled' && prompterText.trim() && !rundownHasScriptWords()) return false;
+  const full = assemblePrompterScriptFromBeats();
+  const E = window.CueolaPrompterEngine;
+  const air = opts.sendAll ? null : prompterOnAirRowNum();
+  let next = full, held = null;
+  if (air != null && typeof _prompterSentText === 'string' && E.rowChanged(_prompterSentText, full, air)) {
+    next = E.holdRow(full, _prompterSentText, air);
+    held = air;
+  }
+  const heldChanged = held !== _prompterHeldRow;
+  _prompterHeldRow = held;
+  if (heldChanged) { renderPrompterHeldNotice(); lsPaintScriptCellStates(); }
+  if (next === prompterText && prompterSource === 'assembled') return false;
+  adoptPrompterText(next, { forceEditor:true, source:'assembled' });
   if (document.getElementById('liveshow')?.classList.contains('on') && isShowCaller()) sendToPrompter(false);
   return true;
+}
+// Send change: the operator says the talent is past that line, so the row on
+// air takes its new words now.
+function sendPrompterRowChange() {
+  const row = _prompterHeldRow;
+  refreshPrompterFromRundown({ sendAll:true });
+  _prompterHeldRow = null;
+  renderPrompterHeldNotice();
+  lsPaintScriptCellStates();
+  if (row != null) toast(`Row ${row}: the change is on the talent screen.`);
+}
+function renderPrompterHeldNotice() {
+  const el = document.getElementById('lsPrompterHeld');
+  if (!el) return;
+  const row = _prompterHeldRow;
+  el.hidden = row == null;
+  const label = document.getElementById('lsPrompterHeldLabel');
+  if (label && row != null) label.textContent = `Row ${row} changed while on air`;
+}
+// The Script cell's third line: PROMPTER HERE on the row the talent screen
+// is on, and "Changed · not sent" on a row whose change is waiting. Painted
+// in place so a talent that moves a row does not redraw the whole table.
+function lsPaintScriptCellStates() {
+  const here = _prompterHasRecentTalent() ? talentCurrentRowNum() : null;
+  document.querySelectorAll('[data-pt-here]').forEach(el => { el.hidden = Number(el.getAttribute('data-pt-here')) !== here; });
+  document.querySelectorAll('[data-pt-held]').forEach(el => { el.hidden = Number(el.getAttribute('data-pt-held')) !== _prompterHeldRow; });
+  document.querySelectorAll('[data-pt-meta]').forEach(el => { el.hidden = Number(el.getAttribute('data-pt-meta')) === _prompterHeldRow; });
 }
 
 let _prompterPingInterval = null;
@@ -15566,8 +15639,9 @@ function updatePrompterOnAdvance(prevBeat, newBeat, opts={}) {
   // seek targets always match the current beats: a co-editor inserting or
   // deleting rows mid-show must not leave every later seek one row off.
   // Hand-pushed scripts (live-edit and friends) are never overwritten.
-  if (!prompterText.trim() || prompterSource === 'assembled') buildPromptFromRundown();
-  sendToPrompter(false);
+  // The row that was on air is not on air any more, so a change that was
+  // waiting on it goes through with this send.
+  if (!refreshPrompterFromRundown()) sendToPrompter(false);
   // Intent is keyed on DIRECTION by the caller (GO forward, Back, Cue here):
   // only a strictly forward move carries { advance:true }.
   cuePrompterToLiveRow({ advance: !!(opts && opts.advance === true) });
@@ -15839,12 +15913,9 @@ function followTalentInEditor(force) {
 }
 
 async function sendToPrompter(isInit=false) {
-  const el = livePrompterEditor();
-  if (el && (livePrompterDraftDirty || document.activeElement === el)) {
-    adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
-  } else {
-    adoptPrompterText(prompterText, { forceEditor:true, source:prompterSource || 'live' });
-  }
+  // The panel's script box is a view of the rundown, never typed in.
+  adoptPrompterText(prompterText, { forceEditor:true, source:prompterSource || 'live' });
+  _prompterSentText = prompterText;
   const version = nextPrompterVersion();
   const updatedAt = prompterUpdatedAt || Date.now();
   markLivePrompterStatus('Updating...', 'busy');
@@ -16089,6 +16160,8 @@ function lsSyncPrompterControls() {
 
 function renderLivePrompterControls() {
   lsSyncPrompterControls();
+  lsPaintScriptCellStates();
+  renderPrompterHeldNotice();
   // The docked Script Op structure is stable. Heartbeats and Live renders patch
   // state in place so focus, slider capture, textarea selection, and caret survive.
   const live = document.getElementById('lsLiveActions');
@@ -16704,25 +16777,22 @@ function lsScrubPreviewScript(pct) {
   ta.scrollTop = p * Math.max(0, ta.scrollHeight - ta.clientHeight);
 }
 
+// Push is retired (Jon, 2026-11-23): the script goes to the talent by
+// itself. This name stays for the Stream Deck key and old shortcuts, and it
+// sends the rundown's script, including a change waiting on the row on air.
 async function pushToPrompter() {
-  const el = livePrompterEditor();
-  if (el) adoptPrompterText(livePrompterEditorText(), { forceEditor:true, source:'live-edit' });
-  const draftVersion = livePrompterDraftVersion;
-  const pushed = await sendToPrompter();
-  if (pushed && draftVersion === livePrompterDraftVersion) livePrompterDraftDirty = false;
-  if (pushed) toast('Pushed to the prompter');
-  return pushed;
+  livePrompterDraftDirty = false;
+  if (_prompterHeldRow != null) { sendPrompterRowChange(); return true; }
+  if (refreshPrompterFromRundown({ sendAll:true })) return true;
+  return sendToPrompter();
 }
 
+// The panel's script box is a view of the rundown. If anything changes it,
+// it goes straight back to what the rundown says: the words are edited in
+// each row's Script cell, in one place only.
 function queueLivePrompterDraftPush() {
-  livePrompterDraftDirty = true;
-  livePrompterDraftVersion += 1;
-  adoptPrompterText(livePrompterEditorText(), { source:'live-edit' });
-  markLivePrompterStatus('Draft held', 'busy');
-  clearTimeout(livePrompterDraftTimer);
-  livePrompterDraftTimer = setTimeout(() => {
-    if (livePrompterDraftDirty) markLivePrompterStatus('Ready to push', 'busy');
-  }, 700);
+  livePrompterDraftDirty = false;
+  setLivePrompterEditorText(prompterText, true);
 }
 
 function clearPrompter() {
@@ -19105,16 +19175,13 @@ function scriptOpTransportPaneHTML() {
 // Markers and Panel Text up front; Align and Theme behind More.
 function scriptOpDisplayPaneHTML() {
   const zoom = Math.round((parseFloat(document.documentElement.style.getPropertyValue('--live-zoom')) || 1) * 100);
+  // The words are written in each row's Script cell, so this tab only
+  // points there. The formatting buttons live in that editor.
   const formatting = `<div class="flow-control-section flow-control-format">
-      <div class="flow-control-title">Formatting &amp; Markers</div>
-      <div class="ls-format-cascade" aria-label="Formatting and markers">
-        <button class="fmt-btn" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('**','**')" data-tip="Make the selected text bold (Cmd/Ctrl+B)" aria-label="Bold"><strong>B</strong></button>
-        <button class="fmt-btn fmt-i" onmousedown="event.preventDefault()" onclick="wrapLivePanelSelection('*','*')" data-tip="Make the selected text italic (Cmd/Ctrl+I)" aria-label="Italic"><em>I</em></button>
-        <span class="fmt-sep"></span>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[UPDATE] ')"><span class="sf-symbol" data-symbol="state.info" aria-hidden="true"></span><span>Update</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[BREAK - AUTO PAUSE] ')"><span class="sf-symbol" data-symbol="media.pause" aria-hidden="true"></span><span>Break</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('[STOP HERE] ')"><span class="sf-symbol" data-symbol="media.stop" aria-hidden="true"></span><span>Stop</span></button>
-        <button class="marker-chip" onmousedown="event.preventDefault()" onclick="insertLivePanelMarker('\\n\\n')" data-tip="Start a new paragraph"><span class="sf-symbol" data-symbol="content.list" aria-hidden="true"></span><span>Paragraph</span></button>
+      <div class="flow-control-title">The script</div>
+      <p class="flow-control-note">The script is written row by row, in the Script column of the rundown. A change goes to the talent screen by itself. A change to the row on air waits for Send change.</p>
+      <div class="flow-control-grid one">
+        <button class="pt-btn" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Open the script for the selected row">${sfIcon('action.edit')}<span>Edit this row's script</span></button>
       </div>
     </div>`;
   const panelText = `<div class="flow-control-section flow-control-paneltext">
