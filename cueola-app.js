@@ -3892,7 +3892,7 @@ function renderAdminBody() {
   else if (active === 'sources') html += renderAdminPaneSources();
   else html += renderAdminPaneSession();
 
-  html += `<button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Sign out of admin</button>`;
+  html += `<div class="admin-section"><button class="admin-logout-btn" onclick="logoutAdmin();closeAdminPanel()">Sign out of admin</button></div>`;
   body.innerHTML = html;
   // Keep the presence-refresh gate honest after any explicit render.
   _adminBodyPresenceFp = adminBodyPresenceFingerprint();
@@ -3914,44 +3914,52 @@ function renderAdminPaneSession() {
   if (isSuper) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Accounts</div>
-      <div class="u-note">Instructor accounts: <a href="dashboard.html#accounts" class="link-accent">Dashboard accounts page</a>.</div>
+      <div class="admin-group"><div class="admin-row">
+        <div class="admin-row-text"><div class="admin-row-title">Instructor accounts</div><div class="admin-row-sub">Add, change or remove admins on the dashboard.</div></div>
+        <a href="dashboard.html#accounts" class="admin-act-btn">Dashboard accounts page</a>
+      </div></div>
     </div>`;
   }
   if (adminShareAvailable()) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Share with another admin</div>
-      <div class="u-note u-mb8">Sharing puts this show on that admin's own list of shows: their front page and their dashboard. They can open it without typing the code.</div>
       <div id="adminShareList">${adminShareListHTML()}</div>
+      <div class="admin-section-foot">Sharing puts this show on that admin's own list of shows: their front page and their dashboard. They can open it without typing the code.</div>
     </div>`;
   }
   if (session.code || session.isExpert) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Show clock</div>
-      <div class="u-note u-mb8">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div>
-      <button class="admin-act-btn danger" onclick="restartShowClock()">${sfIcon('action.reset')} Restart show clock</button>
+      <div class="admin-group"><div class="admin-row">
+        <div class="admin-row-text"><div class="admin-row-sub">Reset the elapsed clock to 0:00 and jump back to the first row. Take the show from the top.</div></div>
+        <button class="admin-act-btn danger" onclick="restartShowClock()">${sfIcon('action.reset')} Restart show clock</button>
+      </div></div>
     </div>`;
   }
   if (session.code) {
     const presenceNames = getActivePresencePeople().map(p=>p.name);
     html += `<div class="admin-section">
       <div class="admin-section-label">Live control</div>
-      <div class="u-note u-mb8">${presenceNames.length ? 'Opens Live on every connected device, on the director\'s cue.' : 'Nobody shows as connected right now, not even this computer.'}</div>
-      <div class="u-row-wrap">
+      <div class="admin-group"><div class="admin-row">
+        <div class="admin-row-text"><div class="admin-row-sub">${presenceNames.length ? 'Opens Live on every connected device, on the director\'s cue.' : 'Nobody shows as connected right now, not even this computer.'}</div></div>
         <button class="admin-act-btn danger" ${presenceNames.length?'':'disabled'} onclick="adminForceLive()">Move everyone to Live</button>
-      </div>
+      </div></div>
     </div>`;
   }
   if (session.code && !session.isDemo && !session.isExpert) {
     html += `<div class="admin-section">
       <div class="admin-section-label">Session rescue</div>
-      <div class="u-note u-mb8">Current code: <b class="u-mono-strong">${esc(session.code)}</b>. If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
-      <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move to a new code</button>
+      <div class="admin-group"><div class="admin-row">
+        <div class="admin-row-text"><div class="admin-row-title">Current code: <b class="u-mono-strong">${esc(session.code)}</b></div></div>
+        <button class="admin-act-btn danger" onclick="moveSessionToNewCode()">Move to a new code</button>
+      </div></div>
+      <div class="admin-section-foot">If there's a problem with this session (a leaked code, stale data, or someone who keeps rejoining), move the whole show (rundown, Planda Bear, notes) to a fresh code. Everyone connected follows automatically; anyone joining later needs the new code.</div>
     </div>`;
   }
   if (!html) {
     html = `<div class="admin-section">
       <div class="admin-section-label">Session</div>
-      <div class="u-note">No session is open on this device. Join or start a session and its controls appear here.</div>
+      <div class="admin-section-foot">No session is open on this device. Join or start a session and its controls appear here.</div>
     </div>`;
   }
   return html;
@@ -4003,9 +4011,9 @@ function repaintAdminShare() {
 function adminShareListHTML() {
   const st = adminShareState.code === session.code ? adminShareState : ADMIN_SHARE_EMPTY;
   if (st.status === 'failed') {
-    return `<div class="u-note">The admin list could not be loaded. <button class="admin-act-btn" onclick="loadAdminShareState(true)">Retry</button></div>`;
+    return `<div class="admin-section-foot">The admin list could not be loaded. <button class="admin-act-btn" onclick="loadAdminShareState(true)">Retry</button></div>`;
   }
-  if (st.status !== 'ready') return '<div class="u-note">Loading admins…</div>';
+  if (st.status !== 'ready') return '<div class="admin-section-foot">Loading admins…</div>';
   const rows = st.admins.filter(a => a.uid && a.username).map(a => {
     const isMe = a.uid === adminSession?.id;
     const isOwner = a.uid === st.ownerUid;
@@ -4013,8 +4021,8 @@ function adminShareListHTML() {
     const busy = adminShareBusy === a.uid;
     const uidArg = esc(JSON.stringify(a.uid));
     let right = '';
-    if (isOwner) right = `<span class="admin-item-you">${isMe ? 'YOU MADE THIS' : 'MADE THIS'}</span>`;
-    else if (isMe) right = `<span class="admin-item-you">${shared ? 'SHARED WITH YOU' : 'YOU'}</span>`;
+    if (isOwner) right = `<span class="admin-item-you">${isMe ? 'You made this show' : 'Made this show'}</span>`;
+    else if (isMe) right = `<span class="admin-item-you">${shared ? 'Shared with you' : 'You'}</span>`;
     else if (shared) right = `<div class="admin-item-acts"><button class="admin-act-btn danger" ${busy ? 'disabled' : ''} onclick="adminUnshareShow(${uidArg})" data-tip="Take this show off their list">Stop sharing</button></div>`;
     else right = `<div class="admin-item-acts"><button class="admin-act-btn" ${busy ? 'disabled' : ''} onclick="adminShareShow(${uidArg})" data-tip="Put this show on their list">Share</button></div>`;
     return `<div class="admin-item">
@@ -4026,7 +4034,7 @@ function adminShareListHTML() {
     </div>`;
   });
   if (rows.length < 2 && !st.admins.some(a => a.uid !== adminSession?.id)) {
-    return '<div class="u-note">There is no other admin yet. A super admin adds one on the dashboard Accounts page.</div>';
+    return '<div class="admin-section-foot">There is no other admin yet. A super admin adds one on the dashboard Accounts page.</div>';
   }
   return `<div class="admin-list">${rows.join('')}</div>`;
 }
@@ -4105,22 +4113,22 @@ function renderAdminPanePeople() {
           <span class="admin-level-chip u-ml7 ${p.role==='instructor'?'alc-full':'alc-standard'}">${p.role==='instructor'?'INST':'STU'}</span>
         </div>
         <div class="u-spacer"></div>
-        ${isMe ? '<span class="admin-item-you">YOU</span>'
+        ${isMe ? '<span class="admin-item-you">You</span>'
                : `<div class="admin-item-acts"><button class="admin-act-btn" onclick="openGradingView(${esc(JSON.stringify(p.name))})" data-tip="Time active and everything they entered, for grading">Grading</button><button class="admin-act-btn danger" onclick="removePersonFromSession(${esc(JSON.stringify(p.name))})">Remove</button></div>`}
       </div>`;
     }).join('') + `</div>`
-    : `<div class="u-note">No one has joined this session yet.</div>`}
-    <div class="u-note-sm u-mt8">Remove disconnects that person's device and takes them off the session roster. They can rejoin with the code. Move the session to a new code to keep them out.</div>
+    : `<div class="admin-section-foot">No one has joined this session yet.</div>`}
+    <div class="admin-section-foot">Remove disconnects that person's device and takes them off the session roster. They can rejoin with the code. Move the session to a new code to keep them out.</div>
   </div>`;
   html += `<div class="admin-section">
     <div class="admin-section-label">Assigned profiles</div>
-    <div class="u-note u-mb8">These profiles carry this session on their sign-in page, one tap to enter. Unassign removes that tile from the profile; it does not disconnect a device and it does not touch crew assignments.</div>
     <div id="adminMembershipList">${adminMembershipListHTML()}</div>
-    <div class="admin-assign-row u-mt8">
-      <input class="field-in" id="adminAssignUser" list="adminAssignOptions" placeholder="@username" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')adminAssignProfileToSession()">
+    <div class="admin-group u-mt8"><div class="admin-row is-form">
+      <input class="field-in" id="adminAssignUser" list="adminAssignOptions" placeholder="@username" aria-label="Username to assign" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')adminAssignProfileToSession()">
       <datalist id="adminAssignOptions">${adminAssignOptionsHTML()}</datalist>
       <button class="admin-act-btn" onclick="adminAssignProfileToSession()">Assign</button>
-    </div>
+    </div></div>
+    <div class="admin-section-foot">These profiles carry this session on their sign-in page, one tap to enter. Unassign removes that tile from the profile; it does not disconnect a device and it does not touch crew assignments.</div>
   </div>`;
   return html;
 }
@@ -4128,12 +4136,12 @@ function renderAdminPanePeople() {
 function renderAdminPaneSources() {
   return `<div class="admin-section">
     <div class="admin-section-label">Sources <span class="admin-section-tag">(this show only)</span></div>
-    <div class="u-note u-mb8">Each name is a button on every Video, Audio or Script cue card in this show.</div>
     <div class="admin-sources-grid">
       ${renderSourcesRow('video','Video')}
       ${renderSourcesRow('audio','Audio')}
       ${renderSourcesRow('scriptWho','Speaker')}
     </div>
+    <div class="admin-section-foot">Each name is a button on every Video, Audio or Script cue card in this show.</div>
   </div>`;
 }
 
@@ -4146,13 +4154,13 @@ function adminSessionMembers() {
 
 function adminMembershipListHTML() {
   if (!(assignmentAllProfiles || []).length) {
-    if (assignmentSaveState === 'loading') return '<div class="u-note">Loading saved profiles…</div>';
+    if (assignmentSaveState === 'loading') return '<div class="admin-section-foot">Loading saved profiles…</div>';
     if (assignmentSaveState === 'failed') {
-      return `<div class="u-note">Profiles could not be loaded. <button class="admin-act-btn" onclick="hydrateRoleAssignments({force:true})">Retry</button></div>`;
+      return `<div class="admin-section-foot">Profiles could not be loaded. <button class="admin-act-btn" onclick="hydrateRoleAssignments({force:true})">Retry</button></div>`;
     }
   }
   const members = adminSessionMembers();
-  if (!members.length) return '<div class="u-note">No profiles carry this session yet.</div>';
+  if (!members.length) return '<div class="admin-section-foot">No profiles carry this session yet.</div>';
   return '<div class="admin-list">' + members.map(p => `<div class="admin-item">
       <div class="admin-item-name">${esc(p.fullName || p.username)}
         <span class="admin-member-user">@${esc(p.username || '')}</span>

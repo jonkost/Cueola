@@ -2,6 +2,25 @@
 
 ## Next release (not pushed yet)
 
+### The admin side (Nov 23)
+
+- **A new admin can now be assigned.** An instructor account made on the
+  dashboard got a username and password but no profile, so the front page,
+  the show list and Assign in the Admin Panel could not find that admin.
+  The profile is now made with the account. Older accounts get theirs the
+  next time that admin logs in, or when a super admin opens Accounts.
+- **A show you make is yours.** It goes on your own list of shows, so it is
+  on your front page without typing the code. Shows you made before today
+  are added the next time you open the dashboard.
+- **Share a show with another admin.** In the Admin Panel, under Session,
+  Share puts the show on the other admin's list and on their dashboard under
+  Your shows. Stop sharing takes it off. Only the admin who made a show (or
+  a super admin) can delete it.
+- **The Admin Panel has the Apple look.** Plain headings, grouped rows with
+  the words on the left and the button on the right, and buttons that belong
+  together are one size. The admin log in window and the person card match.
+  Nothing a control does has changed.
+
 ### The prompter controls are rebuilt (Nov 23)
 
 - **Every prompter control now lands.** Before, each press travelled in a

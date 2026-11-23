@@ -1200,45 +1200,68 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 #adminPanel{align-items:stretch;justify-content:flex-end}
 .admin-wrap{width:100%;max-width:520px;margin:10px;background:var(--liquid-fill-strong);backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));-webkit-backdrop-filter:blur(var(--liquid-blur)) saturate(var(--liquid-saturation));border: 1px solid transparent;border-radius:var(--ui-radius-panel);display:flex;flex-direction:column;overflow:hidden;animation:slideInRight .25s cubic-bezier(.16,1,.3,1) both}
 @keyframes slideInRight{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
-.admin-head{padding:20px 20px 16px;border-bottom: 1px solid transparent;flex-shrink:0}
-.admin-head-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.admin-title{font-family:var(--syne);font-size:22px;font-weight:800}
-.admin-close-btn{width:32px;height:32px;border-radius:var(--ui-radius-control);background:var(--btn-fill-2);border:1px solid transparent;color:var(--btn-ink);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.admin-head{padding:var(--sp-4) 20px var(--sp-3);border-bottom: 1px solid transparent;flex-shrink:0}
+.admin-head-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-1)}
+.admin-title{font-family:var(--syne);font-size:20px;font-weight:700;letter-spacing:0;line-height:1.2}
+.admin-close-btn{width:30px;height:30px;border-radius:var(--ui-radius-control-compact);background:var(--btn-fill-2);border:1px solid transparent;color:var(--btn-ink);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
 .admin-close-btn:hover{color:var(--btn-ink-hover);background:var(--btn-fill-2-hover)}
-.admin-who{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px}
-.admin-level-chip{padding:3px 9px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.06em}
+.admin-who{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:var(--sp-2)}
+.admin-who strong{color:var(--text);font-weight:600}
+.admin-level-chip{padding:2px 8px;border-radius:999px;font-size:10px;font-family:var(--sans);font-weight:700;letter-spacing:.04em;white-space:nowrap}
 
-.alc-full{background:rgba(245,183,49,.15);color:var(--yellow)}
+.alc-full{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
 .alc-standard{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
-.admin-body{flex:1;overflow-y:auto;padding:16px 20px}
+.admin-body{flex:1;overflow-y:auto;padding:var(--sp-1) 20px 20px}
 /* Admin Panel tabs: one segmented control (Apple HIG), every segment the same
    width, icon beside its word. The old 40px circles clipped the words and the
    three labels drew over each other (Jon's screenshot, 2026-10-16). */
-.admin-tabs{display:flex;gap:4px;margin:0 0 16px;padding:4px;border-radius:12px;background:var(--btn-fill);border:var(--btn-hairline)}
-.admin-tab{flex:1 1 0;min-width:0;height:36px;padding:0 10px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:12.5px;font-family:var(--sans);font-weight:600;color:var(--text2);border:1px solid transparent;background:transparent;cursor:pointer;white-space:nowrap;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.admin-tabs{display:flex;gap:2px;margin:0 0 var(--sp-5);padding:3px;border-radius:var(--ui-radius-control);background:color-mix(in srgb,var(--text) 6%,transparent);border:var(--btn-hairline)}
+.admin-tab{flex:1 1 0;min-width:0;height:32px;padding:0 10px;border-radius:var(--ui-radius-control-compact);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-family:var(--sans);font-weight:500;color:var(--text2);border:1px solid transparent;background:transparent;cursor:pointer;white-space:nowrap;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
 .admin-tab .sf-symbol{font-size:15px;flex:none}
 .admin-tab:hover{color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
-.admin-tab.sel{color:var(--text);background:color-mix(in srgb,var(--accent) 20%,var(--s2))}
+.admin-tab.sel{color:var(--text);font-weight:600;background:color-mix(in srgb,var(--accent) 20%,var(--s2))}
 
-.admin-section{margin-bottom:24px}
-.admin-section-label{font-size:10px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;padding-bottom:6px;border-bottom: 1px solid transparent}
-.admin-list{display:flex;flex-direction:column;gap:6px}
-.admin-item{background:var(--s2);border: 1px solid transparent;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px}
-.admin-item-name{font-size:13px;font-weight:600;flex:1}
-.admin-item-you{font-size:10px;font-family:var(--mono);color:var(--text3);padding:2px 7px;border-radius:20px;border: 1px solid transparent}
-.admin-item-acts{display:flex;gap:5px}
+/* Admin Panel body: Apple's grouped form. A plain heading, then one rounded
+   group of rows (words on the left, the control on the right), then a small
+   note under the group. No outlines: rows are told apart by a thin gap. */
+.admin-wrap,.person-info-modal{--admin-row-fill:color-mix(in srgb,var(--text) 6%,transparent);--admin-btn-fill:color-mix(in srgb,var(--text) 11%,transparent);--admin-btn-fill-hover:color-mix(in srgb,var(--text) 17%,transparent)}
+.admin-section{margin-bottom:var(--sp-5)}
+.admin-section-foot{font-size:12px;color:var(--text3);line-height:1.45;margin:var(--sp-2) var(--sp-1) 0}
+.admin-section-foot b{color:var(--text2)}
+.admin-group{display:flex;flex-direction:column;gap:2px;border-radius:var(--ui-radius-group);overflow:hidden}
+.admin-row{display:flex;align-items:center;gap:var(--sp-3);min-height:52px;padding:var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);background:var(--admin-row-fill)}
+.admin-row-text{flex:1;min-width:0}
+.admin-row-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.3}
+.admin-row-sub{font-size:12px;color:var(--text2);line-height:1.4;margin-top:2px}
+.admin-row>.admin-act-btn{flex:none;width:168px}
+.admin-row.is-form{padding:var(--sp-2)}
+.admin-row.is-form .field-in{flex:1;min-width:0;min-height:36px;padding:7px 12px;font-size:13px;border-radius:var(--ui-radius-control-compact);background:var(--admin-btn-fill)}
+.admin-row.is-form .admin-act-btn{flex:none;width:104px;height:36px}
+.admin-section-label{font-size:12px;font-family:var(--sans);font-weight:600;letter-spacing:0;text-transform:none;color:var(--text2);margin:0 var(--sp-1) var(--sp-2);padding:0;border-bottom:0}
+.admin-list{display:flex;flex-direction:column;gap:2px;border-radius:var(--ui-radius-group);overflow:hidden}
+.admin-item{background:var(--admin-row-fill);border:0;border-radius:0;min-height:52px;padding:var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);display:flex;align-items:center;gap:10px}
+.admin-item-name{font-size:13px;font-weight:600;flex:1;min-width:0;line-height:1.3}
+.admin-item>.u-spacer{display:none}
+.admin-item-you{font-size:11px;font-family:var(--sans);font-weight:600;letter-spacing:0;color:var(--text3);padding:0 var(--sp-1);white-space:nowrap}
+.admin-item-acts{display:flex;gap:6px;flex:none}
+.admin-item-acts .admin-act-btn{width:104px}
+.admin-item-acts .admin-act-btn+.admin-act-btn,.admin-item-acts .admin-act-btn:has(+.admin-act-btn){width:84px}
 .admin-item-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);opacity:.4;flex-shrink:0}
 .admin-item-dot.on{background:var(--green);opacity:1}
 @media(forced-colors:active){
   .admin-item-dot{border:1px solid CanvasText;opacity:1;background:Canvas}
   .admin-item-dot.on{background:Highlight}
 }
-.admin-member-user{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text3);margin-left:6px}
-.admin-btn-row{display:flex;gap:6px;flex-wrap:wrap}
+.admin-member-user{font-family:var(--sans);font-size:12px;font-weight:400;color:var(--text3);margin-left:6px}
+.admin-btn-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2)}
+.admin-btn-row .admin-act-btn{height:36px}
 .admin-assign-row{display:flex;gap:6px;align-items:center}
 .admin-assign-row .field-in{flex:1;min-width:0}
-.admin-act-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 12px;border-radius:var(--ui-radius-control);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink);transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.admin-act-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--ui-radius-control-compact);font-size:13px;font-weight:500;font-family:var(--sans);text-decoration:none;white-space:nowrap;cursor:pointer;border:1px solid transparent;background:var(--btn-fill);color:var(--btn-ink-hover);transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
 .admin-act-btn:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
+.admin-wrap .admin-act-btn{background:var(--admin-btn-fill)}
+.admin-wrap .admin-act-btn:hover{background:var(--admin-btn-fill-hover)}
+@media(max-width:520px){.admin-row:not(.is-form){flex-wrap:wrap}.admin-row:not(.is-form)>.admin-act-btn{width:100%}}
 .admin-act-btn.danger{background:color-mix(in srgb,var(--red) 11%,transparent);color:var(--red)}
 .admin-act-btn.danger:hover{border-color:transparent;color:var(--red);background:color-mix(in srgb,var(--red) 20%,transparent)}
 
@@ -1246,11 +1269,11 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .admin-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}.admin-in::placeholder{color:var(--text3)}
 .admin-add-btn{padding:9px;border-radius:var(--ui-radius-control-compact);font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--acg));border:none;color:#fff;transition:transform .12s var(--ease),filter .15s var(--ease)}
 .admin-add-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.admin-sources-grid{display:flex;flex-direction:column;gap:8px}
-.admin-src-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.admin-src-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;width:64px;flex-shrink:0}
-.admin-src-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1}
-.admin-src-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;font-size:10px;font-family:var(--mono);background:var(--s3);border: 1px solid transparent;color:var(--text2)}
+.admin-sources-grid{display:flex;flex-direction:column;gap:2px;border-radius:var(--ui-radius-group);overflow:hidden}
+.admin-src-row{display:flex;align-items:flex-start;gap:var(--sp-3);padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);background:var(--admin-row-fill)}
+.admin-src-label{font-size:13px;font-family:var(--sans);font-weight:600;color:var(--text);letter-spacing:0;width:64px;flex-shrink:0;line-height:26px}
+.admin-src-chips{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+.admin-src-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-family:var(--sans);font-weight:500;background:color-mix(in srgb,var(--text) 11%,transparent);border: 1px solid transparent;color:var(--text)}
 /* Session roster join chips on the assignments editor */
 .pb-roster-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:5px;font-size:10px;font-family:var(--mono);border:1px solid transparent}
 .pb-roster-assigned{background:color-mix(in srgb,var(--green) 12%,transparent);color:var(--green)}
@@ -1272,8 +1295,8 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 .pt-live-find .pt-find-in{flex:1;min-width:0;min-height:36px;font-size:12px;padding:6px 9px}
 .admin-src-chip .rm{cursor:pointer;color:var(--text3);font-size:11px;border:none;background:none;font-family:var(--mono);line-height:1;padding:0}.admin-src-chip .rm:hover{color:var(--red)}
 .admin-src-new{width:140px;height:28px;padding:0 8px;border-radius:5px;font-size:11px;font-family:var(--mono);background:var(--s2);border:1px solid transparent;color:var(--text)}
-.admin-src-add{padding:3px 8px;border-radius:5px;font-size:11px;font-family:var(--mono);background:var(--btn-fill);border:1px solid transparent;color:var(--text3);cursor:pointer;transition:all .12s}
-.admin-src-add:hover{border-color:transparent;color:var(--btn-ink-hover);background:var(--btn-fill-hover)}
+.admin-src-add{height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-family:var(--sans);font-weight:500;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid transparent;color:var(--accent);cursor:pointer;transition:background var(--dur-fast) var(--ease)}
+.admin-src-add:hover{border-color:transparent;background:color-mix(in srgb,var(--accent) 24%,transparent)}
 .admin-assignment-list{display:flex;flex-direction:column;gap:10px}
 .admin-assignment-row{background:var(--s2);border: 1px solid transparent;border-radius:10px;padding:12px;display:grid;gap:10px}
 
@@ -1292,7 +1315,7 @@ input[type="checkbox"]:not([data-native]):focus-visible{outline:2px solid var(--
 
 .admin-assignment-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 @media(max-width:640px){.admin-assignment-remove{width:100%;height:36px}}
-.admin-logout-btn{width:100%;padding:11px;border-radius:var(--r);font-size:15px;font-family:var(--sans);cursor:pointer;background:color-mix(in srgb,var(--red) 12%,transparent);border:1px solid transparent;color:var(--red);transition:all .15s;margin-top:8px}
+.admin-logout-btn{width:100%;min-height:var(--ui-control-height);padding:0 var(--sp-4);border-radius:var(--ui-radius-control);font-size:14px;font-weight:500;font-family:var(--sans);cursor:pointer;background:color-mix(in srgb,var(--red) 11%,transparent);border:1px solid transparent;color:var(--red);transition:background var(--dur-fast) var(--ease)}
 .admin-logout-btn:hover{background:color-mix(in srgb,var(--red) 20%,transparent)}
 
 /* ── SETTINGS ── */
@@ -1707,25 +1730,25 @@ button.pb-roster-row:hover{background:var(--s3)}
 /* Person info — admin click on a presence badge */
 .person-info-modal{max-width:480px}
 .pi-head{display:flex;align-items:center;gap:12px}
-.pi-ava{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);flex-shrink:0}
+.pi-ava{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0}
 .pi-ava.inst{background:var(--accent)}
 .pi-ava.stud{background:var(--green)}
-.pi-name{font-size:17px;font-weight:800;color:var(--text);line-height:1.2}
-.pi-sub{display:flex;align-items:center;gap:9px;margin-top:4px;font-size:11px;color:var(--text3);font-family:var(--mono);flex-wrap:wrap}
-.pi-role{padding:2px 7px;border-radius:5px;font-size:9.5px;font-weight:700;letter-spacing:.08em}
-.pi-role.inst{background:rgba(91,141,248,.15);color:var(--accent)}
-.pi-role.stud{background:rgba(34,211,160,.15);color:var(--green)}
+.pi-name{font-size:17px;font-weight:700;color:var(--text);line-height:1.2}
+.pi-sub{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-1);font-size:12px;color:var(--text3);font-family:var(--sans);flex-wrap:wrap}
+.pi-role{padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em}
+.pi-role.inst{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.pi-role.stud{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
 .pi-live{display:inline-flex;align-items:center;gap:5px}
 .pi-live .dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
 .pi-live.on .dot{background:var(--green);box-shadow:0 0 0 1px color-mix(in srgb,var(--green) 55%,transparent)}
-.pi-sec{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px}
-.pi-card{border: 1px solid transparent;border-radius:10px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:10px 12px;font-size:12.5px;color:var(--text2);line-height:1.55}
+.pi-sec{font-size:12px;font-family:var(--sans);font-weight:600;letter-spacing:0;text-transform:none;color:var(--text2);margin:var(--sp-4) var(--sp-1) var(--sp-2)}
+.pi-card{border: 1px solid transparent;border-radius:var(--ui-radius-control);background:var(--admin-row-fill);padding:var(--sp-3) var(--sp-4);font-size:13px;color:var(--text2);line-height:1.5}
 .pi-card b{color:var(--text)}
-.pi-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-.pi-stat{border: 1px solid transparent;border-radius:10px;background:color-mix(in srgb,var(--s2) 80%,transparent);padding:9px 6px;text-align:center}
-.pi-stat b{display:block;font-size:19px;color:var(--text);font-variant-numeric:tabular-nums}
-.pi-stat span{font-size:9px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
-.pi-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.pi-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-2)}
+.pi-stat{border: 1px solid transparent;border-radius:var(--ui-radius-control);background:var(--admin-row-fill);padding:var(--sp-3) 6px;text-align:center}
+.pi-stat b{display:block;font-size:20px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.pi-stat span{font-size:11px;font-family:var(--sans);letter-spacing:0;text-transform:none;color:var(--text3)}
+.pi-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--sp-2)}
 .pi-sec-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .pi-sec-row .admin-act-btn{text-transform:none;letter-spacing:0;font-family:var(--sans)}
 /* Grading view: one student at a time (admins only) */
@@ -4989,7 +5012,8 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   .ls-exit-btn,.ls-pact-btn,.ls-btn,.marker-chip,.follow-chip{min-height:44px}
   .live-row-go{min-height:44px;margin-top:6px;padding:8px;font-size:11px}
   .admin-tab{height:44px}
-  .admin-act-btn,.admin-src-add{min-height:44px}
+  .admin-act-btn,.admin-src-add,.admin-btn-row .admin-act-btn,.admin-row.is-form .admin-act-btn,.admin-row.is-form .field-in,.admin-close-btn{min-height:44px}
+  .admin-close-btn{min-width:44px}
   .paperwork-flow-actions button,.paperwork-actions :is(.btn-primary,.btn-secondary),.pb-pw-row,.seg-btn{min-height:44px}
   .admin-src-chip .rm{min-width:32px;min-height:32px}
   .fmt-btn{width:44px;height:44px}
@@ -5011,7 +5035,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 }
 
 /* kept: classes built from a prefix at run time (helper-tag-, live-row-, cue-out-, …) */
-.alc-super{background:rgba(240,82,82,.15);color:var(--red)}
+.alc-super{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
 .cue-row.search-hit{background:color-mix(in srgb,var(--accent) 13%,transparent)!important}
 .cue-row.type-audio td:first-child{border-left-color:var(--cue-audio)}
 .cue-row.type-gfx td:first-child{border-left-color:var(--cue-gfx)}
@@ -6888,8 +6912,10 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
       <input class="field-in" id="adminPassIn" type="password" autocomplete="current-password" placeholder="Your password" onkeydown="if(event.key==='Enter')submitAdminLogin()">
     </div>
     <div class="modal-err" id="adminLoginErr">Wrong username or password.</div>
-    <button class="btn-primary" id="admin-login-btn" onclick="submitAdminLogin()">Sign In</button>
-    <button class="btn-secondary" onclick="hideModal('adminLoginModal')">Cancel</button>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="hideModal('adminLoginModal')">Cancel</button>
+      <button class="btn-primary" id="admin-login-btn" onclick="submitAdminLogin()">Sign In</button>
+    </div>
   </div>
 </div>
 
@@ -7560,7 +7586,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 .lbl-hint{color:var(--text3);font-weight:400}
 .link-accent{color:var(--accent)}
 .btn-danger-text{color:var(--red)}
-.admin-section-tag{color:var(--text3);font-size:9px}
+.admin-section-tag{color:var(--text3);font-size:12px;font-weight:400}
 .admin-act-btn:disabled{opacity:.45;cursor:not-allowed}
 .row-ea-btn:disabled{opacity:.3;cursor:not-allowed}
 .p-tip-head{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;margin-bottom:2px}
@@ -7772,7 +7798,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-grading-model.js?v=200ac91a4e"></script>
 <script src="cueola-pin.js?v=e599f35d21"></script>
 <script src="cueola-identity.js?v=e98ee4b56e"></script>
-<script src="cueola-admin-auth.js?v=82979270bc"></script>
+<script src="cueola-admin-auth.js?v=a424c13639"></script>
 <script src="cueola-live-session.js?v=c28b5f25d0"></script>
 <script src="cueola-live-state.js?v=6314983dd7"></script>
 <script src="cueola-link-state.js?v=effa089bdc"></script>
@@ -7785,7 +7811,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=580973cf30"></script>
+<script src="cueola-app.js?v=b5eb4a4354"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>
