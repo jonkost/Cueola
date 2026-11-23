@@ -9035,7 +9035,7 @@ function renderRundown() {
       activeSegCollapsed = collapsedSegments.has(b.id);
       const cc = segChildCounts[b.id] || 0;
       const editActions = editMode ? `
-        <div class="row-edit-actions">
+        <div class="row-edit-actions row-edit-actions-seg">
           <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
           <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
           <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
@@ -9065,12 +9065,13 @@ function renderRundown() {
 
     const editActions = editMode ? `
       <div class="row-edit-actions">
-        <button class="row-ea-btn" onclick="moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
-        <button class="row-ea-btn" onclick="moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
-        <button class="row-ea-btn row-ea-add-before" onclick="addRowAt(${i},'before')" data-tip="Add row before">+ Before</button>
+        <button class="row-ea-btn" onclick="event.stopPropagation();moveRowUp(${b.id})"${i===0?' disabled':''} data-tip="Move up">${sfIcon('chevron.up')} Up</button>
+        <button class="row-ea-btn" onclick="event.stopPropagation();moveRowDown(${b.id})"${i===beats.length-1?' disabled':''} data-tip="Move down">${sfIcon('chevron.down')} Down</button>
+        <button class="row-ea-btn row-ea-add-before" onclick="event.stopPropagation();addRowAt(${i},'before')" data-tip="Add row before">${sfIcon('action.add')} Before</button>
+        <button class="row-ea-btn row-ea-add-after" onclick="event.stopPropagation();addRowAt(${i},'after')" data-tip="Add row after">${sfIcon('action.add')} After</button>
+        <button class="row-ea-btn row-ea-dup" onclick="event.stopPropagation();duplicateRow(${b.id})" data-tip="Make a copy of this row right under it, cues and all">Duplicate</button>
         <button class="row-ea-btn row-ea-hide" onclick="event.stopPropagation();setRowHidden(${b.id},${isHiddenBeat(b) ? 'false' : 'true'})" data-tip="${isHiddenBeat(b) ? 'Put this row back in the show' : 'Keep this row here but leave it out of the show'}">${isHiddenBeat(b) ? 'Show' : 'Hide'}</button>
-        <button class="row-ea-btn row-ea-del" onclick="removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
-        <button class="row-ea-btn row-ea-add-after" onclick="addRowAt(${i},'after')" data-tip="Add row after">+ After</button>
+        <button class="row-ea-btn row-ea-del" onclick="event.stopPropagation();removeRow(${b.id})" data-tip="Remove row">${sfIcon('action.delete')} Remove</button>
       </div>` : '';
     // A hidden row is one slim line: its number, its name and a way back.
     if (isHiddenBeat(b)) {
@@ -9275,6 +9276,26 @@ const ROW_TINTS = [
   { id:'blue',   label:'Blue',   color:'#0a84ff', print:'#dbe9ff' },
   { id:'purple', label:'Purple', color:'#bf5af2', print:'#eedcfa' },
   { id:'pink',   label:'Pink',   color:'#ff375f', print:'#ffdde5' },
+// Duplicate (a student asked for copy and paste, Jon 2026-11-23): a full copy
+// of the row, every cue on it included, lands right under the original. Move
+// it from there with Up, Down or a drag. The copy is its own row: it starts
+// not done, not on air, and is never a PREP/OUT helper of another row.
+function duplicateRow(id) {
+  const i = beats.findIndex(b => b.id === id);
+  if (i < 0 || beats[i].style === 'segment') return;
+  const copy = cloneRundownValue(beats[i]);
+  copy.id = nextBeatId();
+  copy.done = false;
+  delete copy.executionState;
+  delete copy.helperFor;
+  delete copy.helperRole;
+  copy._createdAt = Date.now();
+  copy._createdBy = presenceId;
+  beats.splice(i + 1, 0, copy);
+  renderRundown(); syncToFirestore();
+  toast('Row duplicated. The copy is right under it.');
+}
+
   { id:'gray',   label:'Gray',   color:'#8e8e93', print:'#e8e8ea' },
 ];
 function rowTintDef(b) {

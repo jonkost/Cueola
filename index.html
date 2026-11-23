@@ -338,8 +338,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .cd-time-start{font-family:var(--mono);font-size:9px;color:var(--text3)}
 .cd-time-dur{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2)}
 .edit-mode-row{background:color-mix(in srgb,var(--accent) 5%,transparent)}
-.row-edit-actions{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
-.row-ea-btn{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;cursor:pointer;border:1px solid transparent;background:var(--btn-fill-2);color:var(--text3);transition:all .1s}
+/* Row edit buttons: one tidy grid, every button the same size. Top line moves
+   and adds (Up, Down, Before, After); second line is Duplicate, Hide, and
+   Remove alone at the far end, away from the others. */
+.row-edit-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-top:7px;max-width:340px}
+.row-edit-actions .row-ea-del{grid-column:4}
+.row-edit-actions-seg{margin-left:auto}
+.row-ea-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:22px;white-space:nowrap;font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:4px;cursor:pointer;border:1px solid transparent;background:var(--btn-fill-2);color:var(--text3);transition:all .1s}
 .row-ea-btn:hover{color:var(--btn-ink-hover);border-color:transparent;background:var(--btn-fill-2-hover)}
 .row-ea-del{border-color:transparent;background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red)}
 .row-ea-del:hover{background:color-mix(in srgb,var(--red) 20%,transparent);border-color:transparent}
