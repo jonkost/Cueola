@@ -1547,10 +1547,12 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   // Advance intent: only updatePrompterOnAdvance sends { advance:true }; the
   // payload reaches ptSeekToRow from both remote-control receivers.
   const advance = app.slice(app.indexOf('function updatePrompterOnAdvance('), app.indexOf('function cuePrompterToLiveRow('));
-  assert.match(advance, /cuePrompterToLiveRow\(\{ advance: !!\(opts && opts\.advance === true\) \}\);/);
+  // A rundown move is a TAKE: it carries take:true so Follow and the
+  // wait-for-Play rule apply. Direction still rides as advance.
+  assert.match(advance, /cuePrompterToLiveRow\(\{ advance: !!\(opts && opts\.advance === true\), take:true \}\);/);
   assert.equal((app.match(/cuePrompterToLiveRow\(\{ advance:true \}\)/g) || []).length, 0);
   const cue = app.slice(app.indexOf('function cuePrompterToLiveRow('), app.indexOf('let _lastTalentPosPct'));
-  assert.match(cue, /const payload = opts && opts\.advance === true \? \{ advance:true \} : null;/);
+  assert.match(cue, /let payload = opts && opts\.advance === true \? \{ advance:true \} : null;/);
   assert.match(app, /ptSeekToRow\(action\.replace\('seek_row_', ''\), payload\)\.then/);
   assert.match(app, /if \(action\?\.startsWith\('seek_row_'\)\) \{ ptSeekToRow\(action\.replace\('seek_row_', ''\), payload\); return; \}/);
   // ptSeekToRow: an advance never travels backward. Inside the row (header n
@@ -1560,7 +1562,7 @@ test('prompter follows the rundown by one rule per surface (9/4 slice A2)', asyn
   const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
   assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
   assert.match(seek, /if \(delta <= 8 && afterTop > readY\) \{/);
-  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);/);
+  assert.match(seek, /const resume = !ptPlaying && \(forceRoll \|\| \(mayRoll && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\)\)\);/);
   assert.match(seek, /if \(resume\) ptStartPlay\(\);/);
   assert.match(seek, /if \(afterTop <= readY\) \{\n        \/\/[^\n]*\n        \/\/[^\n]*\n        if \(!ptMotion\.travelling\(\)\) ptPendingHoldResume = false;\n        ptNoteLiveRow\(n\);\n        ptAheadOfLive = ptAutoHeldRow !== n \+ 1;/);
   assert.match(seek, /ptAheadOfLive = false;   \/\/ a cue that moves puts the talent back in step/);
@@ -2195,13 +2197,13 @@ test('9/4 review round, slice A1: rebind evidence, boot prime, direction intent,
   assert.match(jump, /return takeCue\(i, 'jump-cue', \{ fire:false, logVerb:'Cue to' \}\);/);
   assert.doesNotMatch(jump, /setOperatorLiveCue\(i, 'jump-cue'\)/);
   const cue = app.slice(app.indexOf('function cuePrompterToLiveRow('), app.indexOf('let _lastTalentPosPct'));
-  assert.match(cue, /Previous, a backward 'Cue here' and every explicit cue/);
+  assert.match(cue, /An explicit cue \(Cue Now, the deck's cue key\) always moves it/);
   // C5 talent belt: an advance below the noted live row is explicit. C7: the
   // inside branch honors a superseded glide's pending resume.
   const seek = app.slice(app.indexOf('function ptSeekToRow(rowNum, payload=null)'), app.indexOf('function ptShowTechSlate'));
   assert.match(seek, /const backward = Number\.isFinite\(ptLiveRowNum\)\n    && \(n < ptLiveRowNum \|\| \(n === ptLiveRowNum && Number\.isFinite\(ptLiveRowPrev\) && n < ptLiveRowPrev\)\);/);
   assert.match(seek, /const advance = !!\(payload && payload\.advance === true\) && !backward;/);
-  assert.match(seek, /const resume = !ptPlaying && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\);\n        _ptLandCallback = null;\n        ptPendingHoldResume = false;/);
+  assert.match(seek, /const resume = !ptPlaying && \(forceRoll \|\| \(mayRoll && \(ptAutoHeldRow != null \|\| ptPendingHoldResume\)\)\);\n        _ptLandCallback = null;\n        ptPendingHoldResume = false;/);
   // C6: the seen-holds set rebuilds on every live-row CHANGE, without the
   // pause-marker re-baseline; ptRecalcRowHolds composes the two.
   const note = app.slice(app.indexOf('function ptNoteLiveRow('), app.indexOf('// Hold-release fallback'));

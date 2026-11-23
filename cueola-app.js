@@ -6977,6 +6977,7 @@ function setupFirestore() {
       // a talent that died minutes ago stays out, a modestly skewed laptop
       // binds on the first snapshot and a badly skewed one on its next beat,
       // instead of never (the old 20s compare of two Macs' wall clocks).
+      notePrompterOperators(d.prompter?.operators);
       const _hb = d.prompter?.talentHeartbeat;
       if (_hb?.ts && !isPrompterSelfSender(_hb.sender) && _hb.ts !== _lastSeenTalentHeartbeatTs
           && (_lastSeenTalentHeartbeatTs !== 0 || Math.abs(Date.now() - _hb.ts) < 60000)) {
@@ -15644,20 +15645,83 @@ function updatePrompterOnAdvance(prevBeat, newBeat, opts={}) {
   if (!refreshPrompterFromRundown()) sendToPrompter(false);
   // Intent is keyed on DIRECTION by the caller (GO forward, Back, Cue here):
   // only a strictly forward move carries { advance:true }.
-  cuePrompterToLiveRow({ advance: !!(opts && opts.advance === true) });
+  cuePrompterToLiveRow({ advance: !!(opts && opts.advance === true), take:true });
 }
 
 // The row line-up tool: fired on every advance/back/jump, and still available
 // manually (C key, Cue Now button) for recovering a lost place mid-show.
+// ── Who is operating the prompter ──────────────────────────────────────────
+// A TAKE cues the prompter to the row and waits for the operator's Play.
+// If NO operator of any kind is linked (no prompter panel open, no operator
+// window, no Stream Deck), the TAKE starts the roll by itself, so a show
+// with nobody on the prompter still rolls (Jon, 2026-11-23).
+// Every operator surface says "I am here" on the show every ten seconds.
+const PROMPTER_OPERATOR_BEAT_MS = 10000;
+const PROMPTER_OPERATOR_FRESH_MS = 30000;
+const _prompterOperatorsSeen = {};   // id -> { ts, at } (at = when THIS window saw that beat)
+function prompterOperatorKindHere() {
+  try {
+    if (flowOpEl('flowOp')?.classList.contains('on') && flowOpCode) return 'operator';
+    if (document.getElementById('liveshow')?.classList.contains('on') && livePrompterOpen) return 'panel';
+    if (window.CueolaStreamDeck?.deckStatus?.().connectedHere) return 'deck';
+  } catch {}
+  return '';
+}
+// The show's list of operators, from its shared document. Freshness is
+// measured from when this window saw the beat change, never by comparing two
+// computers' clocks.
+function notePrompterOperators(map) {
+  if (!map || typeof map !== 'object') return;
+  const now = Date.now();
+  Object.keys(map).forEach(id => {
+    const beat = map[id];
+    if (!beat || !beat.ts || id === FLOWMINGO_ENDPOINT_ID) return;
+    const seen = _prompterOperatorsSeen[id];
+    if (!seen) {
+      // First sight: trust it only if it is not hours old.
+      _prompterOperatorsSeen[id] = { ts:beat.ts, at:Math.abs(now - beat.ts) < 120000 ? now : 0 };
+    } else if (seen.ts !== beat.ts) {
+      _prompterOperatorsSeen[id] = { ts:beat.ts, at:now };
+    }
+  });
+}
+function prompterAnyOperatorLinked() {
+  if (prompterOperatorKindHere()) return true;
+  try { if (window.CueolaStreamDeck?.deckStatus?.().drivenElsewhere) return true; } catch {}
+  const now = Date.now();
+  return Object.values(_prompterOperatorsSeen).some(o => o && o.at && (now - o.at) < PROMPTER_OPERATOR_FRESH_MS);
+}
+function prompterOperatorBeat() {
+  const kind = prompterOperatorKindHere();
+  if (!kind) return;
+  const code = String(flowOpCode || ((session.isDemo || session.isExpert) ? '' : session.code) || '').trim().toUpperCase();
+  if (!code || !window._firebaseReady || !window._updateDoc || !window._doc || !window._db) return;
+  try {
+    window._updateDoc(window._doc(window._db, 'sessions', code), {
+      ['prompter.operators.' + FLOWMINGO_ENDPOINT_ID]: { ts:Date.now(), kind },
+    }).catch(() => {});
+  } catch {}
+}
+(() => {
+  const P = window.CueolaScriptOperatorProtocol;
+  if (P?.createSteadyInterval) P.createSteadyInterval(prompterOperatorBeat, PROMPTER_OPERATOR_BEAT_MS);
+  else setInterval(prompterOperatorBeat, PROMPTER_OPERATOR_BEAT_MS);
+})();
+
 function cuePrompterToLiveRow(opts={}) {
   const activeIdx = liveActiveCueIndex();
   const rowNum = activeIdx >= 0 ? rowDisplayNumber(activeIdx) : 0;
-  // Only a FORWARD rundown move carries intent ({ advance:true }): on the
-  // talent an advance never travels backward (already inside or past the
-  // row = stay). Previous, a backward 'Cue here' and every explicit cue (Cue
-  // Now, C key, deck cue_current, Cue Next) send the bare verb and keep the
-  // unconditional glide.
-  const payload = opts && opts.advance === true ? { advance:true } : null;
+  // A TAKE (forward, back, or Cue here) carries { take:true }. With Follow
+  // off the operator places the prompter by hand, so a TAKE does not move it.
+  // An explicit cue (Cue Now, the deck's cue key) always moves it.
+  const take = !!(opts && opts.take === true);
+  if (take && ptFollow === false) return;
+  // Only a FORWARD rundown move carries { advance:true }: on the talent an
+  // advance never travels backward (already inside or past the row = stay).
+  // roll:true tells the talent to start rolling by itself, which is only
+  // said when no operator is linked. Otherwise it waits for Play.
+  let payload = opts && opts.advance === true ? { advance:true } : null;
+  if (take) payload = { ...(payload || {}), take:true, roll:!prompterAnyOperatorLinked() };
   // steadyTimeout, not setTimeout: a throttled hidden tab delayed this seek by
   // up to a minute, which read as "the prompter ignored the rundown".
   if (rowNum > 0) steadyTimeout(() => sendPrompterControl(`seek_row_${rowNum}`, payload), 150);
@@ -18722,6 +18786,18 @@ function ptSeekToRow(rowNum, payload=null) {
   const backward = Number.isFinite(ptLiveRowNum)
     && (n < ptLiveRowNum || (n === ptLiveRowNum && Number.isFinite(ptLiveRowPrev) && n < ptLiveRowPrev));
   const advance = !!(payload && payload.advance === true) && !backward;
+  // A TAKE from the rundown. It moves the prompter only while Follow is on.
+  // It starts the roll only when it says so (roll:true = no operator is
+  // linked). Otherwise the talent screen waits for the operator's Play.
+  // A cue with no take flag is an older sender: it keeps the old rule.
+  const isTake = !!(payload && payload.take === true);
+  const forceRoll = isTake && payload.roll === true;
+  const mayRoll = isTake ? forceRoll : true;
+  if (isTake && !ptFollow) {
+    ptNoteLiveRow(n);
+    ptRecalcRowHolds();
+    return Promise.resolve(false);
+  }
   return new Promise(resolve => ptNextFrameOrSoon(() => {
     const rows = ptHeaders();
     const target = rows.find(r => r.row === n);
@@ -18742,7 +18818,7 @@ function ptSeekToRow(rowNum, payload=null) {
       if (delta <= 8 && afterTop > readY) {
         // Inside row n already: release the hold where the talent is. A
         // superseded TAKE's travel may carry the resume intent; honor it.
-        const resume = !ptPlaying && (ptAutoHeldRow != null || ptPendingHoldResume);
+        const resume = !ptPlaying && (forceRoll || (mayRoll && (ptAutoHeldRow != null || ptPendingHoldResume)));
         _ptLandCallback = null;
         ptPendingHoldResume = false;
         ptNoteLiveRow(n);
@@ -18772,8 +18848,8 @@ function ptSeekToRow(rowNum, payload=null) {
     // lands (a manual pause stays paused: ptStopPlay clears the flag). The
     // intent is a module flag so a rapid second TAKE that bends this travel
     // cannot swallow it: whichever travel lands honors it.
-    if (ptAutoHeldRow != null && !ptPlaying) ptPendingHoldResume = true;
-    else if (!ptMotion.travelling()) ptPendingHoldResume = false;
+    if (!ptPlaying && (forceRoll || (mayRoll && ptAutoHeldRow != null))) ptPendingHoldResume = true;
+    else if (!mayRoll || !ptMotion.travelling()) ptPendingHoldResume = false;
     ptNoteLiveRow(n);
     ptAutoHeldRow = null;
     ptRenderHoldChip();
