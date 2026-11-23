@@ -21,6 +21,43 @@
   together are one size. The admin log in window and the person card match.
   Nothing a control does has changed.
 
+### The new teleprompter, first round (Nov 23)
+
+- **One control set on every screen.** The talent screen, the prompter panel
+  in Live, the operator in its own window and the Stream Deck all have the
+  same fifteen controls with the same names, pictures, order and keys:
+  Prev row, Back, Play, Ahead, Next row, Top, Follow, Slower, Speed, Faster,
+  Clock, Slate, Message, Wrap, Clear.
+- **Back and Ahead replace Brake, Boost and Reverse.** Hold Back to roll
+  backward, hold Ahead to roll forward fast. Let go and it stops.
+- **A control lights only when the talent screen answers.** The buttons show
+  what the talent screen is really doing, not what was pressed.
+- **The script lives in the rundown rows. Push is gone.** A Script cell edit
+  goes to the talent screen by itself. A change to the row on air waits for
+  Send change, so the talent never loses their place.
+- **Crew notes stay off the talent screen.** "Roll to air" and "Name / Title"
+  used to show in big letters. A row with no script is now a thin line.
+- **The Script cell says more.** Lines, read time, a warning when the words
+  will not fit the row, PROMPTER HERE on the row the prompter is on, and
+  "Changed, not sent" on a row with a change waiting.
+- **A TAKE cues the row and waits for Play.** If no operator of any kind is
+  linked (no prompter panel, no operator window, no Stream Deck), the TAKE
+  starts the roll by itself. With Follow off, a TAKE does not move the
+  prompter.
+- **The operator window links by show code.** The button in the Live panel
+  opens it. It talks to the show, not to the Live window, so it keeps working
+  if Live closes, and it works the same from another computer.
+- **Stream Deck keys were renamed.** SCROLL is PLAY. BRAKE, BOOST, REV and
+  FWD on a saved layout are now BACK, AHEAD, PREV ROW and NEXT ROW. New keys:
+  FOLLOW, CLOCK, SLATE, MESSAGE, WRAP, CLEAR.
+- **Keys changed on the talent screen.** Arrows are now rows (up, down) and
+  Back and Ahead (left, right). T is Top, F is Follow, C Clock, S Slate,
+  M Message, W Wrap, Esc Clear. Settings is the comma key. Size and Mirror
+  moved into Settings.
+- Not built yet: the new script editor with its five formatting buttons, the
+  new show picker, controls that appear on the talent screen when the link
+  drops, and the extras.
+
 ### The prompter controls are rebuilt (Nov 23)
 
 - **Every prompter control now lands.** Before, each press travelled in a
