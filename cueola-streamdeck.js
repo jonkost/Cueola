@@ -389,7 +389,22 @@
          'clock.start', 'clock.pause', 'clock', 'golive', 'pt.question',
          'pt.wrap5', 'pt.wrap10', 'pt.overlays.clear', 'layout.prev', 'layout.next']
   };
-  var LAYOUT_TEMPLATES = { 'default': DEFAULT_LAYOUTS, director: DIRECTOR_LAYOUTS };
+  // Prompter layouts (2026-11-23): the one control set, key for key, in the
+  // same order as every prompter screen. On the 15-key deck the three rows
+  // are Roll, Place and speed, On screen. The middle key of row two is the
+  // Speed readout on screen; a deck key cannot show a live number here, so
+  // that slot is the page key (the deck needs one to get back anyway).
+  var PROMPTER_LAYOUTS = {
+    6:  ['km:prompter.dir.rev', 'km:prompter.playpause', 'km:prompter.dir.fwd',
+         'km:prompter.brake', 'km:prompter.follow', 'km:prompter.boost'],
+    8:  ['km:prompter.dir.rev', 'km:prompter.brake', 'km:prompter.boost', 'km:prompter.dir.fwd',
+         'km:prompter.playpause', 'km:prompter.follow', 'km:prompter.clear', 'layout.next'],
+    15: ['km:prompter.dir.rev', 'km:prompter.brake', 'km:prompter.playpause', 'km:prompter.boost', 'km:prompter.dir.fwd',
+         'km:prompter.top', 'km:prompter.follow', 'km:prompter.speed.down', 'layout.next', 'km:prompter.speed.up',
+         'km:prompter.clock', 'km:prompter.slate', 'km:prompter.message', 'km:prompter.wrap', 'km:prompter.clear']
+  };
+  var LAYOUT_TEMPLATES = { 'default': DEFAULT_LAYOUTS, director: DIRECTOR_LAYOUTS, prompter: PROMPTER_LAYOUTS };
+  var TEMPLATE_NAMES = { 'default': 'Page', director: 'Director', prompter: 'Prompter' };
   // Which template a fresh (or reset) layout starts from. The bridge's
   // session role is only a hint: a signed-in student gets Director, everyone
   // else the by-app starter; the Add-a-page sheet offers both for any deck.
@@ -3400,16 +3415,18 @@
       + '<div class="sd-ed-desc">Pick what the new page starts with. Every key can be changed afterwards.</div>'
       + '<button class="sd-picker-opt" data-tpl="default">Starter: every app, laid out for this deck</button>'
       + '<button class="sd-picker-opt" data-tpl="director">Director: rundown only (PREV, NEXT, TAKE, ABORT, ROW, CLOCK)</button>'
+      + '<button class="sd-picker-opt" data-tpl="prompter">Prompter: the prompter controls, in the same order as on screen</button>'
       + '<div class="sd-save-actions"><button class="btn-secondary" id="sd-tpl-cancel">Cancel</button></div>';
     var o = overlay(); o.innerHTML = '<div class="sd-picker-card sd-save-card">' + body + '</div>'; o.className = 'sd-picker on';
     o.onclick = function (e) { if (e.target === o) closeOverlay(); };
     bind('sd-tpl-cancel', closeOverlay);
     o.querySelectorAll('[data-tpl]').forEach(function (btn) {
       btn.onclick = function () {
-        var tpl = btn.getAttribute('data-tpl') === 'director' ? 'director' : 'default';
+        var tpl = btn.getAttribute('data-tpl');
+        if (!LAYOUT_TEMPLATES[tpl]) tpl = 'default';
         closeOverlay();
-        addProfile(tpl === 'director' ? 'Director' : 'Page', defaultKeySlots(profile.keys, tpl));
-        toast(tpl === 'director' ? 'Director page added. Set home makes it the page this deck starts on.' : 'Page added.');
+        addProfile(TEMPLATE_NAMES[tpl], defaultKeySlots(profile.keys, tpl));
+        toast(tpl === 'default' ? 'Page added.' : TEMPLATE_NAMES[tpl] + ' page added. Set home makes it the page this deck starts on.');
       };
     });
   }
