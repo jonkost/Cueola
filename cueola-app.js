@@ -6930,6 +6930,7 @@ function setupFirestore() {
           }
         }
         ptAdoptDesk(d.prompter.desk);
+        ptNoteOperatorsFromDoc(d.prompter.operators);
       }
       if (d.prompter?.controlAck) _handlePrompterControlAck(d.prompter.controlAck);
       if (d.showClock) applyRemoteShowClock(d.showClock);  // shared start/pause clock
@@ -13804,6 +13805,7 @@ function paintLiveToggleOpenState(btn, on) {
 
 function toggleLivePrompterPanel() {
   livePrompterOpen = !livePrompterOpen;
+  if (livePrompterOpen) setTimeout(() => { try { prompterOperatorBeat(); } catch {} }, 0);
   applyLivePrompterPanelState();
   const drawerMode = window.matchMedia?.('(max-width: 900px)')?.matches === true;
   if (drawerMode) {
@@ -15797,6 +15799,8 @@ function prompterAnyOperatorLinked() {
 function prompterOperatorBeat() {
   const kind = prompterOperatorKindHere();
   if (!kind) return;
+  // Talent screens in this browser hear it directly, cloud or no cloud.
+  try { _postPrompterMessage({ type:'operator_here', kind, productionCode:String(flowOpCode || session.code || '').trim().toUpperCase(), ts:Date.now() }); } catch {}
   const code = String(flowOpCode || ((session.isDemo || session.isExpert) ? '' : session.code) || '').trim().toUpperCase();
   if (!code || !window._firebaseReady || !window._updateDoc || !window._doc || !window._db) return;
   try {
@@ -17713,8 +17717,71 @@ function ptAdoptCueolaBridgeMessage(msg={}) {
   }
 }
 
+// ── Who has the controls (talent screen) ────────────────────────────────────
+// While an operator is linked, the talent screen puts its own controls away:
+// the operator has them. If the operator goes quiet or the link drops, the
+// roll carries on by itself (it never needed the link) and the controls come
+// back on this screen, so the talent can always run it. H shows them any time.
+const PT_OPERATOR_QUIET_MS = 25000;
+let _ptOperatorAt = 0;            // when an operator last said "I am here" or pressed a control
+let _ptOperatorWasLinked = null;
+let _ptHadOperator = false;
+let _ptPanelAutoHidden = false;
+const _ptOperatorBeatsSeen = {};
+function ptOperatorLinked() {
+  return !!_ptOperatorAt && (Date.now() - _ptOperatorAt) < PT_OPERATOR_QUIET_MS && ptConnState !== 'error';
+}
+function ptNoteOperatorHere() {
+  _ptOperatorAt = Date.now();
+  ptApplyOperatorPresence();
+}
+// The show's list of operators, from its shared document. A beat counts when
+// its time CHANGES, so two computers' clocks are never compared.
+function ptNoteOperatorsFromDoc(map) {
+  if (!map || typeof map !== 'object') return;
+  let fresh = false;
+  Object.keys(map).forEach(id => {
+    const ts = Number(map[id]?.ts) || 0;
+    if (!ts || id === FLOWMINGO_ENDPOINT_ID) return;
+    const seen = _ptOperatorBeatsSeen[id];
+    if (seen == null) { if (Math.abs(Date.now() - ts) < 120000) fresh = true; }
+    else if (seen !== ts) fresh = true;
+    _ptOperatorBeatsSeen[id] = ts;
+  });
+  if (fresh) ptNoteOperatorHere();
+}
+function ptApplyOperatorPresence() {
+  if (!ptEl('promptypus')?.classList.contains('on')) return;
+  const linked = ptOperatorLinked();
+  const pill = ptEl('pt-op-pill');
+  if (pill) {
+    const text = linked ? 'Operator has the controls' : (_ptHadOperator ? 'Link lost · controls are here' : 'No operator · you have the controls');
+    if (pill.textContent !== text) pill.textContent = text;
+    pill.className = 'pt-bar-sync ' + (linked ? 'pt-state-ready' : (_ptHadOperator ? 'pt-state-warn' : 'pt-state-connecting'));
+    pill.hidden = false;
+  }
+  if (linked === _ptOperatorWasLinked) return;
+  _ptOperatorWasLinked = linked;
+  const panel = ptEl('pt-panel');
+  if (linked) {
+    _ptHadOperator = true;
+    if (panel && ptPanelVisible && !panel.classList.contains('hidden')) { panel.classList.add('hidden'); _ptPanelAutoHidden = true; }
+  } else {
+    if (_ptPanelAutoHidden) { _ptPanelAutoHidden = false; if (panel && ptPanelVisible) panel.classList.remove('hidden'); }
+    if (!ptPanelVisible) ptTogglePanel();
+    if (_ptHadOperator) toast(ptPlaying ? 'Link lost. Still rolling. The controls are on this screen.' : 'Link lost. The controls are on this screen.');
+  }
+  ptMeasurePanelLift();
+}
+
 function ptHandleCueolaMessage(msg) {
   if (!msg || isPrompterSelfSender(msg.sender)) return;
+  if (msg.type === 'operator_here') {
+    const theirs = String(msg.productionCode || '').trim().toUpperCase();
+    const mine = String(ptLinkedCueolaCode || session.code || '').trim().toUpperCase();
+    if (!(theirs && mine && theirs !== mine)) ptNoteOperatorHere();
+    return;
+  }
   // A control from an operator window in this browser. It carries its desk
   // record, so it needs no handshake and no matching prompter session: only
   // the show code has to agree. The cloud copy of the same record is then
@@ -17724,7 +17791,7 @@ function ptHandleCueolaMessage(msg) {
     const mine = String(ptLinkedCueolaCode || session.code || '').trim().toUpperCase();
     if (theirs && mine && theirs !== mine) return;
     if (!isFlowmingoTalentActive()) return;
-    ptApplyDeskItem(_ptDeskReceiver.offer(msg.deskFamily, msg.deskRecord));
+    if (ptApplyDeskItem(_ptDeskReceiver.offer(msg.deskFamily, msg.deskRecord))) ptNoteOperatorHere();
     return;
   }
   if (!prompterSessionController.accepts(msg, { allowLegacy:true })) return;
@@ -17808,6 +17875,7 @@ function ptTalentHeartbeat() {
   // Publish "talent online" only while the talent screen is actually up —
   // otherwise operators see a phantom talent long after this tab left the screen.
   if (!document.getElementById('promptypus')?.classList.contains('on')) return;
+  try { ptApplyOperatorPresence(); } catch {}
   currentPrompterSessionState();
   // D11.2: the talent reports its own progress percent — the desk's ▶ rail
   // renders THE TALENT's truth, independent of the operator's local layout.
@@ -19750,6 +19818,15 @@ function ptAdjustOverlaySize(delta) {
 // Hide controls (H, or the operator's Hide controls): the bar and the panel
 // fade; moving the mouse brings the bar back for a moment (ptResetIdle).
 function ptTogglePanel() {
+  // The controls were put away because an operator has them: H brings them
+  // back on this screen without hiding the bar.
+  if (_ptPanelAutoHidden) {
+    _ptPanelAutoHidden = false;
+    ptEl('pt-panel')?.classList.remove('hidden');
+    ptMeasurePanelLift();
+    ptResetIdle();
+    return;
+  }
   ptPanelVisible = !ptPanelVisible;
   const panel = ptEl('pt-panel');
   if (panel) panel.classList.toggle('hidden', !ptPanelVisible);
@@ -20749,7 +20826,7 @@ function ptApplyDeskItem(item) {
 function ptAdoptDesk(desk) {
   if (!desk || typeof desk !== 'object') { _ptDeskReceiver.adopt(null); return; }
   _ptDeskReceiver.adopt(desk).forEach(item => {
-    try { ptApplyDeskItem(item); } catch (err) { containError('Prompter control', err); }
+    try { if (ptApplyDeskItem(item)) ptNoteOperatorHere(); } catch (err) { containError('Prompter control', err); }
   });
 }
 
@@ -22062,6 +22139,7 @@ async function ptLoadFromCueolaCode(codeOverride='') {
         if (ss && ss.textContent !== 'Linked to ' + code) { ss.textContent = 'Linked to ' + code; ss.className = 'pt-setup-status'; }
         ptUpdateReady();
         ptAdoptDesk(data.prompter?.desk);
+        ptNoteOperatorsFromDoc(data.prompter?.operators);
         // Director's fix requests (Go Live preflight): hello, top, slates_off, reload.
         if (data.fixRequests && typeof data.fixRequests === 'object') {
           try { ptHandleFixRequests(code, data.fixRequests); } catch (err) { containError('Talent fix request', err); }
