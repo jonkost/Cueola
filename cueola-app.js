@@ -16000,12 +16000,21 @@ function _talentRowAtPct(pct) {
 // The Script Op status line, from heartbeat truth only:
 // 'Talent connected · row 4 · rolling · seen 1s ago'. Empty when no accepted
 // heartbeat is on record for the bound talent.
+// How many talent screens answered in the last eight seconds.
+function talentScreensNow() {
+  const now = Date.now();
+  return Object.values(_talentSeenAt).filter(ts => now - ts < 8000).length;
+}
 function _talentStatusLine(opts={}) {
   const entry = _talentRegistryEntry();
   if (!entry) return '';
   const ageMs = Date.now() - entry.lastTs;
   const ageS = Math.max(0, Math.round(ageMs / 1000));
-  const head = ageMs < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000) ? 'Talent connected' : 'Talent silent';
+  // Two talent screens (camera 1 and camera 2) roll together: every screen
+  // applies every control. The status line says how many are answering.
+  const screens = talentScreensNow();
+  const head = ageMs < (PROMPTER_HEARTBEAT_MS * PROMPTER_MISS_THRESHOLD + 1000)
+    ? (screens > 1 ? `${screens} talent screens connected` : 'Talent connected') : 'Talent silent';
   // Measured row (heartbeat rowNum) wins; the char-offset estimate is the
   // fallback for talents that predate it.
   const row = entry.heldAtRow || entry.rowNum || _talentRowAtPct(entry.pct);
