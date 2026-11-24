@@ -54,6 +54,8 @@
     if (a.indexOf('seek_') === 0 || a.indexOf('row_') === 0 || a === 'reset' || a === 'rewind') return 'seek';
     if (a.indexOf('hold_') === 0) return 'hold';        // Back and Ahead, while held
     if (a.indexOf('follow_') === 0) return 'follow';    // every TAKE cues the prompter
+    if (a.indexOf('pace_') === 0) return 'pace';        // pace to the clock
+    if (a.indexOf('rehearsal_') === 0) return 'rehearsal';
     if (a.indexOf('align_') === 0) return 'align';
     if (a.indexOf('theme_') === 0) return 'theme';
     if (a.indexOf('direction_') === 0) return 'direction';
@@ -75,7 +77,9 @@
   }
 
   // The look of the show: safe to replay on a talent that just linked.
-  var REPLAY_FAMILIES = { slate: 1, question: 1, clock: 1, wrap: 1, clear: 1, rowinfo: 1, readline: 1, width: 1, follow: 1 };
+  var REPLAY_FAMILIES = { slate: 1, question: 1, clock: 1, wrap: 1, clear: 1, rowinfo: 1, readline: 1, width: 1, follow: 1, pace: 1 };
+  // Rehearsal is never replayed: a talent that links for the show must not
+  // come up in yesterday's rehearsal, where a TAKE does not move the prompter.
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 

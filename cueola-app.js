@@ -15022,6 +15022,18 @@ function refreshPrompterFromRundown(opts={}) {
   if (document.getElementById('liveshow')?.classList.contains('on') && isShowCaller()) sendToPrompter(false);
   return true;
 }
+// Rehearsal: the operator walks the prompter through the show with Prev row,
+// Next row and Play. The rundown, the live position and the clocks are not
+// touched, and a TAKE does not move the prompter. Turning it off puts the
+// prompter back on the row on air.
+function setPrompterRehearsal(on) {
+  sendPrompterControl(on ? 'rehearsal_on' : 'rehearsal_off');
+  if (!on) {
+    const idx = liveActiveCueIndex();
+    if (idx >= 0) steadyTimeout(() => sendPrompterControl('seek_row_' + rowDisplayNumber(idx)), 300);
+  }
+}
+
 // ── Printed backup script ───────────────────────────────────────────────────
 // The whole script by row, in big type, on paper: what the talent holds when
 // the power goes out. Built from the rundown as it stands now, drawn with the
@@ -15486,6 +15498,12 @@ function adoptPrompterTalentState(state={}) {
   }
   // The one control set: Follow, a held Back or Ahead, and the Standby slate.
   if (typeof state.follow === 'boolean') ptFollow = state.follow;
+  if (typeof state.pace === 'boolean' || typeof state.rehearsal === 'boolean') {
+    if (typeof state.pace === 'boolean') ptPace = state.pace;
+    if (typeof state.rehearsal === 'boolean') ptRehearsal = state.rehearsal;
+    document.querySelectorAll('[data-prompter-pace]').forEach(box => { if (document.activeElement !== box && box.checked !== ptPace) box.checked = ptPace; });
+    document.querySelectorAll('[data-prompter-rehearsal]').forEach(box => { if (document.activeElement !== box && box.checked !== ptRehearsal) box.checked = ptRehearsal; });
+  }
   if (typeof state.standbyOn === 'boolean') ptStandbyOn = state.standbyOn;
   if (typeof state.hold === 'string') ptHoldDir = (state.hold === 'back' || state.hold === 'ahead') ? state.hold : '';
   lsPrompterControlsSettled();
@@ -15913,7 +15931,8 @@ function cuePrompterToLiveRow(opts={}) {
   // roll:true tells the talent to start rolling by itself, which is only
   // said when no operator is linked. Otherwise it waits for Play.
   let payload = opts && opts.advance === true ? { advance:true } : null;
-  if (take) payload = { ...(payload || {}), take:true, roll:!prompterAnyOperatorLinked() };
+  // secs is how long the row runs, for pace to the clock.
+  if (take) payload = { ...(payload || {}), take:true, roll:!prompterAnyOperatorLinked(), secs:beatSecs(beats[activeIdx]) };
   // steadyTimeout, not setTimeout: a throttled hidden tab delayed this seek by
   // up to a minute, which read as "the prompter ignored the rundown".
   if (rowNum > 0) steadyTimeout(() => sendPrompterControl(`seek_row_${rowNum}`, payload), 150);
@@ -16245,7 +16264,7 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '8';
+const SCRIPT_OP_REGION_VERSION = '9';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -17623,6 +17642,13 @@ let _ptHoldTimer = null;
 // Follow: every TAKE cues the prompter to that row. On unless turned off.
 let ptFollow = (() => { try { return localStorage.getItem('cueola_prompter_follow') !== '0'; } catch { return true; } })();
 let ptStandbyOn = false;      // the Standby slate covers the script
+// Pace to the clock: the roll gently speeds up or slows down so a row's words
+// end when the row's time ends. Rehearsal: the operator runs the prompter
+// through the show by hand; a TAKE does not move it.
+let ptPace = (() => { try { return localStorage.getItem('cueola_prompter_pace') === '1'; } catch { return false; } })();
+let ptRehearsal = false;
+let _ptPaceRow = null;        // { row, secs, at } for the row the last TAKE put on air
+let _ptPaceBase = null;       // the speed the operator set, while pace is steering
 let _ptControls = null;       // the mounted strip on the talent screen
 let _ptStepRowTarget = null;  // the row a Prev row / Next row press is travelling to
 let ptMirrored = false;
@@ -17975,6 +18001,7 @@ function ptTalentHeartbeat() {
     // What the one control set lights from: every operator screen and the
     // Stream Deck read these, so a key is lit only when it is true here.
     playing:ptPlaying, speed:ptTargetSpeed, follow:ptFollow, hold:ptHoldDir,
+    pace:ptPace, rehearsal:ptRehearsal,
     standbyOn:ptStandbyOn, techSlateOn:ptTechSlateOn, colorBarsOn:ptColorBarsOn,
     questionOn:ptQuestionOn, questionText:ptQuestionText, clockState:{ ...ptClockState },
     // Measured row truth: the header at/above the read line, and whether an
@@ -18349,7 +18376,7 @@ function ptFrame(ts, fromFallback=false) {
     if (ptCheckAutoPauseMarkers()) return;
     if (ptCheckRowHold()) return;
   }
-  if (ts - _ptReadoutAt > 400) { _ptReadoutAt = ts; ptRenderReadout(); }
+  if (ts - _ptReadoutAt > 400) { _ptReadoutAt = ts; ptRenderReadout(); ptPaceTick(); }
   if (ptLoopWanted()) {
     _ptRaf = requestAnimationFrame(ptFrame);
   } else {
@@ -18698,6 +18725,35 @@ function ptStepRow(dir) {
   ptRenderHoldChip();
   ptGlideToOffset(ptMotion.get().pos + ptRowLandingDelta(target), () => { _ptStepRowTarget = null; ptRecalcRowHolds(); });
   return true;
+}
+function ptSetPace(on) {
+  ptPace = !!on;
+  try { localStorage.setItem('cueola_prompter_pace', ptPace ? '1' : '0'); } catch {}
+  if (!ptPace) ptPaceRelease();
+}
+// Give the speed back to what the operator set.
+function ptPaceRelease() {
+  if (_ptPaceBase != null) { const base = _ptPaceBase; _ptPaceBase = null; ptSetSpeed(base); }
+}
+function ptPaceTick() {
+  if (!ptPace || !ptPlaying || ptHoldDir || ptRehearsal || !_ptPaceRow || !(_ptPaceRow.secs > 0)) return;
+  const cur = ptRowAtReadLine();
+  if (!cur || cur.row !== _ptPaceRow.row) { ptPaceRelease(); return; }
+  const pxLeft = cur.el.getBoundingClientRect().bottom - ptReadY();
+  const secLeft = (_ptPaceRow.at + _ptPaceRow.secs * 1000 - Date.now()) / 1000;
+  if (!(secLeft > 3)) { ptPaceRelease(); return; }
+  if (_ptPaceBase == null) _ptPaceBase = ptTargetSpeed;
+  const want = Math.round(PT_ENGINE.paceSpeed(pxLeft, secLeft, _ptPaceBase));
+  if (Math.abs(want - ptTargetSpeed) >= 2) ptSetSpeed(want);
+}
+function ptSetRehearsal(on) {
+  ptRehearsal = !!on;
+  // Not saved: a reload always comes back out of rehearsal, following.
+  ptFollow = !ptRehearsal;
+  ptSyncControls();
+  if (ptRehearsal) ptPaceRelease();
+  const pill = ptEl('pt-rehearse-pill');
+  if (pill) pill.hidden = !ptRehearsal;
 }
 function ptSetFollow(on) {
   ptFollow = on !== false;
@@ -19050,6 +19106,12 @@ function ptSeekToRow(rowNum, payload=null) {
   const isTake = !!(payload && payload.take === true);
   const forceRoll = isTake && payload.roll === true;
   const mayRoll = isTake ? forceRoll : true;
+  if (isTake) {
+    // A new row is on air: pace starts over from the speed the operator set.
+    ptPaceRelease();
+    const secs = Number(payload.secs) || 0;
+    _ptPaceRow = secs > 0 ? { row:n, secs, at:Date.now() } : null;
+  }
   if (isTake && !ptFollow) {
     ptNoteLiveRow(n);
     ptRecalcRowHolds();
@@ -19498,6 +19560,7 @@ function scriptOpTransportPaneHTML() {
         <button class="pt-btn" onclick="sendPrompterControl('hide_interface')" data-tip="Hide or show the controls on the talent screen">Hide controls</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
+      <label class="flow-switch-row" data-tip="The roll gently speeds up or slows down so a row's words end when the row's time ends"><input type="checkbox" data-prompter-pace ${ptPace ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'pace_on' : 'pace_off')"><span>Pace to the clock</span></label>
       <label class="flow-switch-row" data-tip="While a clip plays, the talent screen counts down to when they are back on"><input type="checkbox" ${prompterClipCountdownOn() ? 'checked' : ''} onchange="setPrompterClipCountdown(this.checked)"><span>Clip countdown for the talent</span></label>
     </div>`;
   return `<div class="prompt-op-panel flow-control-panel">${size}${poLayoutSectionHTML('lsq')}${poAlignSectionHTML()}${screen}${poThemeSectionHTML()}</div>`;
@@ -19516,6 +19579,7 @@ function scriptOpDisplayPaneHTML() {
         <button class="pt-btn" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Open the script for the selected row">${sfIcon('action.edit')}<span>Edit this row</span></button>
         <button class="pt-btn" onclick="printPrompterScript()" data-tip="Print the whole script by row, in big type, for when the power goes out"><span>Print backup</span></button>
       </div>
+      <label class="flow-switch-row" data-tip="Run the prompter through the show by hand. A TAKE does not move it, and the show and its clocks are not touched"><input type="checkbox" data-prompter-rehearsal ${ptRehearsal ? 'checked' : ''} onchange="setPrompterRehearsal(this.checked)"><span>Rehearsal</span></label>
     </div>`;
   const panelText = `<div class="flow-control-section flow-control-paneltext">
       <div class="flow-control-title">Panel Text</div>
@@ -20472,6 +20536,8 @@ function ptStateSnapshot() {
     standbyOn: ptStandbyOn,
     follow: ptFollow,
     hold: ptHoldDir,
+    pace: ptPace,
+    rehearsal: ptRehearsal,
     questionOn: ptQuestionOn,
     questionText: ptQuestionText,
     clockState: { ...ptClockState },
@@ -20951,7 +21017,8 @@ function applyRemoteControlOnce(action, ts, sender, controlId='', payload=null) 
 }
 
 function ptHandleRemoteControl(action, payload=null) {
-  if (action?.startsWith('speed_set_')) { ptSetSpeed(action.replace('speed_set_', '')); return; }
+  // A speed the operator sets is the new speed pace works from.
+  if (action?.startsWith('speed_set_')) { _ptPaceBase = null; ptSetSpeed(action.replace('speed_set_', '')); return; }
   if (action?.startsWith('size_set_')) { ptSetSize(action.replace('size_set_', '')); return; }
   if (action?.startsWith('seek_set_')) { ptSeekToProgress(action.replace('seek_set_', '')); return; }
   if (action?.startsWith('seek_line_')) { ptSeekByLines(action.replace('seek_line_', '')); return; }
@@ -20989,6 +21056,10 @@ function ptHandleRemoteControl(action, payload=null) {
     case 'row_next':   ptStepRow(1); break;
     case 'follow_on':  ptSetFollow(true); break;
     case 'follow_off': ptSetFollow(false); break;
+    case 'pace_on':    ptSetPace(true); break;
+    case 'pace_off':   ptSetPace(false); break;
+    case 'rehearsal_on':  ptSetRehearsal(true); break;
+    case 'rehearsal_off': ptSetRehearsal(false); break;
     case 'pause':      ptStopPlay(); break;
     case 'resume':     ptStartPlay(); break;
     case 'speed_up':   ptAdjustSpeed(10); break;
@@ -21037,6 +21108,8 @@ function prompterControlLabel(action) {
     hold_back:'Back', hold_ahead:'Ahead', hold_off:'Let go',
     row_prev:'Prev row', row_next:'Next row',
     follow_on:'Follow on', follow_off:'Follow off',
+    pace_on:'Pace to the clock on', pace_off:'Pace to the clock off',
+    rehearsal_on:'Rehearsal on', rehearsal_off:'Rehearsal off',
     slate_standby_on:'Standby', slate_standby_off:'Standby off',
     size_up:'Bigger text', size_down:'Smaller text', reset:'Top of script',
     align_left:'Left', align_center:'Center', align_right:'Right',

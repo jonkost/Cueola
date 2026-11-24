@@ -438,6 +438,17 @@
     return Math.max(1, Math.round(words / (Number(wpm) > 0 ? Number(wpm) : READ_WPM) * 60));
   }
 
+  // Pace to the clock: the speed that makes the words left in a row end when
+  // the row's time ends. Gentle on purpose: never under 0.6 or over 1.6 times
+  // the speed the operator set, and it lets go in the last three seconds so
+  // the end of a row never lurches.
+  function paceSpeed(pxLeft, secLeft, base) {
+    var b = clamp(finite(base, 60), SPEED_MIN, SPEED_MAX);
+    var px = finite(pxLeft, 0), sec = finite(secLeft, 0);
+    if (!(px > 0) || !(sec > 3)) return b;
+    return clamp(clamp(px / sec, b * 0.6, b * 1.6), SPEED_MIN, SPEED_MAX);
+  }
+
   // Seconds to travel a distance at a speed; null when nothing is moving.
   function secondsForPixels(px, velPxPerSec) {
     var v = Math.abs(finite(velPxPerSec, 0));
@@ -467,6 +478,7 @@
     rowChanged: rowChanged,
     holdRow: holdRow,
     readSeconds: readSeconds,
+    paceSpeed: paceSpeed,
     isSpeakerLine: isSpeakerLine,
     scriptLineHTML: scriptLineHTML,
     scriptHTML: scriptHTML,

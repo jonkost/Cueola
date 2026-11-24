@@ -332,3 +332,12 @@ test('read time skips speaker names and notes', () => {
   assert.equal(E.readSeconds('HOST:\n[TURN TO CAMERA 2]'), 0);
   assert.equal(E.readSeconds('HOST:\n' + Array(151).join('word ')), 60);
 });
+
+test('pace to the clock is gentle and lets go near the end', () => {
+  assert.equal(E.paceSpeed(600, 10, 60), 60, 'on time: no change');
+  assert.equal(E.paceSpeed(900, 10, 60), 90, 'behind: faster');
+  assert.equal(E.paceSpeed(3000, 10, 60), 96, 'never more than 1.6 times');
+  assert.equal(E.paceSpeed(100, 10, 60), 36, 'never less than 0.6 times');
+  assert.equal(E.paceSpeed(900, 2, 60), 60, 'last three seconds: hands off');
+  assert.equal(E.paceSpeed(0, 10, 60), 60);
+});
