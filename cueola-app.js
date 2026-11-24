@@ -14983,6 +14983,52 @@ function refreshPrompterFromRundown(opts={}) {
   if (document.getElementById('liveshow')?.classList.contains('on') && isShowCaller()) sendToPrompter(false);
   return true;
 }
+// ── Printed backup script ───────────────────────────────────────────────────
+// The whole script by row, in big type, on paper: what the talent holds when
+// the power goes out. Built from the rundown as it stands now, drawn with the
+// same five kinds of formatting as the talent screen.
+function prompterBackupHTML() {
+  const E = window.CueolaPrompterEngine;
+  const rows = E.parseRows(assemblePrompterScriptFromBeats());
+  const title = esc(show?.name || 'Untitled Show');
+  const when = new Date().toLocaleString([], { dateStyle:'medium', timeStyle:'short' });
+  const body = rows.map(r => {
+    const words = E.scriptHTML(r.text);
+    const read = E.readSeconds(r.text);
+    const head = `<h2><span class="n">${r.num != null ? r.num : ''}</span>${esc(r.name || (r.num != null ? 'Row ' + r.num : ''))}${read ? `<span class="t">${E.formatSeconds(read)}</span>` : ''}</h2>`;
+    return `<section class="${words ? '' : 'empty'}">${head}${words}</section>`;
+  }).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title} · backup script</title><style>
+    @page{margin:14mm}
+    body{font:20pt/1.45 -apple-system,"Helvetica Neue",Arial,sans-serif;color:#000;margin:0}
+    header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2pt solid #000;padding-bottom:6pt;margin-bottom:12pt}
+    header h1{font-size:16pt;margin:0}header span{font-size:10pt}
+    section{break-inside:avoid-page;margin:0 0 14pt}
+    h2{font-size:11pt;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4pt;padding-top:6pt;border-top:.75pt solid #999;display:flex;gap:8pt;align-items:baseline}
+    h2 .n{font-weight:800;min-width:18pt}h2 .t{margin-left:auto;font-weight:400}
+    section.empty h2{color:#777;font-weight:400}
+    p{margin:0 0 6pt}p.scr-gap{margin-top:12pt}
+    .scr-speaker{font-size:11pt;font-weight:800;letter-spacing:.1em;border:1.5pt solid #000;border-radius:4pt;padding:1pt 6pt}
+    .scr-punch{font-weight:800;text-decoration:underline}
+    .scr-note{font-size:12pt;font-weight:700;border:1.5pt dashed #000;border-radius:4pt;padding:1pt 6pt}
+    .scr-stop{display:block;font-size:11pt;font-weight:800;letter-spacing:.14em;text-align:center;border-top:2pt solid #000;border-bottom:2pt solid #000;padding:2pt 0;margin:6pt 0}
+  </style></head><body><header><h1>${title}</h1><span>Backup script · printed ${esc(when)}</span></header>${body || '<p>This show has no script yet.</p>'}</body></html>`;
+}
+function printPrompterScript() {
+  const old = document.getElementById('ptBackupFrame');
+  if (old) old.remove();
+  const frame = document.createElement('iframe');
+  frame.id = 'ptBackupFrame';
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(frame);
+  frame.srcdoc = prompterBackupHTML();
+  frame.onload = () => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+    catch { toast('The script could not be sent to the printer from this browser.'); }
+  };
+}
+
 // Send change: the operator says the talent is past that line, so the row on
 // air takes its new words now.
 function sendPrompterRowChange() {
@@ -16160,7 +16206,7 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '6';
+const SCRIPT_OP_REGION_VERSION = '7';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -19426,8 +19472,9 @@ function scriptOpDisplayPaneHTML() {
   const formatting = `<div class="flow-control-section flow-control-format">
       <div class="flow-control-title">The script</div>
       <p class="flow-control-note">The script is written row by row, in the Script column of the rundown. A change goes to the talent screen by itself. A change to the row on air waits for Send change.</p>
-      <div class="flow-control-grid one">
-        <button class="pt-btn" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Open the script for the selected row">${sfIcon('action.edit')}<span>Edit this row's script</span></button>
+      <div class="flow-control-grid two">
+        <button class="pt-btn" onclick="openLiveScript(Math.max(lsIdx,0))" data-tip="Open the script for the selected row">${sfIcon('action.edit')}<span>Edit this row</span></button>
+        <button class="pt-btn" onclick="printPrompterScript()" data-tip="Print the whole script by row, in big type, for when the power goes out"><span>Print backup</span></button>
       </div>
     </div>`;
   const panelText = `<div class="flow-control-section flow-control-paneltext">
