@@ -63,8 +63,38 @@
   yellow box. Stop here is a red line and the roll stops there. Stars and
   brackets never show on the talent screen, and old marks like [UPDATE] are
   left out.
-- Not built yet: the new show picker, controls that appear on the talent
-  screen when the link drops, and the extras.
+- **The talent's controls come back when the link drops.** While an operator
+  is linked, the talent screen puts its own controls away. If the operator
+  goes quiet or the link drops, the roll carries on and the controls come
+  back on the talent screen. H shows them at any time.
+- **Practice with no show.** The show picker on the talent screen always
+  offers it.
+- **A ready-made Stream Deck page.** Add a page now offers Prompter: the
+  prompter controls key for key, in the same order as on screen.
+
+### Prompter extras (Nov 23)
+
+- **Print a backup script.** One button in the Live prompter panel (Script
+  tab) prints the whole script by row, in big type.
+- **Clip countdown for the talent.** While a clip plays, the talent screen
+  counts down to when they are back on. A switch on the Look tab turns it
+  off.
+- **Pace to the clock.** A switch on the Look tab. The roll gently speeds up
+  or slows down so a row's words end when the row's time ends. It never goes
+  under 0.6 or over 1.6 times the speed the operator set.
+- **Rehearsal.** A switch on the Script tab. Walk the prompter through the
+  show with Prev row, Next row and Play. A TAKE does not move it and the
+  show's clocks are not touched.
+- **Scan to link, and a phone as the remote.** The talent screen's Settings
+  shows a square code. Point a phone or iPad camera at it and it opens the
+  prompter operator for that show, with the controls sized for a thumb.
+- **Two talent screens.** Two screens linked to one show roll together. The
+  status line says how many are answering. Mirror is set on each screen, in
+  its own Settings.
+- **Voice follow, for practice only.** A switch in the talent screen's
+  Settings. The script follows the reader's voice. It will not turn on while
+  a show is linked.
+- Read time against row time was already in the Script cell and the editor.
 
 ### The prompter controls are rebuilt (Nov 23)
 
