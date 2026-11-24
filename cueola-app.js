@@ -20220,7 +20220,8 @@ function ptUpdateReady() {
   if (setup) setup.classList.toggle('on', !code && !hasScript);
   // A restored local script can be kept with one tap (code-less talents).
   const keep = ptEl('pt-setup-keep');
-  if (keep) keep.hidden = !(ptScriptIsPlaceholder && ptScriptRestored);
+  // Practice with no show: always offered while no show is linked.
+  if (keep) keep.hidden = !ptScriptIsPlaceholder;
 }
 function ptKeepLocalScript() {
   ptScriptIsPlaceholder = false;

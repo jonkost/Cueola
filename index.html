@@ -5874,18 +5874,18 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
   <div id="pt-setup" class="pt-setup">
     <div class="pt-setup-card">
       <div class="pt-setup-logo"><svg class="brand-ico"><use href="#ic-flowmingo"/></svg></div>
-      <h2 class="pt-setup-title">Link this prompter to your show</h2>
-      <p class="pt-setup-sub">Tap your show, or type the show code from the prompter controls.</p>
+      <h2 class="pt-setup-title">Pick a show for this prompter</h2>
+      <p class="pt-setup-sub">Tap your show, or type its show code. The script comes from the rundown by itself.</p>
       <div class="pt-setup-yours" id="pt-setup-yours" hidden></div>
       <div class="pt-setup-row">
         <input class="pt-setup-input" id="pt-setup-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SHOW CODE" maxlength="20" aria-label="Show code" onkeydown="if(event.key==='Enter')ptSetupConnect()">
         <button class="pt-setup-btn" onclick="ptSetupConnect()">Link</button>
       </div>
       <div class="pt-setup-status" id="pt-setup-status"></div>
-      <button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript()">Keep this script (not linked to a show)</button>
+      <button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript()">Practice with no show</button>
       <ol class="pt-setup-steps">
         <li><span class="pt-step-dot" id="pt-step-1"></span>Link to your show</li>
-        <li><span class="pt-step-dot" id="pt-step-2"></span>The script loads from the prompter controls</li>
+        <li><span class="pt-step-dot" id="pt-step-2"></span>The script comes from the rundown</li>
         <li><span class="pt-step-dot" id="pt-step-3"></span>When it turns green <strong>READY</strong>, you're set</li>
       </ol>
       <button class="pt-setup-alt" onclick="ptOpenEdit()">No code? Load a file or paste a script instead</button>
@@ -6062,7 +6062,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
     <div class="flowop-preview">
       <div class="flowop-readline"></div>
       <div class="flowop-script" id="flowOpScriptPreview">
-        <div class="flowop-empty">Type a show code to run the prompter from here.</div>
+        <div class="flowop-empty">Pick your show or type its show code to run the prompter from here.</div>
       </div>
     </div>
     <aside class="flowop-side">
@@ -7784,7 +7784,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=6ad0de1708"></script>
+<script src="cueola-app.js?v=8da607a428"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

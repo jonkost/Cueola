@@ -1752,7 +1752,7 @@ test('talent door: your shows, signed-out link path, stale script honesty, launc
   // Markup: rows above the code row on the Connect card and in the overlay,
   // the keep-this-script dismiss, Link a show first, the bar button renamed.
   assert.match(html, /<div class="pt-setup-yours" id="pt-setup-yours" hidden><\/div>\n      <div class="pt-setup-row">/);
-  assert.match(html, /<button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript\(\)">Keep this script/);
+  assert.match(html, /<button class="pt-setup-alt" id="pt-setup-keep" hidden onclick="ptKeepLocalScript\(\)">Practice with no show/);
   // 10/16: the sheet opens with a title row and a Close button, like Settings.
   assert.match(html, /<div class="pt-sheet-head"><h2>Link a show<\/h2><button class="pt-btn pt-icon-btn" onclick="ptCloseEdit\(\)" aria-label="Close"[^\n]*<\/div>\n      <div class="pt-cueola-yours" id="pt-cueola-yours" hidden><\/div>\n      <div class="pt-cueola-bar">/);
   assert.ok(html.indexOf('<h2>Link a show</h2>') < html.indexOf('<h2>Edit / Load Script</h2>'));
@@ -1797,7 +1797,7 @@ test('talent door: your shows, signed-out link path, stale script honesty, launc
   assert.match(restore, /if \(savedText\) ptSetScriptText\(savedText\);\n    else ptSetScriptHTML\(savedHtml\);\n    ptScriptRestored = true;\n    ptScriptIsPlaceholder = true;\n    ptUpdateReady\(\);\n    return;/);
   assert.match(app, /else if \(hasScript\)                    \{ state = 'warn';       text = 'Local script, not linked'; \}/);
   assert.doesNotMatch(app, /text = 'Script loaded'/);
-  assert.match(app, /if \(keep\) keep\.hidden = !\(ptScriptIsPlaceholder && ptScriptRestored\);/);
+  assert.match(app, /if \(keep\) keep\.hidden = !ptScriptIsPlaceholder;/);
   assert.match(app, /function ptKeepLocalScript\(\) \{\n  ptScriptIsPlaceholder = false;\n  ptScriptRestored = false;\n  ptUpdateReady\(\);/);
   // enterPrompter prefills the last code and lists the shows; the overlay
   // re-lists on open.
