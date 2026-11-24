@@ -37,6 +37,7 @@ export const ASSETS = [
   'cueola-prompter-engine.js',
   'cueola-prompter-desk.js',
   'cueola-prompter-controls.js',
+  'cueola-qr.js',
   'cueola-prompter-controls.css',
   'cueola-prompter-session.js',
   'cueola-script-operator-protocol.js',

@@ -19942,7 +19942,37 @@ function ptToggleKeys(force) {
   ptOpenSettings();
 }
 // Every control in the sheet shows the current truth when it opens.
+// Scan to link: the talent screen shows a square code. Point a phone or an
+// iPad camera at it and that device opens the prompter operator for this
+// show, so a talent with no operator can run their own prompter from a phone.
+function prompterOperatorLink(code) {
+  const url = new URL(location.href);
+  url.pathname = url.pathname.replace(/[^/]*$/, '') || '/';
+  url.search = '';
+  url.searchParams.set('operator', '1');
+  url.searchParams.set('code', String(code || '').trim().toUpperCase());
+  url.hash = 'flowop';
+  return url.toString();
+}
+function ptRenderScan() {
+  const box = ptEl('pt-scan-code'), note = ptEl('pt-scan-note');
+  if (!box || !note) return;
+  const code = String(ptLinkedCueolaCode || (session && session.code && !session.isDemo ? session.code : '') || '').trim().toUpperCase();
+  if (!code) {
+    box.innerHTML = '';
+    box.hidden = true;
+    note.textContent = 'Link a show first. Then a phone or iPad can scan a code here to get the prompter controls.';
+    return;
+  }
+  const svg = window.CueolaQR ? window.CueolaQR.svg(prompterOperatorLink(code), { size:168, label:'Code to scan for the prompter controls' }) : '';
+  box.hidden = !svg;
+  box.innerHTML = svg;
+  note.textContent = svg
+    ? `Point a phone or iPad camera at this square. It opens the prompter controls for ${code}. The same fifteen controls, sized for a thumb.`
+    : `On the phone, open Cueola, choose the prompter operator and type ${code}.`;
+}
 function ptRenderSettingsState() {
+  ptRenderScan();
   ptSetAlign(ptAlign);
   ptSetReadLine(ptReadLinePos, { persist:false });
   ptSetWidth(ptTextWidth, { persist:false });

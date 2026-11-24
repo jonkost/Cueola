@@ -104,3 +104,18 @@ p.scr-gap{margin-top:.55em}
 .scr-edit-actions{display:flex;justify-content:flex-end;gap:10px}
 .scr-edit-actions>button{width:140px;flex:none}
 @media(max-width:760px){.scr-edit-cols{grid-template-columns:1fr}}
+
+/* Scan to link, in the talent screen's Settings. */
+.pt-scan{display:flex;align-items:center;gap:16px}
+.pt-scan-code{flex:none;border-radius:12px;overflow:hidden;background:#fff;line-height:0}
+.pt-scan-code[hidden]{display:none}
+.pt-scan-note{margin:0;font-size:13px;line-height:1.45;opacity:.8}
+/* The operator on a phone: the controls first, big enough for a thumb. */
+@media (max-width:600px){
+  #flowOp .flowop-main{display:flex;flex-direction:column}
+  #flowOp .flowop-preview{display:none}
+  #flowOp .flowop-side{padding:10px}
+  #flowOp .flowop-strip-panel{order:-1}
+  #flowOp .ls-pt-controls{padding:6px 2px 8px}
+  #flowOp .ls-pt-controls .ptc-strip{--ptc-h:64px;--ptc-fs:11px;--ptc-is:20px;--ptc-r:16px}
+}
