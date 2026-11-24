@@ -341,3 +341,21 @@ test('pace to the clock is gentle and lets go near the end', () => {
   assert.equal(E.paceSpeed(900, 2, 60), 60, 'last three seconds: hands off');
   assert.equal(E.paceSpeed(0, 10, 60), 60);
 });
+
+test('voice follow: hears words the way they are said', () => {
+  assert.deepEqual(E.heardWords("Good evening. I'm your anchor!"), ['good', 'evening', 'im', 'your', 'anchor']);
+});
+
+test('voice follow moves forward to the words just said, and never jumps far', () => {
+  const script = E.heardWords('Good evening and welcome to Campus News. Tonight, three big stories from around campus. ' + Array(60).join('filler ') + 'Good evening again.');
+  let at = 0;
+  at = E.voiceMatch(script, at, ['good', 'evening'], 30);
+  assert.equal(at, 2);
+  at = E.voiceMatch(script, at, ['welcome', 'to', 'campus'], 30);
+  assert.equal(at, 6, 'after "campus" the first time');
+  assert.equal(E.voiceMatch(script, at, ['good', 'evening'], 30), at, 'the far "good evening" is out of reach');
+  assert.equal(E.voiceMatch(script, at, ['purple', 'monkey'], 30), at, 'words not in the script do nothing');
+  assert.equal(E.voiceMatch(script, at, [], 30), at);
+  assert.equal(E.voiceMatch(script, at, ['news'], 30), at + 1, 'one word only counts when it is right here');
+  assert.equal(E.voiceMatch(script, 0, ['campus'], 30), 0, 'one word far ahead does not move it');
+});

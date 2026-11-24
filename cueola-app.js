@@ -19951,6 +19951,76 @@ function ptToggleKeys(force) {
   ptOpenSettings();
 }
 // Every control in the sheet shows the current truth when it opens.
+// ── Voice follow (practice only) ────────────────────────────────────────────
+// The script follows the reader's voice. It listens with the browser's own
+// speech recognition, finds the words just said a little way ahead of where
+// the reader was, and moves the read line there. It is an experiment and it
+// is ONLY for practice: it will not turn on while this screen is linked to a
+// show, and it turns itself off when a show is linked.
+let _ptVoice = null;   // { rec, words:[{ el, i, n }], script:[word], at }
+function ptVoiceAvailable() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function ptVoiceLinkedToShow() {
+  return !!(ptLinkedCueolaCode || (session && session.code && !session.isDemo));
+}
+function ptVoiceBuild() {
+  const words = [], script = [];
+  document.querySelectorAll('#pt-text .pt-row-body p').forEach(p => {
+    const copy = p.cloneNode(true);
+    copy.querySelectorAll('.scr-speaker,.scr-note,.scr-stop').forEach(x => x.remove());   // not read aloud
+    const list = PT_ENGINE.heardWords(copy.textContent);
+    list.forEach((w, i) => { words.push({ el:p, i, n:list.length }); script.push(w); });
+  });
+  return { words, script };
+}
+function ptVoiceMoveTo(index) {
+  const w = _ptVoice?.words[Math.min(index, _ptVoice.words.length - 1)];
+  if (!w) return;
+  const r = w.el.getBoundingClientRect();
+  const y = r.top + r.height * (w.n > 1 ? w.i / w.n : 0);
+  const delta = y - ptReadY();
+  if (Math.abs(delta) > 4) ptJogBy(delta);
+}
+function ptSetVoiceFollow(on) {
+  const box = ptEl('pt-voice-toggle');
+  const off = (why) => {
+    if (_ptVoice) { const v = _ptVoice; _ptVoice = null; try { v.rec.onend = null; v.rec.stop(); } catch {} }
+    if (box) box.checked = false;
+    if (why) toast(why);
+  };
+  if (!on) { off(''); return; }
+  if (ptVoiceLinkedToShow()) { off('Voice follow is for practice only. It stays off while a show is linked.'); return; }
+  if (!ptVoiceAvailable()) { off('This browser cannot listen. Voice follow works in Chrome and Safari.'); return; }
+  const built = ptVoiceBuild();
+  if (!built.script.length) { off('There are no words to follow yet.'); return; }
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new Rec();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = document.documentElement.lang || 'en-US';
+  // Start from the words nearest the read line.
+  const readY = ptReadY();
+  let at = built.words.findIndex(w => w.el.getBoundingClientRect().bottom > readY);
+  if (at < 0) at = 0;
+  _ptVoice = { rec, words:built.words, script:built.script, at };
+  rec.onresult = (e) => {
+    if (!_ptVoice) return;
+    if (ptVoiceLinkedToShow()) { off('A show is linked, so voice follow turned off.'); return; }
+    const said = e.results[e.results.length - 1]?.[0]?.transcript || '';
+    const heard = PT_ENGINE.heardWords(said).slice(-3);
+    const next = PT_ENGINE.voiceMatch(_ptVoice.script, _ptVoice.at, heard, 30);
+    if (next > _ptVoice.at) { _ptVoice.at = next; ptVoiceMoveTo(next); }
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') off('The microphone is blocked. Allow it for Cueola to use voice follow.');
+  };
+  // The browser stops listening after a pause: start again while it is on.
+  rec.onend = () => { if (_ptVoice && _ptVoice.rec === rec) { try { rec.start(); } catch {} } };
+  try { rec.start(); } catch { off('Voice follow could not start.'); return; }
+  if (ptPlaying) ptStopPlay();   // the voice moves the script now, not the roll
+  if (box) box.checked = true;
+  toast('Voice follow is on. Start reading. This is for practice only.');
+}
+
 // Scan to link: the talent screen shows a square code. Point a phone or an
 // iPad camera at it and that device opens the prompter operator for this
 // show, so a talent with no operator can run their own prompter from a phone.
@@ -19982,6 +20052,10 @@ function ptRenderScan() {
 }
 function ptRenderSettingsState() {
   ptRenderScan();
+  const voice = ptEl('pt-voice-toggle');
+  if (voice) { voice.checked = !!_ptVoice; voice.disabled = !ptVoiceAvailable() || ptVoiceLinkedToShow(); }
+  const voiceNote = ptEl('pt-voice-note');
+  if (voiceNote) voiceNote.textContent = !ptVoiceAvailable() ? 'Not in this browser' : (ptVoiceLinkedToShow() ? 'Off while a show is linked' : 'Practice only');
   ptSetAlign(ptAlign);
   ptSetReadLine(ptReadLinePos, { persist:false });
   ptSetWidth(ptTextWidth, { persist:false });
@@ -20388,6 +20462,7 @@ function ptHasScript() {
 // the status pill, the two checks, the step dots, and the setup card.
 function ptUpdateReady() {
   const code = ptLinkedCueolaCode || (session && session.code && !session.isDemo ? session.code : '');
+  if (code && _ptVoice) ptSetVoiceFollow(false);   // voice follow is never on in a show
   const hasScript = ptHasScript();
   let state, text;
   if (ptConnState === 'connecting')      { state = 'connecting'; text = 'Connecting…'; }

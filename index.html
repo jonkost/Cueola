@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="cueola-prompter-controls.css?v=17840b0e72">
+<link rel="stylesheet" href="cueola-prompter-controls.css?v=aa8d28b825">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
@@ -5970,6 +5970,10 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
           <span class="pt-ctrl-label">Row info (NEXT and HOLDING)</span>
           <input type="checkbox" id="pt-rowinfo-toggle" checked onchange="ptSetRowInfo(this.checked)">
         </label>
+        <label class="pt-sheet-row pt-sheet-switch" for="pt-voice-toggle" data-tip="The script follows your voice. An experiment, for practice only. It never turns on in a show">
+          <span class="pt-ctrl-label">Voice follow <span class="pt-voice-note" id="pt-voice-note">Practice only</span></span>
+          <input type="checkbox" id="pt-voice-toggle" onchange="ptSetVoiceFollow(this.checked)">
+        </label>
         <div class="pt-sheet-row" role="group" aria-label="Overlay size">
           <span class="pt-ctrl-label">Clock and question size</span>
           <span class="pt-stepper">
@@ -7784,7 +7788,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
-<script src="cueola-prompter-engine.js?v=a69df341e1"></script>
+<script src="cueola-prompter-engine.js?v=3e5c1092ea"></script>
 <script src="cueola-prompter-desk.js?v=78dfab1363"></script>
 <script src="cueola-prompter-controls.js?v=4ab5b570a4"></script>
 <script src="cueola-qr.js?v=c9f10f5ab0"></script>
@@ -7793,7 +7797,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=df30daa30f"></script>
+<script src="cueola-app.js?v=e8939c450c"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

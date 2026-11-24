@@ -449,6 +449,32 @@
     return clamp(clamp(px / sec, b * 0.6, b * 1.6), SPEED_MIN, SPEED_MAX);
   }
 
+  // ── Voice follow (practice only) ─────────────────────────────────────────
+  // The words of some text the way a listener hears them: lower case, no
+  // punctuation. "I'm" and "im" are the same word.
+  function heardWords(text) {
+    var m = String(text || '').toLowerCase().replace(/[’']/g, '').match(/[a-z0-9À-ɏ]+/g);
+    return m || [];
+  }
+  // Where the reader is now. script: every word of the script in order.
+  // at: how many words were already read. heard: the last few words the
+  // microphone caught. It only ever moves forward, and only a little way
+  // (look), so a repeated word far down the page can never yank the script.
+  // Two words in a row must match, unless only one word was heard.
+  function voiceMatch(script, at, heard, look) {
+    var from = Math.max(0, Number(at) || 0);
+    var to = Math.min(script.length, from + (Number(look) > 0 ? Number(look) : 30));
+    var n = heard ? heard.length : 0;
+    if (!n) return from;
+    var last = heard[n - 1], prev = n > 1 ? heard[n - 2] : null;
+    for (var j = from; j < to; j++) {
+      if (script[j] !== last) continue;
+      if (prev == null) { if (j - from < 3) return j + 1; continue; }
+      if (j > 0 && script[j - 1] === prev) return j + 1;
+    }
+    return from;
+  }
+
   // Seconds to travel a distance at a speed; null when nothing is moving.
   function secondsForPixels(px, velPxPerSec) {
     var v = Math.abs(finite(velPxPerSec, 0));
@@ -479,6 +505,8 @@
     holdRow: holdRow,
     readSeconds: readSeconds,
     paceSpeed: paceSpeed,
+    heardWords: heardWords,
+    voiceMatch: voiceMatch,
     isSpeakerLine: isSpeakerLine,
     scriptLineHTML: scriptLineHTML,
     scriptHTML: scriptHTML,

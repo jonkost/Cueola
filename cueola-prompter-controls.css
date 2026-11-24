@@ -119,3 +119,4 @@ p.scr-gap{margin-top:.55em}
   #flowOp .ls-pt-controls{padding:6px 2px 8px}
   #flowOp .ls-pt-controls .ptc-strip{--ptc-h:64px;--ptc-fs:11px;--ptc-is:20px;--ptc-r:16px}
 }
+.pt-voice-note{margin-left:8px;font-size:11px;font-weight:600;opacity:.6}
