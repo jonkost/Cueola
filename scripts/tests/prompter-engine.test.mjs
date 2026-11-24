@@ -282,3 +282,53 @@ test('read time comes from the words, and crew directions do not count', () => {
   assert.equal(E.readSeconds(Array(151).join('word ')), 60);
   assert.equal(E.readSeconds('Hello'), 1);
 });
+
+test('Speaker: a name with a colon on its own line, in any case', () => {
+  assert.equal(E.scriptLineHTML('HOST:'), '<span class="scr-speaker">HOST</span>');
+  assert.equal(E.scriptLineHTML('Host:'), '<span class="scr-speaker">HOST</span>');
+  assert.equal(E.scriptLineHTML('Co-host 2:'), '<span class="scr-speaker">CO-HOST 2</span>');
+  assert.ok(!E.isSpeakerLine('Here is the thing I want to say today:'));
+  assert.ok(!E.isSpeakerLine('Host: good evening'));
+  assert.ok(!E.isSpeakerLine('7:'));
+});
+
+test('Punch: two stars or one star, and stars never reach the talent', () => {
+  assert.equal(E.scriptLineHTML('Tonight, **three big stories**.'), 'Tonight, <span class="scr-punch">three big stories</span>.');
+  assert.equal(E.scriptLineHTML('from *around* campus'), 'from <span class="scr-punch">around</span> campus');
+  assert.ok(!E.scriptHTML('**a** and *b*').includes('*'));
+  assert.equal(E.scriptLineHTML('2 * 3 * 4'), '2 * 3 * 4');
+});
+
+test('Note to talent: brackets become a box, with no brackets shown', () => {
+  assert.equal(E.scriptLineHTML('[Turn to camera 2]'), '<span class="scr-note">TURN TO CAMERA 2</span>');
+  assert.equal(E.scriptLineHTML('Hello [smile] there'), 'Hello <span class="scr-note">SMILE</span> there');
+});
+
+test('Stop here: every old stop mark is one stop line', () => {
+  ['[STOP HERE]', '[stop]', '[BREAK - AUTO PAUSE]', '[HOLD]', '[PAUSE]'].forEach(m => {
+    assert.equal(E.scriptLineHTML(m), '<span class="scr-stop" data-stop="1">STOP</span>', m);
+  });
+  assert.equal(E.scriptLineHTML('[STOP HERE] Ad lib here'), '<span class="scr-stop" data-stop="1">STOP</span>Ad lib here');
+  assert.ok(E.scriptLineHTML('[TECHNICAL DIFFICULTIES]').includes('data-stop'));
+});
+
+test('marks that mean nothing are dropped and leave no gap', () => {
+  assert.equal(E.scriptLineHTML('[UPDATE] The vote was 7 to 2.'), 'The vote was 7 to 2.');
+  assert.equal(E.scriptLineHTML('[DIALOGUE]'), '');
+  assert.equal(E.scriptHTML('HOST:\n[DIALOGUE]\nGood evening.'), '<p><span class="scr-speaker">HOST</span></p><p>Good evening.</p>');
+  assert.equal(E.scriptHTML('One.\n\nTwo.'), '<p>One.</p><p class="scr-gap">Two.</p>');
+});
+
+test('nothing typed can become live HTML', () => {
+  const html = E.scriptHTML('<img src=x onerror=alert(1)> **<b>x</b>** [<i>y</i>]');
+  assert.ok(!/<img|<b>|<i>/.test(html));
+});
+
+test('Clear formatting takes every mark off', () => {
+  assert.equal(E.stripMarks('Tonight, **three** *big* stories. [SMILE] Go.'), 'Tonight, three big stories. Go.');
+});
+
+test('read time skips speaker names and notes', () => {
+  assert.equal(E.readSeconds('HOST:\n[TURN TO CAMERA 2]'), 0);
+  assert.equal(E.readSeconds('HOST:\n' + Array(151).join('word ')), 60);
+});

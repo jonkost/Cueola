@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#080b12">
 <link rel="stylesheet" href="assets/sf-symbols.css?v=a5c5015e64">
-<link rel="stylesheet" href="cueola-prompter-controls.css?v=fb134827ab">
+<link rel="stylesheet" href="cueola-prompter-controls.css?v=a886d186fa">
 <link rel="stylesheet" href="outrangutan/outrangutan.css?v=c643a77857">
 <style>
 :root {
@@ -2917,7 +2917,7 @@ tr.preflight-hit>td{animation:preflightHit 2.6s ease}
 .pt-row.reading .pt-row-head{opacity:.9}
 .pt-row-blank{min-height:.6em!important}
 .scr-direction{opacity:.5;font-style:italic;font-weight:400}
-.scr-speaker{display:inline-block;font-size:.6em;font-weight:700;letter-spacing:.14em;opacity:.62;text-transform:uppercase}
+/* .scr-speaker, .scr-punch, .scr-note and .scr-stop live in cueola-prompter-controls.css */
 .scr-header{display:block;font-size:.5em;font-weight:700;letter-spacing:.16em;opacity:.5;text-transform:uppercase;border-top:1px solid currentColor;margin-top:.35em;padding-top:.5em}
 #pt-text strong,.flowop-script strong{font-weight:1000;color:var(--pt-text,#fff);text-shadow:none;background:color-mix(in srgb,var(--pt-accent,#fff) 12%,transparent);border-radius:.12em;padding:0 .04em}
 
@@ -6238,25 +6238,23 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 </div>
 
 <div class="overlay" id="lsScriptEditOv" onclick="if(event.target===this)hideOverlay('lsScriptEditOv')">
-  <div class="warn-card u-border-soft" style="max-width:520px">
+  <div class="warn-card u-border-soft scr-edit-card">
     <div class="warn-title u-fs16" id="lsScriptEditTitle">Script</div>
-    <div class="u-sub-note">Edit the full script here. Saving pushes this row to Flowmingo.</div>
-    <div class="marker-chip-row">
-      <button class="marker-chip" onclick="wrapTextareaSelection('lsScriptEditText','**','**')"><strong>B</strong>old</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[UPDATE] ')">Update</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[EDIT] ')">Edit</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
-      <button class="marker-chip" onclick="insertScriptMarker('\n\n')">Line break</button>
-      <button class="marker-chip" onclick="insertScriptMarker('\n────────────\n')">Divider</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[STOP HERE] ')">Stop here</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[HOLD] ')">Hold</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[STAND BY] ')">Stand by</button>
-      <button class="marker-chip" onclick="insertScriptMarker('[TECHNICAL DIFFICULTIES] ')">Tech difficulty</button>
+    <div class="u-sub-note">What the talent reads for this row. It goes to the talent screen when you save. If this row is on air, it waits for Send change.</div>
+    <!-- The five formatting buttons (scriptFormatBarHTML), the same as in the Script cue editor. -->
+    <div class="marker-chip-row" id="lsScriptEditBar"></div>
+    <div class="scr-edit-cols">
+      <textarea class="field-in u-script-edit" id="lsScriptEditText" rows="12" aria-label="Script for this row"></textarea>
+      <div class="scr-edit-side">
+        <div class="field-lbl scr-preview-lbl">As the talent sees it</div>
+        <div class="scr-preview" id="lsScriptEditPreview" aria-live="off"></div>
+      </div>
     </div>
-    <div class="marker-divider"></div>
-    <textarea class="field-in u-script-edit" id="lsScriptEditText" rows="14"></textarea>
-    <button class="btn-primary btn-save" onclick="saveLiveScript()"><span class="sf-symbol" data-symbol="action.upload" aria-hidden="true"></span><span>Save and push to prompter</span></button>
-    <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
+    <div class="scr-meter" id="lsScriptEditMeter"></div>
+    <div class="scr-edit-actions">
+      <button class="btn-secondary" onclick="hideOverlay('lsScriptEditOv')">Cancel</button>
+      <button class="btn-primary btn-save" onclick="saveLiveScript()"><span>Save</span></button>
+    </div>
   </div>
 </div>
 
@@ -7777,7 +7775,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="cueola-link-state.js?v=effa089bdc"></script>
 <script src="cueola-keymap.js?v=49533adade"></script>
 <script src="cueola-mac-link.js?v=5341af039a"></script>
-<script src="cueola-prompter-engine.js?v=754932bf19"></script>
+<script src="cueola-prompter-engine.js?v=717a7ce4ae"></script>
 <script src="cueola-prompter-desk.js?v=e3bc7017e7"></script>
 <script src="cueola-prompter-controls.js?v=4ab5b570a4"></script>
 <script src="cueola-prompter-session.js?v=4e90f2af78"></script>
@@ -7785,7 +7783,7 @@ button.pb-collab-avatar{cursor:pointer;padding:0;font:inherit;font-size:10px;fon
 <script src="outrangutan/output-protocol.js?v=1137628cc7"></script>
 <script src="outrangutan/kiosk-transport.js?v=bef496686a"></script>
 <script src="outrangutan/stream-deck-label.js?v=bef2fc8307"></script>
-<script src="cueola-app.js?v=29b302bb6b"></script>
+<script src="cueola-app.js?v=fda70becb1"></script>
 <script src="outrangutan/outrangutan.js?v=e6d66161a1"></script>
 <script src="cueola-streamdeck-device.js?v=eae222bcce"></script>
 <script src="cueola-obs.js?v=7ea9a03cd8"></script>

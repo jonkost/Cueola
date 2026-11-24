@@ -54,9 +54,17 @@
   Back and Ahead (left, right). T is Top, F is Follow, C Clock, S Slate,
   M Message, W Wrap, Esc Clear. Settings is the comma key. Size and Mirror
   moved into Settings.
-- Not built yet: the new script editor with its five formatting buttons, the
-  new show picker, controls that appear on the talent screen when the link
-  drops, and the extras.
+- **Five kinds of formatting, each with a button.** Speaker, Punch, Note to
+  talent, Stop here and Clear formatting, in the Script cue editor and in
+  Live. A preview beside the box shows the words the way the talent sees
+  them, with the read time under it.
+- **Formatting looks the same everywhere.** A speaker is a small name chip
+  ("Host:" counts in any case). Punch words are underlined. A note is a
+  yellow box. Stop here is a red line and the roll stops there. Stars and
+  brackets never show on the talent screen, and old marks like [UPDATE] are
+  left out.
+- Not built yet: the new show picker, controls that appear on the talent
+  screen when the link drops, and the extras.
 
 ### The prompter controls are rebuilt (Nov 23)
 

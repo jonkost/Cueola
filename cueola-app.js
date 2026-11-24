@@ -9714,14 +9714,14 @@ function ccScriptTextHTML(d) {
   const text = d.text || (d.scriptType === 'Dialogue' ? d.dialogueNote : '') || '';
   return `<div class="field">
       <label class="field-lbl" for="cc-s-text">What the talent reads <span class="lbl-hint">(shows big on the prompter)</span></label>
-      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="6" placeholder="Type or paste the words, word for word.">${esc(text)}</textarea>
+      <textarea class="field-in cc-script-ta" id="cc-s-text" rows="6" placeholder="Type or paste the words, word for word." oninput="scriptPreviewRender('cc-s-text','cc-s-preview','cc-s-meter',0)">${esc(text)}</textarea>
       <div class="marker-chip-row">
-        <button type="button" class="marker-chip" onclick="wrapTextareaSelection('cc-s-text','**','**')"><strong>B</strong>old</button>
-        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[BREAK - AUTO PAUSE] ')">Break</button>
-        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[STOP HERE] ')">Stop</button>
-        <button type="button" class="marker-chip" onclick="insertCueScriptMarker('[UPDATE] ')">Update</button>
+        ${scriptFormatBarHTML('cc-s-text')}
         <label class="marker-chip cc-upload">Load a .txt or .pdf<input type="file" class="cc-file-in" id="cc-s-file" accept=".txt,.md,.pdf" hidden onchange="loadScriptFile(this,'cc-s-text')"></label>
       </div>
+      <div class="scr-meter" id="cc-s-meter"><span>${PT_ENGINE.readSeconds(text) ? `Reads in <b>${PT_ENGINE.formatSeconds(PT_ENGINE.readSeconds(text))}</b>` : 'No words yet'}</span></div>
+      <div class="field-lbl scr-preview-lbl">As the talent sees it</div>
+      <div class="scr-preview" id="cc-s-preview" aria-live="off">${PT_ENGINE.scriptHTML(text) || '<p class="scr-preview-empty">Nothing for the talent to read yet.</p>'}</div>
     </div>`;
 }
 
@@ -13655,7 +13655,10 @@ function assemblePrompterScriptFromBeats(list=beats) {
     if (!copy) return header;
     const speaker = scriptSpeakerLabel(d);
     const dialogue = d.scriptType === 'Dialogue' ? '[DIALOGUE]\n' : '';
-    return `${header}\n` + (speaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
+    // A script that already opens with its own Speaker line keeps that one:
+    // the cue's speaker is not added on top (it showed the name twice).
+    const opensWithSpeaker = window.CueolaPrompterEngine.isSpeakerLine(copy.split('\n')[0]);
+    return `${header}\n` + (speaker && !opensWithSpeaker ? `${speaker.toUpperCase()}:\n` : '') + dialogue + copy;
   }).join('\n\n'));
 }
 
@@ -14397,12 +14400,88 @@ function openLiveScript(beatIdx) {
   liveScriptEditIdx = beatIdx;
   const d = b.cues?.script||{};
   document.getElementById('lsScriptEditTitle').textContent = `Script • ${b.info||`Row ${rowDisplayNumber(beatIdx)}`}`;
-  document.getElementById('lsScriptEditText').value = scriptCueText(d);
+  const ta = document.getElementById('lsScriptEditText');
+  ta.value = scriptCueText(d);
+  ta.dataset.speaker = scriptSpeakerLabel(d) || 'HOST';
+  const bar = document.getElementById('lsScriptEditBar');
+  if (bar && !bar.firstElementChild) bar.innerHTML = scriptFormatBarHTML('lsScriptEditText');
+  const rowSecs = (Number(b.min) || 0) * 60 + (Number(b.sec) || 0);
+  ta.oninput = () => scriptPreviewRender('lsScriptEditText', 'lsScriptEditPreview', 'lsScriptEditMeter', rowSecs);
+  ta.oninput();
   showOverlay('lsScriptEditOv');
   setTimeout(()=>document.getElementById('lsScriptEditText')?.focus(),80);
 }
 
 // Wrap the current selection (in a textarea) with markers, e.g. **bold**.
+// ── Script formatting buttons ───────────────────────────────────────────────
+// Five buttons, the same in the Script cue editor and in Live. Each one puts
+// its mark into the words; the preview beside the box shows the result the
+// way the talent screen draws it.
+function scriptFormat(taId, kind) {
+  const ta = document.getElementById(taId);
+  if (!ta) return;
+  const v = ta.value;
+  const start = ta.selectionStart ?? v.length;
+  const end = ta.selectionEnd ?? start;
+  const sel = v.slice(start, end);
+  const lineStart = v.lastIndexOf('\n', start - 1) + 1;
+  const put = (from, to, text, selFrom, selTo) => {
+    ta.value = v.slice(0, from) + text + v.slice(to);
+    ta.focus();
+    ta.setSelectionRange(from + selFrom, from + selTo);
+  };
+  if (kind === 'punch') {
+    const words = sel || 'words to hit';
+    put(start, end, `**${words}**`, 2, 2 + words.length);
+  } else if (kind === 'note') {
+    const words = (sel || 'NOTE TO TALENT').replace(/[\[\]]/g, '').toUpperCase();
+    // A note sits on its own line so it is never read as part of a sentence.
+    const pre = start > lineStart && !sel ? '\n' : '';
+    put(start, end, `${pre}[${words}]`, pre.length + 1, pre.length + 1 + words.length);
+  } else if (kind === 'stop') {
+    const atLineStart = start === lineStart;
+    const text = `${atLineStart ? '' : '\n'}[STOP HERE]\n`;
+    put(start, end, text, text.length, text.length);
+  } else if (kind === 'speaker') {
+    const name = String(ta.dataset.speaker || 'HOST').replace(/[:\n]/g, '').trim().toUpperCase() || 'HOST';
+    const text = `${name}:\n`;
+    put(lineStart, lineStart, text, 0, name.length);
+  } else if (kind === 'clear') {
+    if (sel) { const clean = PT_ENGINE.stripMarks(sel); put(start, end, clean, 0, clean.length); }
+    else { ta.value = PT_ENGINE.stripMarks(v); ta.focus(); }
+  }
+  ta.dispatchEvent(new Event('input', { bubbles:true }));
+}
+function scriptFormatBarHTML(taId) {
+  const b = (kind, cls, inner, tip) => `<button type="button" class="marker-chip scr-fmt ${cls}" onmousedown="event.preventDefault()" onclick="scriptFormat('${taId}','${kind}')" data-tip="${tip}">${inner}</button>`;
+  return b('speaker', 'scr-fmt-speaker', `${sfIcon('action.profile')}<span>Speaker</span>`, 'Who reads next')
+    + b('punch', 'scr-fmt-punch', '<span>Punch</span>', 'Words to hit. Select them first')
+    + b('note', 'scr-fmt-note', '<span>Note to talent</span>', 'Something to do, not say')
+    + b('stop', 'scr-fmt-stop', '<span>Stop here</span>', 'The roll stops here and waits for Play')
+    + b('clear', '', '<span>Clear formatting</span>', 'Take the marks off the selected words');
+}
+// The preview and the read time under a script box. rowSecs is how long the
+// row runs (0 when it has no time).
+function scriptPreviewRender(taId, previewId, meterId, rowSecs) {
+  const ta = document.getElementById(taId);
+  const preview = document.getElementById(previewId);
+  if (!ta) return;
+  if (preview) {
+    const html = PT_ENGINE.scriptHTML(ta.value);
+    preview.innerHTML = html || '<p class="scr-preview-empty">Nothing for the talent to read yet.</p>';
+  }
+  const meter = document.getElementById(meterId);
+  if (meter) {
+    const read = PT_ENGINE.readSeconds(ta.value);
+    const row = Number(rowSecs) || 0;
+    const over = row > 0 && read > row;
+    const pct = row > 0 ? Math.min(100, Math.round(read / row * 100)) : 0;
+    meter.classList.toggle('is-over', over);
+    meter.innerHTML = `<span>${read ? `Reads in <b>${PT_ENGINE.formatSeconds(read)}</b>` : 'No words yet'}${row > 0 && read ? ` of ${PT_ENGINE.formatSeconds(row)}` : ''}${over ? ` · over by ${PT_ENGINE.formatSeconds(read - row)}` : ''}</span>`
+      + (row > 0 ? `<span class="scr-meter-bar"><i style="width:${pct}%"></i></span>` : '');
+  }
+}
+
 function wrapTextareaSelection(taId, pre, post) {
   const ta = document.getElementById(taId);
   if (!ta) return;
@@ -17917,7 +17996,8 @@ function ptMarkerLines() {
   if (text) {
     text.querySelectorAll('.pt-row-body p').forEach((p, i) => {
       const t = p.textContent || '';
-      if (FLOWMINGO_AUTO_PAUSE_RE.test(t)) _ptMarkerCache.push({ el: p, key: `${i}:${t}` });
+      // A Stop here line: the roll stops there and waits for Play.
+      if (p.querySelector('[data-stop]') || FLOWMINGO_AUTO_PAUSE_RE.test(t)) _ptMarkerCache.push({ el: p, key: `${i}:${t}` });
     });
   }
   return _ptMarkerCache;
@@ -18255,7 +18335,7 @@ function ptCheckAutoPauseMarkers() {
     if (cand.el.getBoundingClientRect().top <= readY) {
       ptSeenPauseMarkers.add(cand.key);
       ptStopPlay();
-      toast('Prompter paused at the break.');
+      toast('Stopped at Stop here. Press Play to go on.');
       return true;
     }
   }
@@ -18896,9 +18976,7 @@ function ptRowHTML(row) {
   const head = numbered
     ? `<header class="pt-row-head"><span class="pt-row-num">${row.num}</span><span class="pt-row-name${row.name ? '' : ' pt-row-name-empty'}">${row.name ? esc(row.name) : 'Row ' + row.num}</span><span class="pt-row-tag" aria-hidden="true"></span></header>`
     : '';
-  const body = row.lines.length
-    ? row.lines.map(line => `<p>${formatScriptLine(line) || '&nbsp;'}</p>`).join('')
-    : '<p class="pt-row-blank">&nbsp;</p>';
+  const body = (row.lines.length && PT_ENGINE.scriptHTML(row.text)) || '<p class="pt-row-blank">&nbsp;</p>';
   return `${head}<div class="pt-row-body">${body}</div>`;
 }
 // The whole script as row boxes, for a preview that is not the talent
@@ -19836,24 +19914,16 @@ function ptSetTheme(name) {
 // stays plain text (with [bracket] directions and **bold** markers); this turns
 // it into clean HTML for reading. The editable Script Panel is left plain so the
 // plain text remains the single source of truth.
+// The five kinds of formatting (Speaker, Punch, Note to talent, Stop here,
+// Row name) are read in ONE place: cueola-prompter-engine.js. The talent
+// screen, the operator's preview and the editor's preview all draw from it,
+// so what you see while writing is what the talent gets.
 function formatScriptLine(line) {
-  const trimmed = line.trim();
-  // Row/section header, e.g. "[1] Anchor Cold Open"
-  if (/^\[\d+\]/.test(trimmed)) return `<span class="scr-header">${esc(line)}</span>`;
-  // Speaker label on its own line, e.g. "HOST:" (all caps, ends with colon)
-  if (/[A-Z]/.test(trimmed) && /^[A-Z0-9][A-Z0-9 .,'&/-]*:$/.test(trimmed)) {
-    return `<span class="scr-speaker">${esc(line)}</span>`;
-  }
-  let html = esc(line);
-  // Stage directions / cues in [brackets] — dimmed so talent doesn't read them
-  html = html.replace(/\[[^\]]*\]/g, m => `<span class="scr-direction">${m}</span>`);
-  // **emphasis** — words the talent should stress
-  html = html.replace(/\*\*([^*\n]+)\*\*/g, (_, inner) => `<strong>${inner}</strong>`);
-  return html;
+  return PT_ENGINE.scriptLineHTML(line);
 }
 
 function scriptToFormattedHTML(text) {
-  return String(text || '').split('\n').map(line => `<p>${formatScriptLine(line) || '&nbsp;'}</p>`).join('');
+  return PT_ENGINE.scriptHTML(text);
 }
 
 function ptPlainTextToHTML(text) {

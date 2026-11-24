@@ -74,3 +74,33 @@ button.ptc-key:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pt-row:has(> .pt-row-body > .pt-row-blank:only-child) .pt-row-body{display:none}
 .pt-row:has(> .pt-row-body > .pt-row-blank:only-child) .pt-row-head{margin-bottom:0;padding-top:.5em;opacity:.38}
 .flow-control-note{margin:0 0 10px;font-size:12px;line-height:1.45;color:var(--text2)}
+
+/* ── The five kinds of formatting, as the talent sees them ─────────────────
+   Sizes are in em, so they follow the talent's text size. */
+.scr-speaker{display:inline-block;font-size:.42em;font-weight:800;letter-spacing:.1em;text-transform:uppercase;line-height:1.2;padding:.22em .7em;border-radius:.45em;background:var(--pt-accent,var(--accent));color:#000;opacity:1;vertical-align:middle}
+#promptypus[data-pt-theme="white"] .scr-speaker{color:#fff}
+.scr-punch{font-weight:800;text-decoration:underline;text-decoration-thickness:.07em;text-underline-offset:.16em;color:var(--pt-accent,var(--accent))}
+.scr-note{display:inline-block;font-size:.6em;font-weight:700;font-style:normal;letter-spacing:.04em;line-height:1.25;padding:.2em .6em;border-radius:.4em;background:#f5c842;color:#000;opacity:1;vertical-align:middle}
+.scr-stop{display:flex;align-items:center;gap:.7em;font-size:.38em;font-weight:800;letter-spacing:.14em;color:#f05252;margin:.3em 0}
+.scr-stop::before,.scr-stop::after{content:"";flex:1;height:.2em;border-radius:1em;background:#f05252}
+p.scr-gap{margin-top:.55em}
+/* The editor's preview: a small talent screen. */
+.scr-preview{--pt-accent:var(--cue-script,var(--cyan));border-radius:12px;padding:14px 16px;background:#07080c;color:#f0ead6;font-size:22px;font-weight:600;line-height:1.35;text-align:center;min-height:96px;max-height:300px;overflow:auto}
+.scr-preview p{margin:0 0 .3em}
+.scr-preview .scr-preview-empty{font-size:13px;font-weight:500;opacity:.6;margin:20px 0}
+.scr-preview-lbl{margin:8px 0 4px}
+.scr-meter{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);min-height:18px}
+.scr-meter b{color:var(--text);font-variant-numeric:tabular-nums}
+.scr-meter.is-over,.scr-meter.is-over b{color:var(--yellow)}
+.scr-meter-bar{flex:1;height:6px;border-radius:3px;background:var(--btn-fill-2);overflow:hidden}
+.scr-meter-bar i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.scr-meter.is-over .scr-meter-bar i{background:var(--yellow)}
+.marker-chip.scr-fmt-punch span{text-decoration:underline;text-underline-offset:3px}
+.marker-chip.scr-fmt-note{background:color-mix(in srgb,var(--yellow) 30%,transparent)}
+.marker-chip.scr-fmt-stop{color:var(--red)}
+.scr-edit-card{max-width:860px!important}
+.scr-edit-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.scr-edit-side .scr-preview-lbl{margin-top:0}
+.scr-edit-actions{display:flex;justify-content:flex-end;gap:10px}
+.scr-edit-actions>button{width:140px;flex:none}
+@media(max-width:760px){.scr-edit-cols{grid-template-columns:1fr}}

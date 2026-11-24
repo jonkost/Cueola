@@ -350,11 +350,90 @@
     rows.forEach(function (r) { if (r.num === Number(num)) { r.text = old; r.lines = old ? old.split('\n') : []; } });
     return rowsText(rows);
   }
+  // ── Formatting: the five kinds ───────────────────────────────────────────
+  // A prompter script needs five things and no more:
+  //   Speaker          a name on its own line ending in a colon  (HOST:)
+  //   Punch            words to hit                              (**three big stories**)
+  //   Note to talent   something to do, not say                  ([TURN TO CAMERA 2])
+  //   Stop here        the roll stops and waits for Play         ([STOP HERE])
+  //   Row name         comes from the rundown, never typed
+  // The script is still stored as plain words with those marks, so old shows
+  // open fine. This is the ONE place the marks are read: the talent screen,
+  // the operator's preview and the editor's preview all draw from it.
+  var SPEAKER_RE = /^([A-Za-z0-9][A-Za-z0-9 .'&\/-]{0,30}):$/;
+  var STOP_MARK_RE = /\[\s*(BREAK|AUTO PAUSE|PAUSE|STOP HERE|STOP|HOLD|TECHNICAL DIFFICULTIES)\b([^\]]*)\]/i;
+  // Marks older versions typed that mean nothing to the talent. They are
+  // dropped, never drawn.
+  var DEAD_MARK_RE = /\[\s*(?:UPDATE|EDIT|DIALOGUE)\s*\]\s*/gi;
+
+  function escText(t) {
+    return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function isSpeakerLine(line) {
+    var t = String(line || '').trim();
+    var m = SPEAKER_RE.exec(t);
+    if (!m) return false;
+    return /[A-Za-z]/.test(m[1]) && m[1].trim().split(/\s+/).length <= 3;
+  }
+  // The words of a line with punch and notes drawn.
+  function inlineHTML(text) {
+    var html = escText(text);
+    html = html.replace(/\[([^\]]*)\]/g, function (_, inner) {
+      var t = inner.trim();
+      return t ? '<span class="scr-note">' + t.toUpperCase() + '</span>' : '';
+    });
+    html = html.replace(/\*\*([^*\n]+)\*\*/g, '<span class="scr-punch">$1</span>');
+    html = html.replace(/(^|[^*\w])\*([^\s*](?:[^*\n]*[^\s*])?)\*(?=[^*\w]|$)/g, '$1<span class="scr-punch">$2</span>');
+    return html;
+  }
+  // One line of script as HTML. '' for a line with nothing to show.
+  function scriptLineHTML(line) {
+    var raw = String(line == null ? '' : line);
+    var trimmed = raw.trim();
+    if (!trimmed) return '';
+    if (/^\[\d+\]/.test(trimmed)) return '<span class="scr-header">' + escText(raw) + '</span>';
+    if (isSpeakerLine(trimmed)) return '<span class="scr-speaker">' + escText(trimmed.slice(0, -1).trim().toUpperCase()) + '</span>';
+    var text = raw.replace(DEAD_MARK_RE, '');
+    if (!text.trim()) return '';
+    var stop = STOP_MARK_RE.exec(text);
+    if (stop) {
+      var kind = stop[1].toUpperCase();
+      var label = kind === 'TECHNICAL DIFFICULTIES' ? 'STOP · TECHNICAL DIFFICULTIES' : 'STOP';
+      var before = text.slice(0, stop.index).trim();
+      var after = text.slice(stop.index + stop[0].length).trim();
+      return (before ? inlineHTML(before) : '') +
+        '<span class="scr-stop" data-stop="1">' + label + '</span>' +
+        (after ? inlineHTML(after) : '');
+    }
+    return inlineHTML(text);
+  }
+  // A whole row's words as paragraphs. Lines that show nothing leave no gap.
+  function scriptHTML(text) {
+    var lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    var out = [], blank = false;
+    for (var i = 0; i < lines.length; i++) {
+      var html = scriptLineHTML(lines[i]);
+      if (!html) { if (lines[i].trim() === '' && out.length) blank = true; continue; }
+      out.push('<p' + (blank ? ' class="scr-gap"' : '') + '>' + html + '</p>');
+      blank = false;
+    }
+    return out.join('');
+  }
+  // The plain words with every mark taken off (Clear formatting).
+  function stripMarks(text) {
+    return String(text || '')
+      .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+      .replace(/(^|[^*\w])\*([^\s*](?:[^*\n]*[^\s*])?)\*(?=[^*\w]|$)/g, '$1$2')
+      .replace(/\[[^\]]*\]\s?/g, '');
+  }
+
   // How long the words take to read aloud, in seconds. 150 words a minute is
   // an easy news read. Zero for no words.
   var READ_WPM = 150;
   function readSeconds(text, wpm) {
-    var words = wordCount(text);
+    // A speaker's name is not read aloud.
+    var spoken = String(text || '').split('\n').filter(function (l) { return !isSpeakerLine(l); }).join('\n');
+    var words = wordCount(stripMarks(spoken));
     if (!words) return 0;
     return Math.max(1, Math.round(words / (Number(wpm) > 0 ? Number(wpm) : READ_WPM) * 60));
   }
@@ -388,6 +467,10 @@
     rowChanged: rowChanged,
     holdRow: holdRow,
     readSeconds: readSeconds,
+    isSpeakerLine: isSpeakerLine,
+    scriptLineHTML: scriptLineHTML,
+    scriptHTML: scriptHTML,
+    stripMarks: stripMarks,
     READ_WPM: READ_WPM,
     secondsForPixels: secondsForPixels,
     formatSeconds: formatSeconds
