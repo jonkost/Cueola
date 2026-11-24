@@ -10288,10 +10288,49 @@ function _playoutNowPad() {
 
 // R2: patch the always-on playout strip in place. It lives OUTSIDE #lsBody so
 // renderLive rebuilds never touch it, and only text/width mutate here (P3).
+// ── Clip countdown for the talent ───────────────────────────────────────────
+// While a clip plays, the talent screen counts down to when they are back
+// on. The show caller's Live window sends it; it comes off by itself when
+// the clip ends. A clock the operator put up is never touched.
+const PT_CLIP_CLOCK_LABEL = 'Clip ends in';
+let _ptClipClockEndTs = 0;
+function prompterClipCountdownOn() {
+  try { return localStorage.getItem('cueola_prompter_clipclock') !== '0'; } catch { return true; }
+}
+function setPrompterClipCountdown(on) {
+  try { localStorage.setItem('cueola_prompter_clipclock', on ? '1' : '0'); } catch {}
+  if (!on) prompterClipCountdownTick(null);
+}
+function prompterClipCountdownTick(now) {
+  const playing = !!(now && now.kind !== 'pad' && !now.loop && !now.hold && now.status === 'play' && now.remainMs != null && now.remainMs > 1500);
+  const allowed = playing && prompterClipCountdownOn() && _prompterHasRecentTalent()
+    && document.getElementById('liveshow')?.classList.contains('on') && isShowCaller();
+  if (allowed) {
+    const endTs = Date.now() + now.remainMs;
+    // Send once per clip, and again only if the end time really moved
+    // (a pause, a scrub), never on every tick.
+    if (Math.abs(endTs - _ptClipClockEndTs) > 1500) {
+      // Do not replace a clock the operator put up for another reason.
+      const mode = ptClockState?.mode || 'off';
+      const ours = mode === 'countdown' && ptClockState?.label === PT_CLIP_CLOCK_LABEL;
+      if (mode === 'off' || ours) {
+        _ptClipClockEndTs = endTs;
+        sendPrompterControl(`clock_until_${Math.round(endTs)}_label_${encodePrompterActionText(PT_CLIP_CLOCK_LABEL)}`);
+      }
+    }
+    return;
+  }
+  if (_ptClipClockEndTs) {
+    _ptClipClockEndTs = 0;
+    if ((ptClockState?.mode === 'countdown') && ptClockState?.label === PT_CLIP_CLOCK_LABEL) sendPrompterControl('clock_off');
+  }
+}
+
 function renderPlayoutStrip() {
   const strip = document.getElementById('lsPlayoutStrip');
   if (!strip) return;
   const now = playoutNow();
+  try { prompterClipCountdownTick(now); } catch {}
   const nameEl = document.getElementById('lsPlayoutName');
   const timeEl = document.getElementById('lsPlayoutTime');
   const fill = document.getElementById('lsPlayoutFill');
@@ -16206,7 +16245,7 @@ function lsInspRestoreTab() {
   lsInspTab(key);
 }
 
-const SCRIPT_OP_REGION_VERSION = '7';
+const SCRIPT_OP_REGION_VERSION = '8';
 
 function scriptOpRegionHasInteraction(region) {
   if (!region) return false;
@@ -19459,6 +19498,7 @@ function scriptOpTransportPaneHTML() {
         <button class="pt-btn" onclick="sendPrompterControl('hide_interface')" data-tip="Hide or show the controls on the talent screen">Hide controls</button>
       </div>
       <label class="flow-switch-row" data-tip="Show the NEXT and HOLDING row chips along the bottom of the talent screen"><input type="checkbox" data-prompter-rowinfo ${ptRowInfoOn ? 'checked' : ''} onchange="sendPrompterControl(this.checked ? 'rowinfo_on' : 'rowinfo_off')"><span>Row info on talent</span></label>
+      <label class="flow-switch-row" data-tip="While a clip plays, the talent screen counts down to when they are back on"><input type="checkbox" ${prompterClipCountdownOn() ? 'checked' : ''} onchange="setPrompterClipCountdown(this.checked)"><span>Clip countdown for the talent</span></label>
     </div>`;
   return `<div class="prompt-op-panel flow-control-panel">${size}${poLayoutSectionHTML('lsq')}${poAlignSectionHTML()}${screen}${poThemeSectionHTML()}</div>`;
 }
